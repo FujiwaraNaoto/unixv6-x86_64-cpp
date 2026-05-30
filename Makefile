@@ -42,13 +42,12 @@ run: $(ISO)
 run-gdb: $(ISO)
 	$(QEMU) $(QEMU_GDB_FLAGS)
 
-$(OBJ_DIR):
-	mkdir -p $(OBJ_DIR)/boot $(OBJ_DIR)/kernel
-
-$(OBJ_DIR)/boot.o: boot/boot.asm | $(OBJ_DIR)
+$(OBJ_DIR)/boot.o: boot/boot.asm
+	@mkdir -p $(@D)
 	$(NASM) $(NASMFLAGS) -o $@ $<
 
-$(OBJ_DIR)/%.o: %.cpp | $(OBJ_DIR)
+$(OBJ_DIR)/%.o: %.cpp
+	@mkdir -p $(@D)
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 $(KERNEL): $(OBJS)
