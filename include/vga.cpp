@@ -43,7 +43,7 @@ static void scroll() {
     row_ = HEIGHT - 1;
 }
 
-void init() {
+void initialize() {
     attr_ = make_attr(Color::LightGrey, Color::Black);
     clear();
 }
