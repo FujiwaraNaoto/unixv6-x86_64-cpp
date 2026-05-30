@@ -17,7 +17,7 @@ NASMFLAGS = -f elf64
 
 ASM_SRC  = boot/boot.asm
 CPP_SRC  = kernel/main.cpp \
-           kernel/vga.cpp
+           include/vga.cpp
 
 OBJ_DIR  = build
 ASM_OBJ  = $(OBJ_DIR)/boot.o
