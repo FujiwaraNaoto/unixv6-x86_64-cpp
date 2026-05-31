@@ -28,17 +28,29 @@ OBJS     = $(ASM_OBJ) $(CPP_OBJ)
 KERNEL   = $(OBJ_DIR)/kernel.elf
 ISO      = unixv6.iso
 
-QEMU_FLAGS     = -cdrom $(ISO) -boot d -m 128M -serial stdio \
-                 -display gtk -no-reboot -no-shutdown
-QEMU_GDB_FLAGS = $(QEMU_FLAGS) -s -S
+# 共通フラグ
+QEMU_COMMON    = -cdrom $(ISO) -boot d -m 128M -no-reboot -no-shutdown
 
-.PHONY: all iso run run-gdb clean
+# VSCode 等のターミナルに直結 (シリアル = 標準入出力)。終了は Ctrl-A X
+QEMU_TERM      = $(QEMU_COMMON) -nographic
+# 別ウィンドウ表示 (GTK)。要 DISPLAY。シリアルは serial.log に保存
+QEMU_GUI       = $(QEMU_COMMON) -display gtk -serial file:serial.log
+
+QEMU_GDB_FLAGS = $(QEMU_TERM) -s -S
+
+.PHONY: all iso run run-vscode run-gui run-gdb clean
 
 all: $(KERNEL)
 iso: $(ISO)
 
-run: $(ISO)
-	$(QEMU) $(QEMU_FLAGS)
+# 既定: ターミナル直結 (VSCode 統合ターミナルでもそのまま出る)
+run: run-vscode
+
+run-vscode: $(ISO)
+	$(QEMU) $(QEMU_TERM)
+
+run-gui: $(ISO)
+	$(QEMU) $(QEMU_GUI)
 
 run-gdb: $(ISO)
 	$(QEMU) $(QEMU_GDB_FLAGS)
