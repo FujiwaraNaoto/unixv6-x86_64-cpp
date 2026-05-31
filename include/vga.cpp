@@ -1,5 +1,6 @@
 #include "vga.hpp"
 #include "io.hpp"
+#include "serial.hpp"
 
 // stdarg: __builtin で直接実装
 typedef __builtin_va_list va_list;
@@ -44,6 +45,7 @@ static void scroll() {
 }
 
 void initialize() {
+    serial::initialize();
     attr_ = make_attr(Color::LightGrey, Color::Black);
     clear();
 }
@@ -61,6 +63,7 @@ void clear() {
 }
 
 void putchar(char c) {
+    serial::putchar(c);   // 端末確認用にシリアルへもミラー出力
     auto b = buf();
     if (c == '\n') {
         col_ = 0;

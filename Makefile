@@ -17,7 +17,8 @@ NASMFLAGS = -f elf64
 
 ASM_SRC  = boot/boot.asm io/io.asm
 CPP_SRC  = kernel/main.cpp \
-           include/vga.cpp
+           include/vga.cpp \
+           include/serial.cpp
 
 OBJ_DIR  = build
 ASM_OBJ  = $(OBJ_DIR)/boot.o $(OBJ_DIR)/io.o
@@ -27,8 +28,8 @@ OBJS     = $(ASM_OBJ) $(CPP_OBJ)
 KERNEL   = $(OBJ_DIR)/kernel.elf
 ISO      = unixv6.iso
 
-QEMU_FLAGS     = -cdrom $(ISO) -m 128M -serial stdio \
-                 -display curses -no-reboot -no-shutdown
+QEMU_FLAGS     = -cdrom $(ISO) -boot d -m 128M -serial stdio \
+                 -display none -no-reboot -no-shutdown
 QEMU_GDB_FLAGS = $(QEMU_FLAGS) -s -S
 
 .PHONY: all iso run run-gdb clean
