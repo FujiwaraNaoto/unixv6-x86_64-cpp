@@ -11,6 +11,12 @@ enum class Color : uint8_t {
 namespace vga {
     void initialize();
     void clear();
+
+    /**
+     * テキストバッファに画面のカーソルを動かす処理
+     * 
+     * fg: font color, bg: background color
+     */
     void set_color(Color fg, Color bg);
     void putchar(char c);
     void puts(const char *s);

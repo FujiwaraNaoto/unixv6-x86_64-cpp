@@ -10,6 +10,8 @@ typedef __builtin_va_list va_list;
 
 namespace vga {
 
+// PC起動時にBIOSがVGAチップを80x25のテキストモードに設定する．
+// 物理アドレス0xB8000から始まる4000バイトの領域が、80x25=2000文字分のテキストバッファとして使われる．
 constexpr size_t   WIDTH  = 80;
 constexpr size_t   HEIGHT = 25;
 constexpr uint32_t ADDR   = 0xB8000;
@@ -18,9 +20,12 @@ static size_t  row_  = 0;
 static size_t  col_  = 0;
 static uint8_t attr_ = 0;
 
+// bit0~bit3の4bit分が前景色, bit4~bit7の4bit分が背景色
 static constexpr uint8_t make_attr(Color fg, Color bg) {
     return (uint8_t)(((uint8_t)bg << 4) | ((uint8_t)fg & 0x0F));
 }
+
+// 文字コードを下位8bit, 属性を上位8bitに詰めた16bit値を作る
 static constexpr uint16_t make_entry(char c, uint8_t attr) {
     return (uint16_t)((uint8_t)c) | ((uint16_t)attr << 8);
 }
@@ -28,6 +33,9 @@ static volatile uint16_t *buf() {
     return reinterpret_cast<volatile uint16_t *>(ADDR);
 }
 
+
+// 0x3D4はインデックスレジスタ, 0x3D5はデータレジスタ.
+// 0x0Fはカーソル位置の下位8bit, 0x0Eは上位8bitを指定する値.
 static void move_cursor() {
     uint16_t pos = (uint16_t)(row_ * WIDTH + col_);
     io::out32b(0x3D4, 0x0F); io::out32b(0x3D5, (uint8_t)(pos & 0xFF));
