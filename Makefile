@@ -86,3 +86,8 @@ $(ISO): $(KERNEL)
 
 clean:
 	rm -rf $(OBJ_DIR) iso $(ISO)
+
+format:
+	@echo "[format] Running clang-format..."
+	@find . -type f \( -name '*.c' -o -name '*.cpp' -o -name '*.h' -o -name '*.hpp' \) -print0 | xargs -0 clang-format -i
+	@echo "[format] Done."

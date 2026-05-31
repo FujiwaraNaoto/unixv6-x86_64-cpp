@@ -1,0 +1,79 @@
+## Project clang-format style
+BasedOnStyle: LLVM
+Language: Cpp
+
+# インデントとスペース
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+ContinuationIndentWidth: 4
+PointerAlignment: Right        # TYPE *ptr 形式
+AlignConsecutiveAssignments: true
+AlignConsecutiveDeclarations: false
+AlignConsecutiveMacros: true
+SpaceBeforeParens: ControlStatements
+SpacesInParentheses: false
+SpacesInSquareBrackets: false
+SpacesInAngles: false
+SpaceInEmptyParentheses: false
+Cpp11BracedListStyle: true
+AllowShortIfStatementsOnASingleLine: false
+AllowShortBlocksOnASingleLine: Never
+AllowShortFunctionsOnASingleLine: Empty
+AllowShortLoopsOnASingleLine: false
+AllowShortCaseLabelsOnASingleLine: false
+
+# ブレーススタイル (関数/制御構文は次の行)
+BreakBeforeBraces: Allman
+AlwaysBreakAfterDefinitionReturnType: None
+AlwaysBreakTemplateDeclarations: Yes
+
+# ライン長
+ColumnLimit: 120
+
+# 引数/パラメータの折り返し
+BinPackParameters: false
+BinPackArguments: false
+PenaltyBreakAssignment: 50
+PenaltyBreakBeforeFirstCallParameter: 100
+PenaltyBreakComment: 300
+PenaltyBreakFirstLessLess: 120
+PenaltyBreakString: 100
+
+# コメント
+ReflowComments: true
+CommentPragmas: '^ IWYU pragma:'
+
+# インクルード順序は手動維持 (edk2 などの順序依存防止)
+SortIncludes: false
+IncludeBlocks: Preserve
+
+# 名前空間やスコープ
+NamespaceIndentation: None
+IndentCaseLabels: true
+BreakBeforeBinaryOperators: None
+KeepEmptyLinesAtTheStartOfBlocks: true
+
+# プロトタイプ/宣言
+DerivePointerAlignment: false
+
+# EDK2 の多行パラメータ書式 (手動維持したいので過度な再整形禁止)
+AlignAfterOpenBracket: Align
+AllowAllParametersOfDeclarationOnNextLine: true
+PenaltyExcessCharacter: 1000000
+
+# プリプロセッサ
+IndentPPDirectives: AfterHash
+SpaceAfterCStyleCast: false
+MaxEmptyLinesToKeep: 2
+SpaceInEmptyBlock: true
+
+# Objective-C 無効化 (使用予定なし)
+ObjCBlockIndentWidth: 4
+ObjCSpaceAfterProperty: false
+ObjCSpaceBeforeProtocolList: false
+
+# その他余計な整形抑止
+SortUsingDeclarations: false
+InsertTrailingCommas: None
+# Removed unsupported KeepEmptyLinesAtEOF (not available in clang-format 14)
