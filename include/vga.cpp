@@ -29,8 +29,8 @@ static volatile uint16_t *buf() {
 
 static void move_cursor() {
     uint16_t pos = (uint16_t)(row_ * WIDTH + col_);
-    io::outb(0x3D4, 0x0F); io::outb(0x3D5, (uint8_t)(pos & 0xFF));
-    io::outb(0x3D4, 0x0E); io::outb(0x3D5, (uint8_t)(pos >> 8));
+    io::out32b(0x3D4, 0x0F); io::out32b(0x3D5, (uint8_t)(pos & 0xFF));
+    io::out32b(0x3D4, 0x0E); io::out32b(0x3D5, (uint8_t)(pos >> 8));
 }
 
 static void scroll() {
