@@ -29,7 +29,7 @@ KERNEL   = $(OBJ_DIR)/kernel.elf
 ISO      = unixv6.iso
 
 QEMU_FLAGS     = -cdrom $(ISO) -boot d -m 128M -serial stdio \
-                 -display none -no-reboot -no-shutdown
+                 -display gtk -no-reboot -no-shutdown
 QEMU_GDB_FLAGS = $(QEMU_FLAGS) -s -S
 
 .PHONY: all iso run run-gdb clean
