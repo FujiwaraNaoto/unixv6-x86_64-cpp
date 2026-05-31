@@ -46,7 +46,7 @@ static void scroll() {
 
 void initialize() {
     serial::initialize();
-    attr_ = make_attr(Color::LightGrey, Color::Black);
+    attr_ = make_attr(Color::LightGreen, Color::Black);
     clear();
 }
 
