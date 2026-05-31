@@ -15,12 +15,12 @@ CFLAGS   = -m64 -std=c++17 \
 LDFLAGS  = -T kernel.ld -nostdlib -z max-page-size=0x1000
 NASMFLAGS = -f elf64
 
-ASM_SRC  = boot/boot.asm
+ASM_SRC  = boot/boot.asm io/io.asm
 CPP_SRC  = kernel/main.cpp \
            include/vga.cpp
 
 OBJ_DIR  = build
-ASM_OBJ  = $(OBJ_DIR)/boot.o
+ASM_OBJ  = $(OBJ_DIR)/boot.o $(OBJ_DIR)/io.o
 CPP_OBJ  = $(CPP_SRC:%.cpp=$(OBJ_DIR)/%.o)
 OBJS     = $(ASM_OBJ) $(CPP_OBJ)
 
@@ -43,6 +43,10 @@ run-gdb: $(ISO)
 	$(QEMU) $(QEMU_GDB_FLAGS)
 
 $(OBJ_DIR)/boot.o: boot/boot.asm
+	@mkdir -p $(@D)
+	$(NASM) $(NASMFLAGS) -o $@ $<
+
+$(OBJ_DIR)/io.o: io/io.asm
 	@mkdir -p $(@D)
 	$(NASM) $(NASMFLAGS) -o $@ $<
 

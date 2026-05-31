@@ -1,15 +1,12 @@
 #pragma once
 #include "types.hpp"
 
+// 実装は io/io.asm にある (System V AMD64 ABI)。
+// extern "C" によりシンボル名は名前空間を付けずに outb / inb / io_wait となる。
 namespace io {
-void outb(uint16_t port, uint8_t val) {
-    __asm__ volatile("outb %0, %1" : : "a"(val), "Nd"(port));
+extern "C" {
+void outb(uint16_t port, uint8_t val);
+uint8_t inb(uint16_t port);
+void io_wait(void);
 }
-uint8_t inb(uint16_t port) {
-    uint8_t val;
-    __asm__ volatile("inb %1, %0" : "=a"(val) : "Nd"(port));
-    return val;
-}
-void io_wait(void) { outb(0x80, 0); }
-
 }
