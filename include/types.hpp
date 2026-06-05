@@ -11,6 +11,3 @@ using int32_t   = signed int;
 using int64_t   = signed long long;
 using size_t    = unsigned long;
 using uintptr_t = unsigned long;
-
-// nullptr_t
-using nullptr_t = decltype(nullptr);
