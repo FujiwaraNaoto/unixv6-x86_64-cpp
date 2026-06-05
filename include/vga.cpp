@@ -8,8 +8,19 @@ typedef __builtin_va_list va_list;
 #define va_end(v)      __builtin_va_end(v)
 #define va_arg(v, l)   __builtin_va_arg(v, l)
 
+namespace
+{
+// PC起動時にBIOSがVGAチップを80x25のテキストモードに設定する．
+// 物理アドレス0xB8000から始まる4000バイトの領域が、80x25=2000文字分のテキストバッファとして使われる．
+constexpr size_t WIDTH  = 80;
+constexpr size_t HEIGHT = 25;
+constexpr uint32_t ADDR = 0xB8000;
+
+} // namespace
+
 namespace vga
 {
+
 
 VGA::VGA()
     : attr_(make_attr(Color::LightGreen, Color::Black)), buffer_(reinterpret_cast<uint16_t *>(ADDR)), width_(WIDTH),
