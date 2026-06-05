@@ -11,6 +11,17 @@ typedef __builtin_va_list va_list;
 namespace vga
 {
 
+VGA::VGA()
+    : attr_(make_attr(Color::LightGreen, Color::Black)), buffer_(reinterpret_cast<uint16_t *>(ADDR)), width_(WIDTH),
+      height_(HEIGHT), row_(0), col_(0)
+{
+    for (size_t i = 0; i < width_ * height_; i++)
+    {
+        buffer_[i] = make_entry(' ', attr_);
+    }
+    move_cursor();
+}
+
 // bit0~bit3の4bit分が前景色, bit4~bit7の4bit分が背景色
 uint8_t VGA::make_attr(Color fg, Color bg)
 {
