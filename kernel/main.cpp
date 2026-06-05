@@ -3,10 +3,10 @@
 
 extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]] uint32_t mb_addr)
 {
-    vga::initialize();
+    vga::VGA vga;
     // print_banner();
-    vga::puts("  [ ] IDT / interrupt handlers\n");
-    vga::puts("  [ ] Physical memory allocator\n");
+    vga.puts("  [ ] IDT / interrupt handlers\n");
+    vga.puts("  [ ] Physical memory allocator\n");
 
     while (1)
     {

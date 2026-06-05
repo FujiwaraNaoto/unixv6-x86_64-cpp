@@ -11,36 +11,24 @@ typedef __builtin_va_list va_list;
 namespace vga
 {
 
-// PC起動時にBIOSがVGAチップを80x25のテキストモードに設定する．
-// 物理アドレス0xB8000から始まる4000バイトの領域が、80x25=2000文字分のテキストバッファとして使われる．
-constexpr size_t WIDTH  = 80;
-constexpr size_t HEIGHT = 25;
-constexpr uint32_t ADDR = 0xB8000;
-
-static size_t row_   = 0;
-static size_t col_   = 0;
-static uint8_t attr_ = 0;
-
 // bit0~bit3の4bit分が前景色, bit4~bit7の4bit分が背景色
-static constexpr uint8_t make_attr(Color fg, Color bg)
+uint8_t VGA::make_attr(Color fg, Color bg)
 {
     return (uint8_t)(((uint8_t)bg << 4) | ((uint8_t)fg & 0x0F));
 }
 
 // 文字コードを下位8bit, 属性を上位8bitに詰めた16bit値を作る
-static constexpr uint16_t make_entry(char c, uint8_t attr)
+uint16_t VGA::make_entry(char c, uint8_t attr)
 {
     return (uint16_t)((uint8_t)c) | ((uint16_t)attr << 8);
 }
-static volatile uint16_t *buf()
-{
-    return reinterpret_cast<volatile uint16_t *>(ADDR);
+volatile uint16_t* VGA::buffer(){
+    return reinterpret_cast<volatile uint16_t*>(ADDR);
 }
-
 
 // 0x3D4はインデックスレジスタ, 0x3D5はデータレジスタ.
 // 0x0Fはカーソル位置の下位8bit, 0x0Eは上位8bitを指定する値.
-static void move_cursor()
+void VGA::move_cursor()
 {
     uint16_t pos = (uint16_t)(row_ * WIDTH + col_);
     io::out32b(0x3D4, 0x0F);
@@ -49,9 +37,9 @@ static void move_cursor()
     io::out32b(0x3D5, (uint8_t)(pos >> 8));
 }
 
-static void scroll()
+void VGA::scroll()
 {
-    auto b = buf();
+    auto b = buffer();
     for (size_t r = 1; r < HEIGHT; r++)
         for (size_t c = 0; c < WIDTH; c++)
             b[(r - 1) * WIDTH + c] = b[r * WIDTH + c];
@@ -60,31 +48,10 @@ static void scroll()
     row_ = HEIGHT - 1;
 }
 
-void initialize()
-{
-    serial::initialize();
-    attr_ = make_attr(Color::LightGreen, Color::Black);
-    clear();
-}
-
-void set_color(Color fg, Color bg)
-{
-    attr_ = make_attr(fg, bg);
-}
-
-void clear()
-{
-    auto b = buf();
-    for (size_t i = 0; i < WIDTH * HEIGHT; i++)
-        b[i] = make_entry(' ', attr_);
-    row_ = col_ = 0;
-    move_cursor();
-}
-
-void putchar(char c)
+void VGA::putchar(char c)
 {
     serial::putchar(c); // 端末確認用にシリアルへもミラー出力
-    auto b = buf();
+    auto b = buffer();
     if (c == '\n')
     {
         col_ = 0;
@@ -118,13 +85,13 @@ void putchar(char c)
     move_cursor();
 }
 
-void puts(const char *s)
+void VGA::puts(const char *s)
 {
     while (*s)
         putchar(*s++);
 }
 
-static void print_uint(unsigned long long n, int base, int width, char pad)
+void VGA::print_uint(unsigned long long n, int base, int width, char pad)
 {
     static const char digits[] = "0123456789abcdef";
     char tmp[64];
@@ -147,7 +114,7 @@ static void print_uint(unsigned long long n, int base, int width, char pad)
         putchar(tmp[i]);
 }
 
-void printf(const char *fmt, ...)
+void VGA::printf(const char *fmt, ...)
 {
     va_list ap;
     va_start(ap, fmt);
