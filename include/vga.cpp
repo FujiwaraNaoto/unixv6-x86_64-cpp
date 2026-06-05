@@ -22,8 +22,9 @@ uint16_t VGA::make_entry(char c, uint8_t attr)
 {
     return (uint16_t)((uint8_t)c) | ((uint16_t)attr << 8);
 }
-volatile uint16_t* VGA::buffer(){
-    return reinterpret_cast<volatile uint16_t*>(ADDR);
+volatile uint16_t *VGA::buffer()
+{
+    return reinterpret_cast<volatile uint16_t *>(ADDR);
 }
 
 // 0x3D4はインデックスレジスタ, 0x3D5はデータレジスタ.

@@ -30,19 +30,17 @@ constexpr size_t WIDTH  = 80;
 constexpr size_t HEIGHT = 25;
 constexpr uint32_t ADDR = 0xB8000;
 
-class VGA{
+class VGA
+{
 
-public:
-    
-    VGA():
-    attr_(make_attr(Color::LightGreen, Color::Black)), 
-    buffer_(reinterpret_cast<uint16_t*>(ADDR)),
-    width_(WIDTH), 
-    height_(HEIGHT),
-    row_(0),
-    col_(0) {
+  public:
+    VGA()
+        : attr_(make_attr(Color::LightGreen, Color::Black)), buffer_(reinterpret_cast<uint16_t *>(ADDR)), width_(WIDTH),
+          height_(HEIGHT), row_(0), col_(0)
+    {
 
-        for(size_t i = 0; i < width_ * height_; i++){
+        for (size_t i = 0; i < width_ * height_; i++)
+        {
             buffer_[i] = make_entry(' ', attr_);
         }
         move_cursor();
@@ -52,22 +50,19 @@ public:
     void printf(const char *fmt, ...);
     void print_uint(unsigned long long n, int base, int width, char pad);
 
-private:
+  private:
     static uint8_t make_attr(Color fg, Color bg);
     static uint16_t make_entry(char c, uint8_t attr);
-    
-    volatile uint16_t* buffer();
+
+    volatile uint16_t *buffer();
     void move_cursor();
     void scroll();
     uint8_t attr_;
-    uint16_t* buffer_;
+    uint16_t *buffer_;
     size_t width_;
     size_t height_;
     size_t row_;
     size_t col_;
-    
-    
-
 };
 
 
