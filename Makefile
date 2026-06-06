@@ -44,7 +44,7 @@ QEMU_COMMON    = -cdrom $(ISO) -boot d -m 128M -no-reboot -no-shutdown
 # VSCode 等のターミナルに直結 (シリアル = 標準入出力)。終了は Ctrl-A X
 QEMU_TERM      = $(QEMU_COMMON) -nographic
 # 別ウィンドウ表示 (GTK)。要 DISPLAY。シリアルは標準入出力(端末)にも出す
-QEMU_GUI       = $(QEMU_COMMON) -display gtk -serial stdio
+QEMU_GUI       = $(QEMU_COMMON) -display gtk -serial file:serial.log
 
 QEMU_GDB_FLAGS = $(QEMU_TERM) -s -S
 
