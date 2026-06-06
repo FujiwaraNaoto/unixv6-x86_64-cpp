@@ -16,11 +16,11 @@ namespace idt
     InterruptDescriptorTable::InterruptDescriptorTable()
     {
         for(uint8_t i=0;i<32;i++){
-            set_idt(i, isr_stubs[i], IDT_INTERRUPT_GATE);
+            set_idt(i, IDT_INTERRUPT_GATE, isr_stubs[i]);
         }
 
         for(uint8_t i=0;i<16;i++){
-            set_idt(0x20 + i, irq_stubs[i], IDT_INTERRUPT_GATE);
+            set_idt(0x20 + i, IDT_INTERRUPT_GATE, irq_stubs[i]);
         }
         
         // IDTのベースアドレスとサイズを設定
