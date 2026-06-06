@@ -34,6 +34,7 @@ class VGA
     void printf(const char *fmt, ...);
     void print_uint(unsigned long long n, int base, int width, char pad);
     void set_color(Color fg, Color bg);
+
   private:
     static uint8_t make_attr(Color fg, Color bg);
     static uint16_t make_entry(char c, uint8_t attr);

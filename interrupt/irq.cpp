@@ -5,9 +5,11 @@
 static uint32_t timer_ticks = 0;
 
 /* IRQ0: PIT タイマー (約 100 Hz) */
-void irq0_handler(void) {
+void irq0_handler(void)
+{
     timer_ticks++;
-    if (timer_ticks % 100 == 0) {
+    if (timer_ticks % 100 == 0)
+    {
         vga::vga.set_color(Color::DarkGrey, Color::Black);
         vga::vga.printf("[TIMER] %u sec\n", timer_ticks / 100);
         vga::vga.set_color(Color::LightGrey, Color::Black);
@@ -16,6 +18,7 @@ void irq0_handler(void) {
 }
 
 /* その他 IRQ: とりあえず EOI だけ送る */
-void irq_handler(uint8_t irq) {
+void irq_handler(uint8_t irq)
+{
     pic::send_eoi(irq);
 }

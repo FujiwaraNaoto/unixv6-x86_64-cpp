@@ -37,7 +37,7 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]]
 
     idt::InterruptDescriptorTable idt;
     vga::vga.puts("  IDT / interrupt handlers\n");
-    
+
 
     while (1)
     {
