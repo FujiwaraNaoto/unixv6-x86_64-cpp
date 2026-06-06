@@ -40,7 +40,11 @@ namespace pic
     {
       
     io::outb(0x43, 0x36); // チャンネル0、モード3、二進数カウンタ
-    uint16_t divisor = 1193182; //1193182Hz / 100Hz
+    //8253/8254 PITの入力クロック（14.31818MHz / 12 = 1.193182MHz）という確立したPC仕様。
+    //https://f.osdev.org/viewtopic.php?t=15503
+    //https://f.osdev.org/viewtopic.php?t=15503
+    //https://en.wikipedia.org/wiki/Color_burst
+    uint16_t divisor = 1193182 / 100; // = 11932 → 約100Hz (PIT入力1193182Hzを100で分周)
     io::outb(0x40, divisor & 0xFF); // カウンタの下位8ビット
     io::outb(0x40, (divisor >> 8) & 0xFF); // カウンタの上位8ビット
     }
