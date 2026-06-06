@@ -35,6 +35,14 @@ SECTIONS {
         *(.data.*)
     }
 
+    /* グローバルコンストラクタへのポインタ配列 (CRT 相当)。
+     * 境界シンボルをカーネルから走査してコンストラクタを呼ぶ。 */
+    .init_array ALIGN(8) : {
+        __init_array_start = .;
+        KEEP(*(SORT_BY_INIT_PRIORITY(.init_array.*) .init_array))
+        __init_array_end = .;
+    }
+
     /* 未初期化データ (ページテーブル, スタックなど) */
     .bss ALIGN(4096) : {
         *(COMMON)

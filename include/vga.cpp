@@ -24,11 +24,6 @@ namespace vga
 
 VGA::VGA()
 {
-    initialize();
-}
-
-void VGA::initialize()
-{
     attr_   = make_attr(Color::LightGreen, Color::Black);
     buffer_ = reinterpret_cast<uint16_t *>(ADDR);
     width_  = WIDTH;
