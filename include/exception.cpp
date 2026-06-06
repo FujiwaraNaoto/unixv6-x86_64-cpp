@@ -52,18 +52,26 @@ namespace exception
 
     }
 
+    static uint64_t timer_ticks = 0;
 
-}
+    // ─── IRQ ハンドラ (isr.asm から呼ばれる) ─────────────────────
+    // 今は EOI を返すだけの最小実装。実処理は今後追加する。
+    extern "C" void irq0_handler()
+    {
+        // IRQ0: タイマ
+        timer_ticks++;
+        if (timer_ticks % 100 == 0) {
+            vga::vga.set_color(Color::DarkGrey, Color::Black);
+            vga::vga.printf("[TIMER] %u sec\n", timer_ticks / 100);
+            vga::vga.set_color(Color::LightGrey, Color::Black);
+        }
+        pic::send_eoi(0);
+    }
 
-// ─── IRQ ハンドラ (isr.asm から呼ばれる) ─────────────────────
-// 今は EOI を返すだけの最小実装。実処理は今後追加する。
-extern "C" void irq0_handler()
-{
-    // IRQ0: タイマ
-    pic::send_eoi(0);
-}
+    // TODO: IRQ1 (キーボード) 以降のハンドラも実装する。 --- IGNORE ---
+    extern "C" void irq_handler(uint64_t irq_no)
+    {
+        pic::send_eoi(static_cast<uint8_t>(irq_no));
+    }
 
-extern "C" void irq_handler(uint64_t irq_no)
-{
-    pic::send_eoi(static_cast<uint8_t>(irq_no));
 }

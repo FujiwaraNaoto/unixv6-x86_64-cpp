@@ -14,6 +14,7 @@ namespace
 
 namespace pic
 {
+    //pic_init
     void InitializePIC(uint8_t offset1, uint8_t offset2)
     {
         // PICを初期化するコードをここに記述
@@ -33,6 +34,15 @@ namespace pic
         io::outb(PIC2_DATA, m2);
 
 
+    }
+
+    void InitializePIT()
+    {
+      
+    io::outb(0x43, 0x36); // チャンネル0、モード3、二進数カウンタ
+    uint16_t divisor = 1193182; //1193182Hz / 100Hz
+    io::outb(0x40, divisor & 0xFF); // カウンタの下位8ビット
+    io::outb(0x40, (divisor >> 8) & 0xFF); // カウンタの上位8ビット
     }
 
     void mask_irq(uint8_t irq)
