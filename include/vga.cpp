@@ -73,7 +73,7 @@ void VGA::scroll()
 
 void VGA::putchar(char c)
 {
-    serial::putchar(c); // 端末確認用にシリアルへもミラー出力
+    serial::serial.putchar(c); // 端末確認用にシリアルへもミラー出力
     auto b = buffer();
     if (c == '\n')
     {

@@ -5,7 +5,14 @@
 // ホスト端末に直接テキストが流れるため、表示確認に使える。
 namespace serial
 {
-void initialize();    // 38400 baud, 8N1 で COM1 を初期化
-void putchar(char c); // 1文字送信 ('\n' は "\r\n" に変換)
-void puts(const char *s);
+
+class Serial
+{
+  public:
+    static void initialize();
+    static void putchar(char c); // 1文字送信 ('\n' は "\r\n" に変換)
+    static void puts(const char *s);
+};
+
+inline Serial serial;
 } // namespace serial
