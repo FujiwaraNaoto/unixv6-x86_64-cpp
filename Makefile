@@ -43,8 +43,8 @@ QEMU_COMMON    = -cdrom $(ISO) -boot d -m 128M -no-reboot -no-shutdown
 
 # VSCode 等のターミナルに直結 (シリアル = 標準入出力)。終了は Ctrl-A X
 QEMU_TERM      = $(QEMU_COMMON) -nographic
-# 別ウィンドウ表示 (GTK)。要 DISPLAY。シリアルは serial.log に保存
-QEMU_GUI       = $(QEMU_COMMON) -display gtk -serial file:serial.log
+# 別ウィンドウ表示 (GTK)。要 DISPLAY。シリアルは標準入出力(端末)にも出す
+QEMU_GUI       = $(QEMU_COMMON) -display gtk -serial stdio
 
 QEMU_GDB_FLAGS = $(QEMU_TERM) -s -S
 
@@ -91,6 +91,7 @@ $(ISO): $(KERNEL)
 	cp $(KERNEL) iso/boot/kernel.elf
 	@echo 'set timeout=0'                        >  iso/boot/grub/grub.cfg
 	@echo 'set default=0'                        >> iso/boot/grub/grub.cfg
+	@echo 'set gfxpayload=text'                  >> iso/boot/grub/grub.cfg
 	@echo 'menuentry "UnixV6 x86-64 C++ Ph1" {' >> iso/boot/grub/grub.cfg
 	@echo '  multiboot2 /boot/kernel.elf'        >> iso/boot/grub/grub.cfg
 	@echo '  boot'                               >> iso/boot/grub/grub.cfg
