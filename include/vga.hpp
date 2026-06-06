@@ -49,5 +49,7 @@ class VGA
     size_t col_;
 };
 
+inline VGA vga;
+
 
 } // namespace vga
