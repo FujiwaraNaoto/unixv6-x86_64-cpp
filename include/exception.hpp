@@ -11,8 +11,8 @@ namespace exception
     
     // isr.asm から呼ばれるため C リンケージ (名前マングリング無効)
     extern "C" void isr_common_handler(register_state_t *regs);
+    extern "C" void irq0_handler();
+    extern "C" void irq_handler(uint64_t irq_no);
+
 }
 
-// IRQ ハンドラ (isr.asm から呼ばれる)。C リンケージ。
-extern "C" void irq0_handler();
-extern "C" void irq_handler(uint64_t irq_no);
