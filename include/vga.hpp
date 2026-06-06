@@ -29,6 +29,9 @@ class VGA
 
   public:
     VGA();
+    // グローバル変数のコンストラクタは CRT 不在のため呼ばれない。
+    // kernel_main から明示的に呼んでメンバを初期化し画面をクリアする。
+    void initialize();
     void putchar(char c);
     void puts(const char *s);
     void printf(const char *fmt, ...);

@@ -23,9 +23,18 @@ namespace vga
 
 
 VGA::VGA()
-    : attr_(make_attr(Color::LightGreen, Color::Black)), buffer_(reinterpret_cast<uint16_t *>(ADDR)), width_(WIDTH),
-      height_(HEIGHT), row_(0), col_(0)
 {
+    initialize();
+}
+
+void VGA::initialize()
+{
+    attr_   = make_attr(Color::LightGreen, Color::Black);
+    buffer_ = reinterpret_cast<uint16_t *>(ADDR);
+    width_  = WIDTH;
+    height_ = HEIGHT;
+    row_    = 0;
+    col_    = 0;
     for (size_t i = 0; i < width_ * height_; i++)
     {
         buffer_[i] = make_entry(' ', attr_);
