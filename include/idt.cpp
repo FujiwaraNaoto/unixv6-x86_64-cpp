@@ -6,6 +6,9 @@ namespace
 {
 constexpr int IDT_INTERRUPT_GATE = 0x8E; // P=1, DPL=0, S=0, Type=14 (32-bit interrupt gate)
 constexpr int IDT_TRAP_GATE      = 0x8F; // P=1, DPL=0, S=0, Type=15 (32-bit trap gate)   
+
+extern "C" uint64_t isr_stubs[]; // isr.asm で定義される ISR スタブ関数のテーブル
+extern "C" uint64_t irq_stubs[]; // isr.asm で定義される IRQ スタブ関数のテーブル
 }
 
 namespace idt
@@ -13,11 +16,11 @@ namespace idt
     InterruptDescriptorTable::InterruptDescriptorTable()
     {
         for(uint8_t i=0;i<32;i++){
-            set_idt(i, IDT_INTERRUPT_GATE, 0);
+            set_idt(i, isr_stubs[i], IDT_INTERRUPT_GATE);
         }
 
         for(uint8_t i=0;i<16;i++){
-            set_idt(0x20 + i, IDT_INTERRUPT_GATE, 0);
+            set_idt(0x20 + i, irq_stubs[i], IDT_INTERRUPT_GATE);
         }
         
         // IDTのベースアドレスとサイズを設定
