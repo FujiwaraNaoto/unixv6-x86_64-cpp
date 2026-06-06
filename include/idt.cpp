@@ -23,6 +23,8 @@ namespace idt
         // IDTのベースアドレスとサイズを設定
         idt_ptr.limit = sizeof(idt_entry_t) * entries.size() - 1;
         idt_ptr.base  = reinterpret_cast<uint64_t>(entries.data());
+        asm volatile("lidt %0" : : "m"(idt_ptr));
+        asm volatile("sti"); // 割り込みを有効化
     }
 
     
