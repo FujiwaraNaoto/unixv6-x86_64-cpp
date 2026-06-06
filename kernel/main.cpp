@@ -15,6 +15,7 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]]
 
     pic::InitializePIC(0x20, 0x28); // IRQ0-7は0x20-0x27、IRQ8-15は0x28-0x2Fに割り当てる
     idt::InterruptDescriptorTable idt;
+    vga::vga.puts("  IDT / interrupt handlers\n");
     
 
     while (1)
