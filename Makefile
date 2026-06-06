@@ -4,13 +4,24 @@ NASM     = nasm
 GRUB     = grub-mkrescue
 QEMU     = qemu-system-x86_64
 
+# -nostdinc で標準インクルードを切った上で、libstdc++ の C++ ヘッダ
+# (<array> など) を使うために必要なパスだけを -isystem で足す。
+# バージョン/ターゲットはコンパイラから取得してハードコードを避ける。
+GCC_VER    := $(shell $(CC) -dumpversion)
+GCC_TRIPLE := $(shell $(CC) -dumpmachine)
+STD_INC    = -isystem /usr/include/c++/$(GCC_VER) \
+             -isystem /usr/include/$(GCC_TRIPLE)/c++/$(GCC_VER) \
+             -isystem /usr/lib/gcc/$(GCC_TRIPLE)/$(GCC_VER)/include \
+             -isystem /usr/include/$(GCC_TRIPLE) \
+             -isystem /usr/include
+
 CFLAGS   = -m64 -std=c++17 \
            -ffreestanding -fno-stack-protector -fno-builtin \
            -fno-exceptions -fno-rtti \
            -nostdlib -nostdinc \
            -Wall -Wextra -O2 \
            -mno-red-zone -mno-mmx -mno-sse -mno-sse2 \
-           -Iinclude
+           -Iinclude $(STD_INC)
 
 LDFLAGS  = -T kernel.ld -nostdlib -z max-page-size=0x1000
 NASMFLAGS = -f elf64

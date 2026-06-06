@@ -32,7 +32,7 @@ typedef struct __attribute__((packed)) {
 class InterruptDescriptorTable
 {
   public:
-    InterruptDescriptorTable()
+    InterruptDescriptorTable();
     void set_gate(uint8_t num, uint64_t offset, uint16_t selector, uint8_t type_attr, uint8_t ist = 0);
     void load();
 
