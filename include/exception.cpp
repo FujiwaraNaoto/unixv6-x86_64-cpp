@@ -1,6 +1,7 @@
 
 #include "exception.hpp"
 #include "vga.hpp"
+#include "pic.hpp"
 
 namespace exception
 {
@@ -52,4 +53,17 @@ namespace exception
     }
 
 
+}
+
+// ─── IRQ ハンドラ (isr.asm から呼ばれる) ─────────────────────
+// 今は EOI を返すだけの最小実装。実処理は今後追加する。
+extern "C" void irq0_handler()
+{
+    // IRQ0: タイマ
+    pic::send_eoi(0);
+}
+
+extern "C" void irq_handler(uint64_t irq_no)
+{
+    pic::send_eoi(static_cast<uint8_t>(irq_no));
 }

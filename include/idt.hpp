@@ -33,9 +33,7 @@ class InterruptDescriptorTable
 {
   public:
     InterruptDescriptorTable();
-    void set_gate(uint8_t num, uint64_t offset, uint16_t selector, uint8_t type_attr, uint8_t ist = 0);
-    void load();
-
+   
   private:
 
     void set_idt(uint8_t idx, uint8_t type_attr, uint64_t handler);
