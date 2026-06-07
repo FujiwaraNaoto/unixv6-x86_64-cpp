@@ -38,15 +38,14 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]]
     call_global_constructors();
 
     // print_banner();
-    vga::vga.puts("  [ ] IDT / interrupt handlers\n");
-    vga::vga.puts("  [ ] Physical memory allocator\n");
+    vga::vga.puts("Hello World\n");
 
     pic::InitializePIC(0x20, 0x28); // IRQ0-7は0x20-0x27、IRQ8-15は0x28-0x2Fに割り当てる
 
     pic::InitializePIT();
 
     idt::InterruptDescriptorTable idt;
-    vga::vga.puts("  IDT / interrupt handlers\n");
+    vga::vga.puts("IDT / interrupt handlers\n");
 
 
     while (1)
