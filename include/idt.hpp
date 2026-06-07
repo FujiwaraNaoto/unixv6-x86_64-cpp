@@ -7,16 +7,46 @@
 namespace idt
 {
 
-typedef struct __attribute__((packed))
+enum class DescriptorType : uint16_t
+{
+    // system segment & gate descriptor types
+    kUpper8Bytes   = 0,
+    kLDT           = 2,
+    kTSSAvailable  = 9,
+    kTSSBusy       = 11,
+    kCallGate      = 12,
+    kInterruptGate = 14,
+    kTrapGate      = 15,
+
+    // code & data segment types
+    kReadWrite   = 2,
+    kExecuteRead = 10,
+};
+
+union InterruptDescriptorAttribute
+{
+    uint16_t data;
+    struct
+    {
+        uint16_t interrupt_stack_table : 3; // IST (Interrupt Stack Table) インデックス
+        uint16_t reserved0 : 5;
+        DescriptorType type : 4; // タイプ (例: 0
+        uint16_t : 1;
+        uint16_t descriptor_privilege_level : 2; // DPL (Descriptor Privilege Level)
+        uint16_t present : 1;                    // P (Present) ビット
+    } __attribute__((packed)) bits;
+} __attribute__((packed));
+
+
+struct InterruptDescriptorTableEntry
 {
     uint16_t offset_low;
-    uint16_t selector;
-    uint8_t ist;
-    uint8_t type_attribute;
+    uint16_t segment_selector;
+    InterruptDescriptorAttribute attribute;
     uint16_t offset_middle;
     uint32_t offset_high;
-    uint32_t zero;
-} idt_entry_t;
+    uint32_t reserved;
+} __attribute__((packed));
 
 typedef struct __attribute__((packed))
 {
@@ -38,8 +68,8 @@ class InterruptDescriptorTable
     InterruptDescriptorTable();
 
   private:
-    void set_idt(uint8_t idx, uint8_t type_attr, uint64_t handler);
-    std::array<idt_entry_t, 256> entries;
+    void set_idt(uint8_t idx, InterruptDescriptorAttribute attribute, uint64_t handler);
+    std::array<InterruptDescriptorTableEntry, 256> entries;
     idt_ptr_t idt_ptr;
 };
 
