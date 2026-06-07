@@ -15,7 +15,7 @@ STD_INC    = -isystem /usr/include/c++/$(GCC_VER) \
              -isystem /usr/include/$(GCC_TRIPLE) \
              -isystem /usr/include
 
-CFLAGS   = -m64 -std=c++17 \
+CFLAGS   = -m64 -std=c++20 \
            -ffreestanding -fno-stack-protector -fno-builtin \
            -fno-exceptions -fno-rtti \
            -nostdlib -nostdinc \
