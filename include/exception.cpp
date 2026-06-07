@@ -55,8 +55,7 @@ void isr_common_handler(register_state_t *regs)
 
 static uint64_t timer_ticks = 0;
 
-// ─── IRQ ハンドラ (isr.asm から呼ばれる) ─────────────────────
-// 今は EOI を返すだけの最小実装。実処理は今後追加する。
+// ─── IRQ ハンドラ ─────────────────────
 extern "C" void irq0_handler()
 {
     // IRQ0: タイマ
