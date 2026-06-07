@@ -21,6 +21,16 @@ static void call_global_constructors()
 }
 
 
+// 意図的に 0 除算 (#DE) を発生させて isr_common_handler を起こす。
+// volatile を使わないと 1/0 はコンパイル時に畳まれ div 命令が出ないため、
+// 実行時に必ず CPU 例外が起きるよう除数をメモリ経由にする。
+[[maybe_unused]] static void intentional_division_by_zero()
+{
+    volatile int zero = 0;
+    volatile int x    = 1 / zero;
+    (void)x;
+}
+
 extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]] uint32_t mb_addr)
 {
     // 他のどのグローバル変数を使う前に、コンストラクタを実行する。
