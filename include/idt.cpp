@@ -6,8 +6,20 @@ namespace
 {
 // attribute は IST バイト(下位8bit) + type/DPL/P バイト(上位8bit) の 16bit。
 // 旧 type_attribute (0x8E/0x8F) は上位バイトに置く必要があるため << 8 する。
-constexpr idt::InterruptDescriptorAttribute IDT_INTERRUPT_GATE = {0x8E00}; // P=1, DPL=0, IST=0, Type=14 (interrupt gate)
-constexpr idt::InterruptDescriptorAttribute IDT_TRAP_GATE      = {0x8F00}; // P=1, DPL=0, IST=0, Type=15 (trap gate)
+// union の bits メンバを designated initializer で初期化する (C++20)。
+// designator は宣言順・1段のみ。匿名ビットフィールドや reserved0 は 0 で省略。
+constexpr idt::InterruptDescriptorAttribute IDT_INTERRUPT_GATE = {.bits = {
+                                                                      .interrupt_stack_table = 0,
+                                                                      .type = idt::DescriptorType::kInterruptGate,
+                                                                      .descriptor_privilege_level = 0,
+                                                                      .present                    = 1,
+                                                                  }};
+constexpr idt::InterruptDescriptorAttribute IDT_TRAP_GATE      = {.bits = {
+                                                                      .interrupt_stack_table = 0,
+                                                                      .type = idt::DescriptorType::kTrapGate,
+                                                                      .descriptor_privilege_level = 0,
+                                                                      .present                    = 1,
+                                                             }};
 
 extern "C" uint64_t isr_stubs[]; // isr.asm で定義される ISR スタブ関数のテーブル
 extern "C" uint64_t irq_stubs[]; // isr.asm で定義される IRQ スタブ関数のテーブル
