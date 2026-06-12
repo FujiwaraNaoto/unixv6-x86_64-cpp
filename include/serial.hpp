@@ -9,7 +9,7 @@ namespace serial
 class Serial
 {
   public:
-    static void initialize();
+    Serial();                    // グローバル変数の構築時に COM1 を初期化する
     static void putchar(char c); // 1文字送信 ('\n' は "\r\n" に変換)
     static void puts(const char *s);
 };

@@ -23,9 +23,13 @@ namespace vga
 
 
 VGA::VGA()
-    : attr_(make_attr(Color::LightGreen, Color::Black)), buffer_(reinterpret_cast<uint16_t *>(ADDR)), width_(WIDTH),
-      height_(HEIGHT), row_(0), col_(0)
 {
+    attr_   = make_attr(Color::LightGreen, Color::Black);
+    buffer_ = reinterpret_cast<uint16_t *>(ADDR);
+    width_  = WIDTH;
+    height_ = HEIGHT;
+    row_    = 0;
+    col_    = 0;
     for (size_t i = 0; i < width_ * height_; i++)
     {
         buffer_[i] = make_entry(' ', attr_);
@@ -37,6 +41,11 @@ VGA::VGA()
 uint8_t VGA::make_attr(Color fg, Color bg)
 {
     return (uint8_t)(((uint8_t)bg << 4) | ((uint8_t)fg & 0x0F));
+}
+
+void VGA::set_color(Color fg, Color bg)
+{
+    attr_ = make_attr(fg, bg);
 }
 
 // 文字コードを下位8bit, 属性を上位8bitに詰めた16bit値を作る

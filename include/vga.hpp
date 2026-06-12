@@ -33,6 +33,7 @@ class VGA
     void puts(const char *s);
     void printf(const char *fmt, ...);
     void print_uint(unsigned long long n, int base, int width, char pad);
+    void set_color(Color fg, Color bg);
 
   private:
     static uint8_t make_attr(Color fg, Color bg);
@@ -48,6 +49,8 @@ class VGA
     size_t row_;
     size_t col_;
 };
+
+inline VGA vga;
 
 
 } // namespace vga

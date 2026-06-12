@@ -10,7 +10,7 @@ namespace serial
 // レジスタオフセット (DLAB=0 時)
 //  +0 THR/RBR/DLL   +1 IER/DLM   +2 IIR/FCR   +3 LCR
 //  +4 MCR           +5 LSR       +6 MSR       +7 SCR
-void Serial::initialize()
+Serial::Serial()
 {
     // 38400 baud, 8N1 で COM1 を初期化
     io::outb(PORT + 1, 0x00); // 割り込み無効

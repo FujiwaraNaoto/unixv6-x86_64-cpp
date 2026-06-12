@@ -4,24 +4,34 @@ NASM     = nasm
 GRUB     = grub-mkrescue
 QEMU     = qemu-system-x86_64
 
-CFLAGS   = -m64 -std=c++17 \
+# -nostdinc で標準インクルードを切った上で、libstdc++ の C++ ヘッダ
+# (<array> など) を使うために必要なパスだけを -isystem で足す。
+# バージョン/ターゲットはコンパイラから取得してハードコードを避ける。
+GCC_VER    := $(shell $(CC) -dumpversion)
+GCC_TRIPLE := $(shell $(CC) -dumpmachine)
+STD_INC    = -isystem /usr/include/c++/$(GCC_VER) \
+             -isystem /usr/include/$(GCC_TRIPLE)/c++/$(GCC_VER) \
+             -isystem /usr/lib/gcc/$(GCC_TRIPLE)/$(GCC_VER)/include \
+             -isystem /usr/include/$(GCC_TRIPLE) \
+             -isystem /usr/include
+
+CFLAGS   = -m64 -std=c++20 \
            -ffreestanding -fno-stack-protector -fno-builtin \
            -fno-exceptions -fno-rtti \
            -nostdlib -nostdinc \
            -Wall -Wextra -O2 \
            -mno-red-zone -mno-mmx -mno-sse -mno-sse2 \
-           -Iinclude
+           -Iinclude $(STD_INC)
 
 LDFLAGS  = -T kernel.ld -nostdlib -z max-page-size=0x1000
 NASMFLAGS = -f elf64
 
-ASM_SRC  = boot/boot.asm io/io.asm
+ASM_SRC  = boot/boot.asm io/io.asm interrupt/isr.asm
 CPP_SRC  = kernel/main.cpp \
-           include/vga.cpp \
-           include/serial.cpp
+           $(wildcard include/*.cpp)
 
 OBJ_DIR  = build
-ASM_OBJ  = $(OBJ_DIR)/boot.o $(OBJ_DIR)/io.o
+ASM_OBJ  = $(OBJ_DIR)/boot.o $(OBJ_DIR)/io.o $(OBJ_DIR)/isr.o
 CPP_OBJ  = $(CPP_SRC:%.cpp=$(OBJ_DIR)/%.o)
 OBJS     = $(ASM_OBJ) $(CPP_OBJ)
 
@@ -33,7 +43,7 @@ QEMU_COMMON    = -cdrom $(ISO) -boot d -m 128M -no-reboot -no-shutdown
 
 # VSCode 等のターミナルに直結 (シリアル = 標準入出力)。終了は Ctrl-A X
 QEMU_TERM      = $(QEMU_COMMON) -nographic
-# 別ウィンドウ表示 (GTK)。要 DISPLAY。シリアルは serial.log に保存
+# 別ウィンドウ表示 (GTK)。要 DISPLAY。シリアルは標準入出力(端末)にも出す
 QEMU_GUI       = $(QEMU_COMMON) -display gtk -serial file:serial.log
 
 QEMU_GDB_FLAGS = $(QEMU_TERM) -s -S
@@ -63,6 +73,10 @@ $(OBJ_DIR)/io.o: io/io.asm
 	@mkdir -p $(@D)
 	$(NASM) $(NASMFLAGS) -o $@ $<
 
+$(OBJ_DIR)/isr.o: interrupt/isr.asm
+	@mkdir -p $(@D)
+	$(NASM) $(NASMFLAGS) -o $@ $<
+
 $(OBJ_DIR)/%.o: %.cpp
 	@mkdir -p $(@D)
 	$(CC) $(CFLAGS) -c -o $@ $<
@@ -77,6 +91,7 @@ $(ISO): $(KERNEL)
 	cp $(KERNEL) iso/boot/kernel.elf
 	@echo 'set timeout=0'                        >  iso/boot/grub/grub.cfg
 	@echo 'set default=0'                        >> iso/boot/grub/grub.cfg
+	@echo 'set gfxpayload=text'                  >> iso/boot/grub/grub.cfg
 	@echo 'menuentry "UnixV6 x86-64 C++ Ph1" {' >> iso/boot/grub/grub.cfg
 	@echo '  multiboot2 /boot/kernel.elf'        >> iso/boot/grub/grub.cfg
 	@echo '  boot'                               >> iso/boot/grub/grub.cfg
