@@ -10,6 +10,13 @@ const int PIC1_DATA    = 0x21;
 const int PIC2_COMMAND = 0xA0;
 const int PIC2_DATA    = 0xA1;
 const int PIC_EOI      = 0x20;
+
+const int PIT_CHANNEL0 = 0x40;
+const int PIT_COMMAND  = 0x43;
+// 8253/8254 PIT input clock: 14.31818MHz / 12 = 1.193182MHz (established PC spec).
+// https://f.osdev.org/viewtopic.php?t=15503
+// https://en.wikipedia.org/wiki/Color_burst
+const uint32_t PIT_FREQUENCY = 1193182;
 } // namespace
 
 namespace pic
@@ -41,17 +48,20 @@ void InitializePIC(uint8_t offset1, uint8_t offset2)
     io::outb(PIC2_DATA, m2);
 }
 
-void InitializePIT()
+void InitializePIT(uint32_t hz)
 {
+    io::outb(PIT_COMMAND, 0x36); // channel 0, mode 3 (square wave), lobyte/hibyte access, binary counter
 
-    io::outb(0x43, 0x36); // チャンネル0、モード3、二進数カウンタ
-    // 8253/8254 PITの入力クロック（14.31818MHz / 12 = 1.193182MHz）という確立したPC仕様。
-    // https://f.osdev.org/viewtopic.php?t=15503
-    // https://f.osdev.org/viewtopic.php?t=15503
-    // https://en.wikipedia.org/wiki/Color_burst
-    uint16_t divisor = 1193182 / 100;      // = 11932 → 約100Hz (PIT入力1193182Hzを100で分周)
-    io::outb(0x40, divisor & 0xFF);        // カウンタの下位8ビット
-    io::outb(0x40, (divisor >> 8) & 0xFF); // カウンタの上位8ビット
+    uint16_t divisor = PIT_FREQUENCY / hz;
+
+    // The 16-bit divisor must be written as two 8-bit writes (low byte first,
+    // then high byte). The PIT data port is only 8 bits wide, and the
+    // lobyte/hibyte access mode set in the command byte above tells the chip
+    // to latch the two consecutive writes in that order. A single 16-bit OUT
+    // would not work: the x86 bus splits it into byte writes to ports 0x40
+    // and 0x41, sending the high byte to channel 1 instead of channel 0.
+    io::outb(PIT_CHANNEL0, divisor & 0xFF);
+    io::outb(PIT_CHANNEL0, (divisor >> 8) & 0xFF);
 }
 
 void mask_irq(uint8_t irq)
