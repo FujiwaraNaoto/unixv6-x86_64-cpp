@@ -48,18 +48,18 @@ struct InterruptDescriptorTableEntry
     uint32_t reserved;
 } __attribute__((packed));
 
-typedef struct __attribute__((packed))
+struct idt_ptr_t
 {
     uint16_t limit;
     uint64_t base;
-} idt_ptr_t;
+} __attribute__((packed));
 
 
 /* 割り込み時にスタックに積まれるフレーム */
-typedef struct __attribute__((packed))
+struct int_frame_t
 {
     uint64_t rip, cs, rflags, rsp, ss;
-} int_frame_t;
+} __attribute__((packed));
 
 
 class InterruptDescriptorTable
