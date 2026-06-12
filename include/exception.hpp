@@ -1,4 +1,4 @@
-#include "types.hpp"
+#include <cstdint>
 
 namespace exception
 {

@@ -1,5 +1,5 @@
 #pragma once
-#include "types.hpp"
+#include <cstdint>
 
 // 実装は io/io.asm にある (System V AMD64 ABI)。
 // extern "C" によりシンボル名は名前空間を付けずに out32b / in32b / io_wait となる。

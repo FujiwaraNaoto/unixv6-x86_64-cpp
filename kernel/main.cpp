@@ -1,4 +1,4 @@
-#include "types.hpp"
+#include <cstdint>
 #include "vga.hpp"
 #include "serial.hpp"
 #include "idt.hpp"

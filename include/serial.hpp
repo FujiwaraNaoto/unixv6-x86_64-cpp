@@ -1,5 +1,5 @@
 #pragma once
-#include "types.hpp"
+#include <cstdint>
 
 // COM1 (0x3F8) シリアルポートへの出力。QEMU の -serial stdio で
 // ホスト端末に直接テキストが流れるため、表示確認に使える。

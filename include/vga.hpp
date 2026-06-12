@@ -1,5 +1,6 @@
 #pragma once
-#include "types.hpp"
+#include <cstddef>
+#include <cstdint>
 
 enum class Color : uint8_t
 {
