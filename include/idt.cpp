@@ -8,6 +8,8 @@ namespace
 // 旧 type_attribute (0x8E/0x8F) は上位バイトに置く必要があるため << 8 する。
 // union の bits メンバを designated initializer で初期化する (C++20)。
 // designator は宣言順・1段のみ。匿名ビットフィールドや reserved0 は 0 で省略。
+// type: 記述子の属性を表し，設定可能な値は14(割り込みゲート)と15(トラップゲート)のみ.
+// present: 記述子が有効であることを表すフラグで1に設定する必要がある.
 constexpr idt::InterruptDescriptorAttribute IDT_INTERRUPT_GATE = {.bits = {
                                                                       .interrupt_stack_table = 0,
                                                                       .type = idt::DescriptorType::kInterruptGate,
