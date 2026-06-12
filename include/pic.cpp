@@ -17,7 +17,6 @@ namespace pic
 // pic_init
 void InitializePIC(uint8_t offset1, uint8_t offset2)
 {
-    // PICを初期化するコードをここに記述
     uint8_t m1 = io::inb(PIC1_DATA); /* マスク保存 */
     uint8_t m2 = io::inb(PIC2_DATA);
 
