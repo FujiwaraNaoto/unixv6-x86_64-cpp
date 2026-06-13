@@ -10,6 +10,7 @@ namespace pmm
 {
 PhysicalMemoryManager::PhysicalMemoryManager(Multiboot2MemoryMapTag *memory_map, uint64_t kernel_end)
 {
+    // initialize bitmap (all pages used)
     for (uint32_t i = 0; i < BITMAP_SIZE; i++)
     {
         bitmap_[i] = 0xFF;
@@ -23,8 +24,10 @@ PhysicalMemoryManager::PhysicalMemoryManager(Multiboot2MemoryMapTag *memory_map,
                                                                   i * memory_map->entry_size);
         if (entry->type != MULTIBOOT2_MEMORY_AVAILABLE)
             continue;
-        uint64_t start = (entry->base_addr + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
-        uint64_t end   = (entry->base_addr + entry->length) & ~(PAGE_SIZE - 1);
+
+        // ~(PAGE_SIZE - 1) は PAGE_SIZE でアラインメントするためのマスク
+        uint64_t start = (entry->base_addr + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1); //切り上げ
+        uint64_t end   = (entry->base_addr + entry->length) & ~(PAGE_SIZE - 1); //切り捨て
         if (start >= end)
             continue;
         if (total == 0)
@@ -58,6 +61,9 @@ PhysicalMemoryManager::PhysicalMemoryManager(Multiboot2MemoryMapTag *memory_map,
     }
 
     // NULL ページを使用中にする
+    // 物理アドレス0は通常使用されないが、誤ってアクセスされたときにすぐにわかるようにするため
+    // 0x0000 ~ 0x03FF
+    // はリアルモード割り込みベクタテーブルやBIOSデータエリアなどで使用されることがあるため、これらも使用中にする
     if (base_ == 0)
     {
         set_bit(0); // ベースアドレスが0の場合、最初のページを使用中にする

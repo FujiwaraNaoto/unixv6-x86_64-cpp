@@ -1,9 +1,9 @@
 #pragma once
 #include <cstdint>
 
-
+// see 4.4.1 multiboot2.h
 constexpr uint32_t MULTIBOOT2_TAG_END             = 0;
-constexpr uint32_t MULTIBOOT2_TAG_TYPE_MEMORY_MAP = 6;
+constexpr uint32_t MULTIBOOT2_TAG_TYPE_MEMORY_MAP = 6; // 3.6.8 Memory Map
 constexpr uint32_t MULTIBOOT2_MEMORY_AVAILABLE    = 1;
 
 // https://www.gnu.org/software/grub/manual/multiboot2/multiboot.html
