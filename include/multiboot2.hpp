@@ -6,13 +6,16 @@ constexpr uint32_t MULTIBOOT2_TAG_END             = 0;
 constexpr uint32_t MULTIBOOT2_TAG_TYPE_MEMORY_MAP = 6;
 constexpr uint32_t MULTIBOOT2_MEMORY_AVAILABLE    = 1;
 
-
+// https://www.gnu.org/software/grub/manual/multiboot2/multiboot.html
+// chapter3.1.3 General tag structure
 struct [[gnu::packed]] Multiboot2Tag
 {
-    uint32_t type;
+    uint16_t type;
+    uint16_t flags;
     uint32_t size;
 };
 
+// chapter3.6.8 Memory Map
 struct [[gnu::packed]] Multiboot2MemoryMapEntry
 {
     uint64_t base_addr;
@@ -21,6 +24,7 @@ struct [[gnu::packed]] Multiboot2MemoryMapEntry
     uint32_t reserved;
 };
 
+// chapter3.6.8 Memory Map
 struct [[gnu::packed]] Multiboot2MemoryMapTag
 {
     uint32_t type;
