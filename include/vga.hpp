@@ -1,6 +1,7 @@
 #pragma once
 #include <cstddef>
 #include <cstdint>
+#include "console.hpp"
 
 enum class Color : uint8_t
 {
@@ -25,13 +26,13 @@ enum class Color : uint8_t
 namespace vga
 {
 
-class VGA
+class VGA : public IConsole
 {
 
   public:
     VGA();
-    void putchar(char c);
-    void puts(const char *s);
+    void putchar(char c) override;
+    void puts(const char *s) override;
     void printf(const char *fmt, ...);
     void print_uint(unsigned long long n, int base, int width, char pad);
     void set_color(Color fg, Color bg);
