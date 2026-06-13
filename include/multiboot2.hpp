@@ -1,3 +1,4 @@
+#pragma once
 #include <cstdint>
 
 
@@ -25,3 +26,7 @@ struct [[gnu::packed]] Multiboot2MemoryMapTag {
    uint32_t entry_version;
    Multiboot2MemoryMapEntry entries[];
 };
+
+Multiboot2Tag* find_next_tag(Multiboot2Tag *current_tag);
+
+Multiboot2MemoryMapTag* find_mmap(uint32_t multiboot_address);

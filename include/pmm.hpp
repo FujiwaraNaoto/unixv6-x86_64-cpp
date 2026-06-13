@@ -2,6 +2,8 @@
 #include <cstdint>
 #include "multiboot2.hpp"
 
+#include "vga.hpp"
+
 namespace pmm
 {
     constexpr uint64_t PAGE_SIZE = 0x1000; // 4KB
@@ -19,13 +21,14 @@ namespace pmm
     static constexpr uint32_t MAX_PAGES   = 65536;
     static constexpr uint32_t BITMAP_SIZE = MAX_PAGES / 8;
 
+    //TODO:vgaと依存するので剥がしたい    
     static void print_mm_state([[maybe_unused]]const PhysicalMemoryManagerState &state)
     {
-        // vga::vga.printf("Physical Memory Manager State:\n");
-        // vga::vga.printf("  Total Pages: %llu\n", state.total_pages);
-        // vga::vga.printf("  Free Pages: %llu\n", state.free_pages);
-        // vga::vga.printf("  Base Address: 0x%016llx\n", state.base);
-        // vga::vga.printf("  Top Address: 0x%016llx\n", state.top);
+        vga::vga.printf("Physical Memory Manager State:\n");
+        vga::vga.printf("  Total Pages: %llu\n", state.total_pages);
+        vga::vga.printf("  Free Pages: %llu\n", state.free_pages);
+        vga::vga.printf("  Base Address: 0x%016llx\n", state.base);
+        vga::vga.printf("  Top Address: 0x%016llx\n", state.top);
     }
     class PhysicalMemoryManager
     {
@@ -71,4 +74,7 @@ namespace pmm
         }
 
     };
+
+    inline PhysicalMemoryManager *pmm_instance = nullptr;
+
 }
