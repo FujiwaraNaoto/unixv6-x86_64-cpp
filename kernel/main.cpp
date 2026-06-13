@@ -53,29 +53,34 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]]
 
     auto *mmap = find_mmap(mb_addr);
 
-    if(mmap){
+    if (mmap)
+    {
         pmm::PhysicalMemoryManager pmm(mmap, reinterpret_cast<uint64_t>(kernel_end));
         pmm::pmm_instance = &pmm; // グローバルにアクセスできるようにする
-        auto state = pmm.get_state();
+        auto state        = pmm.get_state();
         pmm::print_mm_state(state);
 
         uint64_t p1 = pmm.allocate();
         uint64_t p2 = pmm.allocate();
         uint64_t p3 = pmm.allocate();
-        vga::vga.set_color(Color::LightGreen, Color::Black); vga::vga.puts("[PMM]  ");
-        vga::vga.set_color(Color::LightGrey,  Color::Black);
-        vga::vga.printf("alloc test: 0x%x  0x%x  0x%x\n",
-                    (unsigned)p1, (unsigned)p2, (unsigned)p3);
+        vga::vga.set_color(Color::LightGreen, Color::Black);
+        vga::vga.puts("[PMM]  ");
+        vga::vga.set_color(Color::LightGrey, Color::Black);
+        vga::vga.printf("alloc test: 0x%x  0x%x  0x%x\n", (unsigned)p1, (unsigned)p2, (unsigned)p3);
         pmm.free(p2);
         uint64_t p4 = pmm.allocate();
-        vga::vga.set_color(Color::LightGreen, Color::Black); vga::vga.puts("[PMM]  ");
-        vga::vga.set_color(Color::LightGrey,  Color::Black);
+        vga::vga.set_color(Color::LightGreen, Color::Black);
+        vga::vga.puts("[PMM]  ");
+        vga::vga.set_color(Color::LightGrey, Color::Black);
         vga::vga.printf("free+realloc: freed=0x%x  got=0x%x  %s\n",
-                    (unsigned)p2, (unsigned)p4, p4 == p2 ? "OK" : "MISMATCH");
-    } else {
+                        (unsigned)p2,
+                        (unsigned)p4,
+                        p4 == p2 ? "OK" : "MISMATCH");
+    }
+    else
+    {
         vga::vga.puts("Memory map not found\n");
     }
-
 
 
     while (1)
