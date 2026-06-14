@@ -40,6 +40,6 @@ namespace vmm
 
     };
 
-    VirtualMemoryManager *vmm_ptr = nullptr;
+    inline VirtualMemoryManager *vmm_ptr = nullptr;
     
 }
