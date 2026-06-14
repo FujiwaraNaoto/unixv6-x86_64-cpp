@@ -1,10 +1,5 @@
 #include "pmm.hpp"
 
-namespace
-{
-
-}
-
 
 namespace pmm
 {
