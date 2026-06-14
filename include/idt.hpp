@@ -1,5 +1,5 @@
 #pragma once
-#include "types.hpp"
+#include <cstdint>
 
 #include <array>
 
@@ -23,10 +23,10 @@ enum class DescriptorType : uint16_t
     kExecuteRead = 10,
 };
 
-union InterruptDescriptorAttribute
+union [[gnu::packed]] InterruptDescriptorAttribute
 {
     uint16_t data;
-    struct
+    struct [[gnu::packed]]
     {
         uint16_t interrupt_stack_table : 3; // IST (Interrupt Stack Table) インデックス
         uint16_t reserved0 : 5;
@@ -34,11 +34,11 @@ union InterruptDescriptorAttribute
         uint16_t : 1;
         uint16_t descriptor_privilege_level : 2; // DPL (Descriptor Privilege Level)
         uint16_t present : 1;                    // P (Present) ビット
-    } __attribute__((packed)) bits;
-} __attribute__((packed));
+    } bits;
+};
 
 
-struct InterruptDescriptorTableEntry
+struct [[gnu::packed]] InterruptDescriptorTableEntry
 {
     uint16_t offset_low;
     uint16_t segment_selector;
@@ -46,20 +46,20 @@ struct InterruptDescriptorTableEntry
     uint16_t offset_middle;
     uint32_t offset_high;
     uint32_t reserved;
-} __attribute__((packed));
+};
 
-struct idt_ptr_t
+struct [[gnu::packed]] idt_ptr_t
 {
     uint16_t limit;
     uint64_t base;
-} __attribute__((packed));
+};
 
 
 /* 割り込み時にスタックに積まれるフレーム */
-struct int_frame_t
+struct [[gnu::packed]] int_frame_t
 {
     uint64_t rip, cs, rflags, rsp, ss;
-} __attribute__((packed));
+};
 
 
 class InterruptDescriptorTable
