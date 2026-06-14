@@ -10,7 +10,7 @@ namespace serial
 class Serial : public IConsole
 {
   public:
-    Serial();                    // グローバル変数の構築時に COM1 を初期化する
+    Serial();                      // グローバル変数の構築時に COM1 を初期化する
     void putchar(char c) override; // 1文字送信 ('\n' は "\r\n" に変換)
     void puts(const char *s) override;
 };

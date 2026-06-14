@@ -12,27 +12,29 @@
 extern "C"
 {
 
-// Fallback invoked if a pure virtual function (= 0) is ever actually called.
-// It should never happen in correct operation, but the linker requires the
-// symbol to exist.
-[[noreturn]] void __cxa_pure_virtual() {
-    while(1) __asm__ volatile("hlt");
-}
+    // Fallback invoked if a pure virtual function (= 0) is ever actually called.
+    // It should never happen in correct operation, but the linker requires the
+    // symbol to exist.
+    [[noreturn]] void __cxa_pure_virtual()
+    {
+        while (1)
+            __asm__ volatile("hlt");
+    }
 
-// Registration hook for destructors of static-storage objects. The kernel
-// never exits, so we register nothing and always report success
-// (i.e. no destructor ever runs).
-int __cxa_atexit(void (*)(void *), void *, void *)
-{
-    return 0;
-}
+    // Registration hook for destructors of static-storage objects. The kernel
+    // never exits, so we register nothing and always report success
+    // (i.e. no destructor ever runs).
+    int __cxa_atexit(void (*)(void *), void *, void *)
+    {
+        return 0;
+    }
 
-// Dummy symbol referenced as the third argument (DSO handle) of __cxa_atexit.
-void *__dso_handle = nullptr;
+    // Dummy symbol referenced as the third argument (DSO handle) of __cxa_atexit.
+    void *__dso_handle = nullptr;
 }
 
 // operator delete referenced by the deleting destructor (D0) in the vtable of
 // classes with a virtual destructor. These globals are never heap-allocated,
 // so it is never called and an empty body is sufficient.
-void operator delete(void *) noexcept {}
-void operator delete(void *, std::size_t) noexcept {}
+void operator delete(void *) noexcept { }
+void operator delete(void *, std::size_t) noexcept { }
