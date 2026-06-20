@@ -38,8 +38,10 @@ extern "C" uint8_t kernel_end[]; // カーネルの終端アドレス (kernel.ld
     (void)x;
 }
 
-static void thread_A(){
-    for(int i=0; i<3; ++i){
+static void thread_A()
+{
+    for (int i = 0; i < 3; ++i)
+    {
         vga::vga->set_color(Color::LightCyan, Color::Black);
         vga::vga->printf("[THREAD-A] iteration %u\n", (unsigned)i);
         vga::vga->set_color(Color::LightGrey, Color::Black);
@@ -47,16 +49,16 @@ static void thread_A(){
     }
 }
 
-static void thread_B(){
-    for(int i=0; i<3; ++i){
+static void thread_B()
+{
+    for (int i = 0; i < 3; ++i)
+    {
         vga::vga->set_color(Color::LightCyan, Color::Black);
         vga::vga->printf("[THREAD-B] iteration %u\n", (unsigned)i);
         vga::vga->set_color(Color::LightGrey, Color::Black);
         process::yield();
     }
 }
-
-
 
 
 extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]] uint32_t mb_addr)
@@ -109,9 +111,9 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]]
     vga::vga->puts("[PMM]  ");
     vga::vga->set_color(Color::LightGrey, Color::Black);
     vga::vga->printf("free+realloc: freed=0x%x  got=0x%x  %s\n",
-                    (unsigned)p2,
-                    (unsigned)p4,
-                    p4 == p2 ? "OK" : "MISMATCH");
+                     (unsigned)p2,
+                     (unsigned)p4,
+                     p4 == p2 ? "OK" : "MISMATCH");
     {
         void *brk0 = heap::heap_ptr->sbrk(0);         // 現在の brk
         void *brk1 = heap::heap_ptr->sbrk(PAGE_SIZE); // 1ページ伸ばす
@@ -119,9 +121,9 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]]
         vga::vga->puts("[SBRK] ");
         vga::vga->set_color(Color::LightGrey, Color::Black);
         vga::vga->printf("brk before=0x%x  returned=0x%x  now=0x%x\n",
-                        (unsigned)(uintptr_t)brk0,
-                        (unsigned)(uintptr_t)brk1,
-                        (unsigned)(uintptr_t)heap::heap_ptr->sbrk(0));
+                         (unsigned)(uintptr_t)brk0,
+                         (unsigned)(uintptr_t)brk1,
+                         (unsigned)(uintptr_t)heap::heap_ptr->sbrk(0));
 
         // alloc/free テスト (morecore が自動で呼ばれる)
         void *p1 = heap::heap_ptr->alloc(64);
@@ -133,11 +135,11 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]]
         vga::vga->puts("[HEAP] ");
         vga::vga->set_color(Color::LightGrey, Color::Black);
         vga::vga->printf("p1=0x%x p2=0x%x p3=0x%x p4=0x%x reuse=%s\n",
-                        (unsigned)(uintptr_t)p1,
-                        (unsigned)(uintptr_t)p2,
-                        (unsigned)(uintptr_t)p3,
-                        (unsigned)(uintptr_t)p4,
-                        p4 == p2 ? "OK" : "MISMATCH");
+                         (unsigned)(uintptr_t)p1,
+                         (unsigned)(uintptr_t)p2,
+                         (unsigned)(uintptr_t)p3,
+                         (unsigned)(uintptr_t)p4,
+                         p4 == p2 ? "OK" : "MISMATCH");
     }
 
     process::initialize(heap::heap_ptr);

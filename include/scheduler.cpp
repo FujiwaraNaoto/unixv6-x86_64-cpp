@@ -3,8 +3,8 @@
 
 namespace scheduler
 {
-    void tick()
-    {
-        process::yield();
-    }
+void tick()
+{
+    process::yield();
 }
+} // namespace scheduler

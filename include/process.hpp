@@ -24,7 +24,7 @@ enum class ProcessState
     Zombie,
 };
 
-constexpr size_t MAX_PROCESSES = 64;
+constexpr size_t MAX_PROCESSES     = 64;
 constexpr size_t KERNEL_STACK_SIZE = 0x4000; // 16KB
 
 struct Process
@@ -39,8 +39,8 @@ struct Process
 
 namespace process
 {
-    void initialize(heap::Heap *heap_ptr);
-    Process *create_process(void (*entry)(), const char *name);
-    void yield();
-    Process *current_process();
-}
+void initialize(heap::Heap *heap_ptr);
+Process *create_process(void (*entry)(), const char *name);
+void yield();
+Process *current_process();
+} // namespace process
