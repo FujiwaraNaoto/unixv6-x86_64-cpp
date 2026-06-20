@@ -3,7 +3,6 @@
 #include "vga.hpp"
 #include "pic.hpp"
 #include "process.hpp"
-#include "scheduler.hpp"
 
 namespace exception
 {
@@ -69,11 +68,9 @@ extern "C" void irq0_handler()
         vga::vga->set_color(Color::LightGrey, Color::Black);
     }
     pic::send_eoi(0);
-    
-    if(timer_ticks % 10 == 0){
-        scheduler::tick();
-    }
-
+    // 注意: 割り込みゲートでは IF=0 で入るため、ここから yield()/switch_context
+    // を呼ぶと IF が落ちたまま別プロセスへ移り、以降の割り込みが止まる。
+    // スケジューリングは各スレッドが自分で yield() を呼ぶ協調型に任せる。
 }
 
 // TODO: IRQ1 (キーボード) 以降のハンドラも実装する。 --- IGNORE ---
