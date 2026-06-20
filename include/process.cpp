@@ -24,7 +24,7 @@ void initialize(heap::Heap *heap_ptr)
 }
 
 
-// 新規プロセスが初めて実行されるときに呼ばれる関数
+// A function called when a new process is executed for the first time
 // ProcessContext の rip に設定される
 static void trampoline()
 {
@@ -53,13 +53,12 @@ Process *create_process(EntryPoint entry, const char *name)
 
     if (proc == nullptr)
     {
-        return nullptr; // プロステーブルが満杯
+        return nullptr; // The process table is full.
     }
     proc->pid   = next_pid_++;
     proc->state = ProcessState::Embryo;
     proc->entry = entry;
     proc->name  = name; // kstring が容量超過分を切り捨てて null 終端する
-    proc->state = ProcessState::Ready;
 
     uint8_t *stack = static_cast<uint8_t *>(heap_ptr_->alloc(KERNEL_STACK_SIZE));
     if (stack == nullptr)
@@ -82,7 +81,7 @@ Process *create_process(EntryPoint entry, const char *name)
     return proc;
 }
 
-// ラウンドロビンで次のReady状態のプロセスに切り替える
+// Switch to the next process in the “Ready” state using round-robin scheduling
 void yield()
 {
     Process *prev_proc = current_proc_;
@@ -101,14 +100,13 @@ void yield()
                 prev_proc->state = ProcessState::Ready;
             }
             ProcessContext **old_ctx = (prev_proc) ? &prev_proc->context : nullptr;
-            static ProcessContext *dummy; // prev がnullptrのときに渡すダミーのコンテキスト
+            static ProcessContext *dummy; // A dummy context to pass when `prev` is `nullptr`
 
             switch_context((old_ctx) ? old_ctx : &dummy, current_proc_->context);
             return;
         }
     }
-    // ここに到達するのは、実行可能なプロセス(=Ready)がない場合
-    // その場合は、CPUをアイドル状態にする
+    // This point is reached when there are no executable processes (=Ready Status)
     asm volatile("hlt");
 }
 
