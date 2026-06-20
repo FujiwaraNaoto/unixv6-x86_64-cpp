@@ -29,6 +29,7 @@ constexpr size_t MAX_PROCESSES     = 64;
 constexpr size_t KERNEL_STACK_SIZE = 0x4000; // 16KB
 
 // プロセスのエントリポイント (引数なし・戻り値なしの関数)。
+// NOTE: std::function などの C++ 標準ライブラリは使えないので、関数ポインタで表現する
 using EntryPoint = void (*)();
 
 struct Process
@@ -38,7 +39,8 @@ struct Process
     ProcessContext *context; // カーネルスタック上の保存コンテキストを指す
     uint64_t kernel_stack;
     EntryPoint entry;
-    kstring<16> name;
+    kstring<16> name; // NOTE: kstring は固定容量の文字列で、容量超過分は切り捨てられる.
+                      // C++の標準ライブラリは使えないので、std::string は使えない
 };
 
 namespace process
