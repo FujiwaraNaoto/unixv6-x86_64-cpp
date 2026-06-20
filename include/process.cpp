@@ -100,6 +100,10 @@ void yield()
                 prev_proc->state = ProcessState::Ready;
             }
             ProcessContext **old_ctx = (prev_proc) ? &prev_proc->context : nullptr;
+
+            // intentionally use static so that the dummy context is shared across all calls to yield() and doesn't
+            // consume stack space, and it wll continue to exist until the program ends. I use it as a place to write,
+            // but it's a dumping ground that no one reads
             static ProcessContext *dummy; // A dummy context to pass when `prev` is `nullptr`
 
             switch_context((old_ctx) ? old_ctx : &dummy, current_proc_->context);
