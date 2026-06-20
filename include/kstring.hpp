@@ -12,8 +12,14 @@ class kstring
     static_assert(N > 0, "kstring capacity must be > 0");
 
   public:
-    kstring() { clear(); }
-    kstring(const char *s) { assign(s); }
+    kstring()
+    {
+        clear();
+    }
+    kstring(const char *s)
+    {
+        assign(s);
+    }
 
     kstring &operator=(const char *s)
     {
@@ -21,12 +27,27 @@ class kstring
         return *this;
     }
 
-    const char *c_str() const { return data_; }
-    size_t size() const { return len_; }
-    bool empty() const { return len_ == 0; }
-    static constexpr size_t capacity() { return N - 1; }
+    const char *c_str() const
+    {
+        return data_;
+    }
+    size_t size() const
+    {
+        return len_;
+    }
+    bool empty() const
+    {
+        return len_ == 0;
+    }
+    static constexpr size_t capacity()
+    {
+        return N - 1;
+    }
 
-    char operator[](size_t i) const { return data_[i]; }
+    char operator[](size_t i) const
+    {
+        return data_[i];
+    }
 
     bool operator==(const char *s) const
     {
@@ -40,7 +61,10 @@ class kstring
         }
         return s[i] == '\0';
     }
-    bool operator!=(const char *s) const { return !(*this == s); }
+    bool operator!=(const char *s) const
+    {
+        return !(*this == s);
+    }
 
   private:
     void clear()

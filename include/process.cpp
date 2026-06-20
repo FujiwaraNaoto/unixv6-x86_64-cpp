@@ -23,6 +23,9 @@ void initialize(heap::Heap *heap_ptr)
     heap_ptr_     = heap_ptr;
 }
 
+
+// 新規プロセスが初めて実行されるときに呼ばれる関数
+// ProcessContext の rip に設定される
 static void trampoline()
 {
     Process *proc = current_proc_;
@@ -36,7 +39,7 @@ static void trampoline()
         asm volatile("hlt");
 }
 
-Process *create_process(void (*entry)(), const char *name)
+Process *create_process(EntryPoint entry, const char *name)
 {
     Process *proc = nullptr;
     for (size_t idx = 0; idx < process_table_.size(); ++idx)
@@ -79,7 +82,7 @@ Process *create_process(void (*entry)(), const char *name)
     return proc;
 }
 
-
+// ラウンドロビンで次のReady状態のプロセスに切り替える
 void yield()
 {
     Process *prev_proc = current_proc_;
