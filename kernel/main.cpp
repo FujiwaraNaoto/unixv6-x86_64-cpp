@@ -7,6 +7,7 @@
 #include "pmm.hpp"
 #include "vmm.hpp"
 #include "heap.hpp"
+#include "process.hpp"
 #include "multiboot2.hpp"
 
 // CRT 相当: リンカが .init_array に並べたグローバルコンストラクタを
@@ -36,6 +37,27 @@ extern "C" uint8_t kernel_end[]; // カーネルの終端アドレス (kernel.ld
     volatile int x    = 1 / zero;
     (void)x;
 }
+
+static void thread_A(){
+    for(int i=0; i<3; ++i){
+        vga::vga->set_color(Color::LightCyan, Color::Black);
+        vga::vga->printf("[THREAD-A] iteration %u\n", (unsigned)i);
+        vga::vga->set_color(Color::LightGrey, Color::Black);
+        process::yield();
+    }
+}
+
+static void thread_B(){
+    for(int i=0; i<3; ++i){
+        vga::vga->set_color(Color::LightCyan, Color::Black);
+        vga::vga->printf("[THREAD-B] iteration %u\n", (unsigned)i);
+        vga::vga->set_color(Color::LightGrey, Color::Black);
+        process::yield();
+    }
+}
+
+
+
 
 extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]] uint32_t mb_addr)
 {
@@ -116,6 +138,13 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]]
                         (unsigned)(uintptr_t)p3,
                         (unsigned)(uintptr_t)p4,
                         p4 == p2 ? "OK" : "MISMATCH");
+    }
+
+    process::initialize(heap::heap_ptr);
+    Process *procA = process::create_process(thread_A, "Thread A");
+    Process *procB = process::create_process(thread_B, "Thread B");
+    {
+
     }
     while (1)
     {
