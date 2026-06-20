@@ -75,6 +75,6 @@ class PhysicalMemoryManager
     }
 };
 
-inline PhysicalMemoryManager *pmm_instance = nullptr;
+inline PhysicalMemoryManager *pmm_ptr = nullptr;
 
 } // namespace pmm

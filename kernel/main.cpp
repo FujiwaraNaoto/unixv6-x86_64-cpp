@@ -5,6 +5,8 @@
 #include "pic.hpp"
 #include "io.hpp"
 #include "pmm.hpp"
+#include "vmm.hpp"
+#include "heap.hpp"
 #include "multiboot2.hpp"
 
 // CRT 相当: リンカが .init_array に並べたグローバルコンストラクタを
@@ -53,36 +55,65 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]]
 
     auto *mmap = find_mmap(mb_addr);
 
-    if (mmap)
-    {
-        pmm::PhysicalMemoryManager pmm(mmap, reinterpret_cast<uint64_t>(kernel_end));
-        pmm::pmm_instance = &pmm; // グローバルにアクセスできるようにする
-        auto state        = pmm.get_state();
-        pmm::print_mm_state(state);
-
-        uint64_t p1 = pmm.allocate();
-        uint64_t p2 = pmm.allocate();
-        uint64_t p3 = pmm.allocate();
-        vga::vga.set_color(Color::LightGreen, Color::Black);
-        vga::vga.puts("[PMM]  ");
-        vga::vga.set_color(Color::LightGrey, Color::Black);
-        vga::vga.printf("alloc test: 0x%x  0x%x  0x%x\n", (unsigned)p1, (unsigned)p2, (unsigned)p3);
-        pmm.free(p2);
-        uint64_t p4 = pmm.allocate();
-        vga::vga.set_color(Color::LightGreen, Color::Black);
-        vga::vga.puts("[PMM]  ");
-        vga::vga.set_color(Color::LightGrey, Color::Black);
-        vga::vga.printf("free+realloc: freed=0x%x  got=0x%x  %s\n",
-                        (unsigned)p2,
-                        (unsigned)p4,
-                        p4 == p2 ? "OK" : "MISMATCH");
-    }
-    else
+    if (!mmap)
     {
         vga::vga.puts("Memory map not found\n");
+        asm volatile("hlt");
     }
 
+    pmm::PhysicalMemoryManager pmm(mmap, reinterpret_cast<uint64_t>(kernel_end));
+    vmm::VirtualMemoryManager vmm_instance = vmm::VirtualMemoryManager(&pmm);
+    heap::Heap heap_instance(0x400000, 0x800000, &pmm, &vmm_instance);
 
+    vmm::vmm_ptr   = &vmm_instance;  // グローバルにアクセスできるようにする
+    pmm::pmm_ptr   = &pmm;           // グローバルにアクセスできるようにする
+    heap::heap_ptr = &heap_instance; // グローバルにアクセスできるようにする
+    auto state     = pmm.get_state();
+    pmm::print_mm_state(state);
+
+    uint64_t p1 = pmm.allocate();
+    uint64_t p2 = pmm.allocate();
+    uint64_t p3 = pmm.allocate();
+    vga::vga.set_color(Color::LightGreen, Color::Black);
+    vga::vga.puts("[PMM]  ");
+    vga::vga.set_color(Color::LightGrey, Color::Black);
+    vga::vga.printf("alloc test: 0x%x  0x%x  0x%x\n", (unsigned)p1, (unsigned)p2, (unsigned)p3);
+    pmm.free(p2);
+    uint64_t p4 = pmm.allocate();
+    vga::vga.set_color(Color::LightGreen, Color::Black);
+    vga::vga.puts("[PMM]  ");
+    vga::vga.set_color(Color::LightGrey, Color::Black);
+    vga::vga.printf("free+realloc: freed=0x%x  got=0x%x  %s\n",
+                    (unsigned)p2,
+                    (unsigned)p4,
+                    p4 == p2 ? "OK" : "MISMATCH");
+    {
+        void *brk0 = heap::heap_ptr->sbrk(0);         // 現在の brk
+        void *brk1 = heap::heap_ptr->sbrk(PAGE_SIZE); // 1ページ伸ばす
+        vga::vga.set_color(Color::LightGreen, Color::Black);
+        vga::vga.puts("[SBRK] ");
+        vga::vga.set_color(Color::LightGrey, Color::Black);
+        vga::vga.printf("brk before=0x%x  returned=0x%x  now=0x%x\n",
+                        (unsigned)(uintptr_t)brk0,
+                        (unsigned)(uintptr_t)brk1,
+                        (unsigned)(uintptr_t)heap::heap_ptr->sbrk(0));
+
+        // alloc/free テスト (morecore が自動で呼ばれる)
+        void *p1 = heap::heap_ptr->alloc(64);
+        void *p2 = heap::heap_ptr->alloc(128);
+        void *p3 = heap::heap_ptr->alloc(32);
+        heap::heap_ptr->free(p2);
+        void *p4 = heap::heap_ptr->alloc(64); // p2 の領域が再利用されるはず
+        vga::vga.set_color(Color::LightGreen, Color::Black);
+        vga::vga.puts("[HEAP] ");
+        vga::vga.set_color(Color::LightGrey, Color::Black);
+        vga::vga.printf("p1=0x%x p2=0x%x p3=0x%x p4=0x%x reuse=%s\n",
+                        (unsigned)(uintptr_t)p1,
+                        (unsigned)(uintptr_t)p2,
+                        (unsigned)(uintptr_t)p3,
+                        (unsigned)(uintptr_t)p4,
+                        p4 == p2 ? "OK" : "MISMATCH");
+    }
     while (1)
     {
         asm volatile("hlt");

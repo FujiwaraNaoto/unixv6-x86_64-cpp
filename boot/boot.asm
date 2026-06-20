@@ -48,6 +48,7 @@ ALIGN 4096
 pml4_table: resb 4096
 pdpt_table:  resb 4096
 pd_table:    resb 4096
+pt_table:    resb 4096 ; 2MiB page table  8byte * 512entries = 4096 bytes
 
 ; ─── 32-bit スタートアップ ────────────────────────────────────────
 section .text
@@ -84,8 +85,21 @@ setup_paging:
     or  eax, 0x3
     mov [pdpt_table], eax
 
-    ; PD[0] → 2MiB 巨大ページ (0x000000 - 0x1FFFFF)
-    mov dword [pd_table], 0x000083  ; Present + Writable + HugePage
+    ; PD[0] → PT (巨大ページフラグなし)
+    mov eax, pt_table
+    or  eax, 0x3          ; Present + Writable
+    mov [pd_table], eax
+
+    ; PT[0..511] → 物理アドレス 0x0000 〜 0x1FF000 (各4KiB)
+    mov ecx, 0             ; ループカウンタ
+.pt_loop:
+    mov eax, ecx
+    shl eax, 12            ; index × 4096 = 物理アドレス
+    or  eax, 0x3           ; Present + Writable
+    mov [pt_table + ecx*8], eax
+    inc ecx
+    cmp ecx, 512
+    jl  .pt_loop
 
     ; CR3 ← PML4
     mov eax, pml4_table
