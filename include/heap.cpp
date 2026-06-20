@@ -55,7 +55,7 @@ namespace heap
         return ptr;
     }
 
-    void Heap::init(uint64_t virt_start, uint64_t virt_end, pmm::PhysicalMemoryManager *pmm_ptr, vmm::VirtualMemoryManager *vmm_ptr)
+    Heap::Heap(uint64_t virt_start, uint64_t virt_end, pmm::PhysicalMemoryManager *pmm_ptr, vmm::VirtualMemoryManager *vmm_ptr)
     {
         virt_start_ = virt_start;
         virt_end_ = virt_end;

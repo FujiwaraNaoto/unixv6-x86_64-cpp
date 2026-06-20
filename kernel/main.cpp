@@ -6,6 +6,7 @@
 #include "io.hpp"
 #include "pmm.hpp"
 #include "vmm.hpp"
+#include "heap.hpp"
 #include "multiboot2.hpp"
 
 // CRT 相当: リンカが .init_array に並べたグローバルコンストラクタを
@@ -61,9 +62,11 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]]
     
     pmm::PhysicalMemoryManager pmm(mmap, reinterpret_cast<uint64_t>(kernel_end));
     vmm::VirtualMemoryManager vmm_instance = vmm::VirtualMemoryManager(&pmm);
-        
+    heap::Heap heap_instance(0x400000, 0x800000, &pmm, &vmm_instance);
+
     vmm::vmm_ptr = &vmm_instance; // グローバルにアクセスできるようにする
     pmm::pmm_ptr = &pmm; // グローバルにアクセスできるようにする
+    heap::heap_ptr = &heap_instance; // グローバルにアクセスできるようにする
     auto state = pmm.get_state();
     pmm::print_mm_state(state);
 

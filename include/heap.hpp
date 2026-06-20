@@ -16,10 +16,8 @@ namespace heap
     class Heap final
     {
     public:
-        Heap() = default;
-        ~Heap() = default;
 
-        void init(uint64_t heap_start, uint64_t heap_size, pmm::PhysicalMemoryManager *pmm_ptr, vmm::VirtualMemoryManager *vmm_ptr);
+        Heap(uint64_t heap_start, uint64_t heap_size, pmm::PhysicalMemoryManager *pmm_ptr, vmm::VirtualMemoryManager *vmm_ptr);
         void *alloc(size_t size);
         void free(void *ptr);
     private:
@@ -35,5 +33,5 @@ namespace heap
         vmm::VirtualMemoryManager *vmm_ptr_ = nullptr; // VMMのポインタ
     };
 
-    
+    inline Heap* heap_ptr;
 }
