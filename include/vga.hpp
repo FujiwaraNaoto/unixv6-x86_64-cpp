@@ -52,7 +52,7 @@ class VGA : public IConsole
     size_t col_;
 };
 
-inline VGA vga;
+inline VGA* vga;
 
 
 } // namespace vga
