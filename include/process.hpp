@@ -2,6 +2,7 @@
 #include <cstdint>
 #include <cstddef>
 #include "heap.hpp"
+#include "kstring.hpp"
 
 struct [[gnu::packed]] ProcessContext
 {
@@ -34,7 +35,7 @@ struct Process
     ProcessContext *context; // カーネルスタック上の保存コンテキストを指す
     uint64_t kernel_stack;
     void (*entry)();
-    char name[16];
+    kstring<16> name;
 };
 
 namespace process

@@ -55,12 +55,8 @@ Process *create_process(void (*entry)(), const char *name)
     proc->pid   = next_pid_++;
     proc->state = ProcessState::Embryo;
     proc->entry = entry;
-    for (size_t i = 0; i < sizeof(proc->name) - 1 && name[i] != '\0'; ++i)
-    {
-        proc->name[i] = name[i];
-    }
-    proc->name[sizeof(proc->name) - 1] = '\0'; // 念のためnull終端
-    proc->state                        = ProcessState::Ready;
+    proc->name  = name; // kstring が容量超過分を切り捨てて null 終端する
+    proc->state = ProcessState::Ready;
 
     uint8_t *stack = static_cast<uint8_t *>(heap_ptr_->alloc(KERNEL_STACK_SIZE));
     if (stack == nullptr)
