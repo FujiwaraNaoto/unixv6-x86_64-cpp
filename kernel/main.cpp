@@ -144,7 +144,7 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]]
     Process *procA = process::create_process(thread_A, "Thread A");
     Process *procB = process::create_process(thread_B, "Thread B");
     {
-
+        process::yield(); // 最初のプロセスに切り替える
     }
     while (1)
     {

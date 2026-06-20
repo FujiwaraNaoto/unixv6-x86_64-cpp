@@ -2,6 +2,8 @@
 #include "exception.hpp"
 #include "vga.hpp"
 #include "pic.hpp"
+#include "process.hpp"
+#include "scheduler.hpp"
 
 namespace exception
 {
@@ -67,6 +69,11 @@ extern "C" void irq0_handler()
         vga::vga->set_color(Color::LightGrey, Color::Black);
     }
     pic::send_eoi(0);
+    
+    if(timer_ticks % 10 == 0){
+        scheduler::tick();
+    }
+
 }
 
 // TODO: IRQ1 (キーボード) 以降のハンドラも実装する。 --- IGNORE ---
