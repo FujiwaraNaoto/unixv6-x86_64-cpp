@@ -35,6 +35,9 @@ static void trampoline()
     }
     proc->state = ProcessState::Zombie;
     yield();
+
+    // unreachable, but just in case, halt the CPU to avoid unexpected behavior. The process will be in Zombie state,
+    // and won't be scheduled again, but it will still consume CPU time if we don't halt here.
     while (1)
         asm volatile("hlt");
 }
