@@ -34,19 +34,19 @@ static const char *exception_messages[NUM_EXCEPTIONS] = {
 
 void isr_common_handler(register_state_t *regs)
 {
-    vga::vga.set_color(Color::White, Color::Red);
-    vga::vga.printf("**Exception **");
+    vga::vga->set_color(Color::White, Color::Red);
+    vga::vga->printf("**Exception **");
     if (regs->int_no < NUM_EXCEPTIONS)
     {
-        vga::vga.printf(": %s\n", exception_messages[regs->int_no]);
+        vga::vga->printf(": %s\n", exception_messages[regs->int_no]);
     }
     else
     {
-        vga::vga.printf(": Unknown Exception\n");
+        vga::vga->printf(": Unknown Exception\n");
     }
 
-    vga::vga.printf("RIP: %016llx,CS=0x%016llx, RFLAGS=0x%016llx\n", regs->rip, regs->cs, regs->rflags);
-    vga::vga.printf("RSP: %016llx, SS=0x%016llx\n", regs->rsp, regs->ss);
+    vga::vga->printf("RIP: %016llx,CS=0x%016llx, RFLAGS=0x%016llx\n", regs->rip, regs->cs, regs->rflags);
+    vga::vga->printf("RSP: %016llx, SS=0x%016llx\n", regs->rsp, regs->ss);
     while (1)
     {
         asm volatile("hlt");
@@ -62,9 +62,9 @@ extern "C" void irq0_handler()
     timer_ticks++;
     if (timer_ticks % 100 == 0)
     {
-        vga::vga.set_color(Color::DarkGrey, Color::Black);
-        vga::vga.printf("[TIMER] %u sec\n", timer_ticks / 100);
-        vga::vga.set_color(Color::LightGrey, Color::Black);
+        vga::vga->set_color(Color::DarkGrey, Color::Black);
+        vga::vga->printf("[TIMER] %u sec\n", timer_ticks / 100);
+        vga::vga->set_color(Color::LightGrey, Color::Black);
     }
     pic::send_eoi(0);
 }
