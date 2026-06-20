@@ -86,7 +86,30 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]]
                     (unsigned)p2,
                     (unsigned)p4,
                     p4 == p2 ? "OK" : "MISMATCH");
+    {
+    void *brk0 = heap::heap_ptr->sbrk(0);           // 現在の brk
+    void *brk1 = heap::heap_ptr->sbrk(PAGE_SIZE);   // 1ページ伸ばす
+    vga::vga.set_color(Color::LightGreen, Color::Black); vga::vga.puts("[SBRK] ");
+    vga::vga.set_color(Color::LightGrey,  Color::Black);
+    vga::vga.printf("brk before=0x%x  returned=0x%x  now=0x%x\n",
+                   (unsigned)(uintptr_t)brk0,
+                   (unsigned)(uintptr_t)brk1,
+                   (unsigned)(uintptr_t)heap::heap_ptr->sbrk(0));
 
+    // alloc/free テスト (morecore が自動で呼ばれる)
+    void *p1 = heap::heap_ptr->alloc(64);
+    void *p2 = heap::heap_ptr->alloc(128);
+    void *p3 = heap::heap_ptr->alloc(32);
+    heap::heap_ptr->free(p2);
+    void *p4 = heap::heap_ptr->alloc(64);   // p2 の領域が再利用されるはず
+    vga::vga.set_color(Color::LightGreen, Color::Black); vga::vga.puts("[HEAP] ");
+    vga::vga.set_color(Color::LightGrey,  Color::Black);
+    vga::vga.printf("p1=0x%x p2=0x%x p3=0x%x p4=0x%x reuse=%s\n",
+                   (unsigned)(uintptr_t)p1, (unsigned)(uintptr_t)p2,
+                   (unsigned)(uintptr_t)p3, (unsigned)(uintptr_t)p4,
+                   p4 == p2 ? "OK" : "MISMATCH");
+
+    }
     while (1)
     {
         asm volatile("hlt");

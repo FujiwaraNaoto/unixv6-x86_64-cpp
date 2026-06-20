@@ -25,8 +25,8 @@ namespace heap
             return (void*)-1; // 仮想アドレスの範囲
         }
 
-        uint64_t map_start = (brk_ + pmm::PAGE_SIZE - 1) & pmm::PAGE_SIZE; // 次のページ境界
-        
+        uint64_t map_start = (brk_ + pmm::PAGE_SIZE - 1) & ~(pmm::PAGE_SIZE - 1); // 次のページ境界に切り上げ
+
         for(uint64_t va = map_start; va < new_brk; va += pmm::PAGE_SIZE) {
             uint64_t pa = pmm_ptr_->allocate();
             if(pa == 0) {
@@ -35,15 +35,11 @@ namespace heap
             if(!vmm_ptr_->map_page(va, pa, vmm::PageFlag::Present | vmm::PageFlag::Writable)) {
                 return (void*)-1;
             }
-            
-            void *old_brk = reinterpret_cast<void*>(brk_);
-            brk_ = new_brk; // ブレークポイントを更新
-            return old_brk; // 古いブレークポイントを返す
-
-
         }
-        // unreachable
-        return (void*)-1; 
+
+        void *old_brk = reinterpret_cast<void*>(brk_);
+        brk_ = new_brk; // ブレークポイントを更新
+        return old_brk; // 古いブレークポイントを返す
     }
     void *Heap::morecore(size_t pages)
     {
