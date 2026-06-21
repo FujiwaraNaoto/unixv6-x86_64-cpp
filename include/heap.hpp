@@ -28,10 +28,6 @@ class Heap final
     void *morecore(size_t pages);
 
   private:
-    // union header base;		  // free listのベース
-    // union header* freelist_ptr = nullptr; // free listの先頭を指すポインタ
-
-
     pmm::PhysicalMemoryManager *pmm_ptr_ = nullptr; // PMMのポインタ
     vmm::VirtualMemoryManager *vmm_ptr_  = nullptr; // VMMのポインタ
 };
