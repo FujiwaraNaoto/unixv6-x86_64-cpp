@@ -26,12 +26,12 @@ CFLAGS   = -m64 -std=c++20 \
 LDFLAGS  = -T kernel.ld -nostdlib -z max-page-size=0x1000
 NASMFLAGS = -f elf64
 
-ASM_SRC  = boot/boot.asm io/io.asm interrupt/isr.asm boot/switch.asm
+ASM_SRC  = boot/boot.asm io/io.asm interrupt/isr.asm boot/switch.asm syscall/syscall_entry.asm
 CPP_SRC  = kernel/main.cpp \
            $(wildcard include/*.cpp)
 
 OBJ_DIR  = build
-ASM_OBJ  = $(OBJ_DIR)/boot.o $(OBJ_DIR)/io.o $(OBJ_DIR)/isr.o $(OBJ_DIR)/switch.o
+ASM_OBJ  = $(OBJ_DIR)/boot.o $(OBJ_DIR)/io.o $(OBJ_DIR)/isr.o $(OBJ_DIR)/switch.o $(OBJ_DIR)/syscall_entry.o
 CPP_OBJ  = $(CPP_SRC:%.cpp=$(OBJ_DIR)/%.o)
 OBJS     = $(ASM_OBJ) $(CPP_OBJ)
 
@@ -78,6 +78,10 @@ $(OBJ_DIR)/isr.o: interrupt/isr.asm
 	$(NASM) $(NASMFLAGS) -o $@ $<
 
 $(OBJ_DIR)/switch.o: boot/switch.asm
+	@mkdir -p $(@D)
+	$(NASM) $(NASMFLAGS) -o $@ $<
+
+$(OBJ_DIR)/syscall_entry.o: syscall/syscall_entry.asm
 	@mkdir -p $(@D)
 	$(NASM) $(NASMFLAGS) -o $@ $<
 
