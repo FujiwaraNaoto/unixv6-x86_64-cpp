@@ -146,18 +146,9 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]]
                          p4 == p2 ? "OK" : "MISMATCH");
     }
 
-    process::ProcessManager process_manager(heap::heap_ptr);
-    Process *procA = process::create_process(thread_A, "Thread A");
-    Process *procB = process::create_process(thread_B, "Thread B");
-    vga::vga->printf("[DBG] procA=0x%x stateA=%d procB=0x%x stateB=%d\n",
-                     static_cast<unsigned>(reinterpret_cast<uintptr_t>(procA)),
-                     procA ? static_cast<int>(procA->state) : -1,
-                     static_cast<unsigned>(reinterpret_cast<uintptr_t>(procB)),
-                     procB ? static_cast<int>(procB->state) : -1);
-    {
-        process::yield(); // 最初のプロセスに切り替える
-    }
-
+    // syscall テストは先に実行する。下のスレッドデモ (process::yield) は
+    // kernel_main のコンテキストを dummy に捨ててしまい二度と戻らないため、
+    // それより後ろに置くと到達しない。
     {
         syscall::init();
 
@@ -177,9 +168,20 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]]
         vga::vga->set_color(Color::LightGreen, Color::Black); vga::vga->puts("[SYS]  ");
         vga::vga->set_color(Color::LightGrey,  Color::Black);
         vga::vga->printf("write() returned %u\n", (unsigned)ret);
-        
-
     }
+
+    process::ProcessManager process_manager(heap::heap_ptr);
+    Process *procA = process::create_process(thread_A, "Thread A");
+    Process *procB = process::create_process(thread_B, "Thread B");
+    vga::vga->printf("[DBG] procA=0x%x stateA=%d procB=0x%x stateB=%d\n",
+                     static_cast<unsigned>(reinterpret_cast<uintptr_t>(procA)),
+                     procA ? static_cast<int>(procA->state) : -1,
+                     static_cast<unsigned>(reinterpret_cast<uintptr_t>(procB)),
+                     procB ? static_cast<int>(procB->state) : -1);
+    {
+        process::yield(); // 最初のプロセスに切り替える
+    }
+
     while (1)
     {
         asm volatile("hlt");
