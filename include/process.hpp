@@ -45,7 +45,16 @@ struct Process
 
 namespace process
 {
-void initialize(heap::Heap *heap_ptr);
+// プロセス管理の初期化を担うクラス。
+// コンストラクタが従来の initialize() 相当 (プロセステーブルのクリアと
+// heap の登録) を行う。状態自体は process.cpp のモジュール内 static が持ち、
+// create_process()/yield() はフリー関数としてそれを操作する。
+class ProcessManager
+{
+  public:
+    explicit ProcessManager(heap::Heap *heap_ptr);
+};
+
 Process *create_process(EntryPoint entry, const char *name);
 void yield();
 Process *current_process();

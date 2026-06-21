@@ -145,7 +145,7 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]]
                          p4 == p2 ? "OK" : "MISMATCH");
     }
 
-    process::initialize(heap::heap_ptr);
+    process::ProcessManager process_manager(heap::heap_ptr);
     Process *procA = process::create_process(thread_A, "Thread A");
     Process *procB = process::create_process(thread_B, "Thread B");
     vga::vga->printf("[DBG] procA=0x%x stateA=%d procB=0x%x stateB=%d\n",

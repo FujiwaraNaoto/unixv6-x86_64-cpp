@@ -13,7 +13,7 @@ static Process *current_proc_             = nullptr;
 static ProcessContext *scheduler_context_ = nullptr;
 static heap::Heap *heap_ptr_              = nullptr;
 
-void initialize(heap::Heap *heap_ptr)
+ProcessManager::ProcessManager(heap::Heap *heap_ptr)
 {
     for (size_t idx = 0; idx < process_table_.size(); ++idx)
     {
