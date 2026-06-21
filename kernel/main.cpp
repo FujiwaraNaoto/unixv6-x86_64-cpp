@@ -145,6 +145,9 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]]
     process::initialize(heap::heap_ptr);
     Process *procA = process::create_process(thread_A, "Thread A");
     Process *procB = process::create_process(thread_B, "Thread B");
+    vga::vga->printf("[DBG] procA=0x%x stateA=%d procB=0x%x stateB=%d\n",
+                     (unsigned)(uintptr_t)procA, procA ? (int)procA->state : -1,
+                     (unsigned)(uintptr_t)procB, procB ? (int)procB->state : -1);
     {
         process::yield(); // 最初のプロセスに切り替える
     }
