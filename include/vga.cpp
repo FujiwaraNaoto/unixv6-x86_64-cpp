@@ -40,7 +40,7 @@ VGA::VGA()
 // bit0~bit3の4bit分が前景色, bit4~bit7の4bit分が背景色
 uint8_t VGA::make_attr(Color fg, Color bg)
 {
-    return (uint8_t)(((uint8_t)bg << 4) | ((uint8_t)fg & 0x0F));
+    return static_cast<uint8_t>((static_cast<uint8_t>(bg) << 4) | (static_cast<uint8_t>(fg) & 0x0F));
 }
 
 void VGA::set_color(Color fg, Color bg)
@@ -51,7 +51,7 @@ void VGA::set_color(Color fg, Color bg)
 // 文字コードを下位8bit, 属性を上位8bitに詰めた16bit値を作る
 uint16_t VGA::make_entry(char c, uint8_t attr)
 {
-    return (uint16_t)((uint8_t)c) | ((uint16_t)attr << 8);
+    return static_cast<uint16_t>(static_cast<uint8_t>(c)) | (static_cast<uint16_t>(attr) << 8);
 }
 volatile uint16_t *VGA::buffer()
 {
@@ -62,11 +62,11 @@ volatile uint16_t *VGA::buffer()
 // 0x0Fはカーソル位置の下位8bit, 0x0Eは上位8bitを指定する値.
 void VGA::move_cursor()
 {
-    uint16_t pos = (uint16_t)(row_ * WIDTH + col_);
+    uint16_t pos = static_cast<uint16_t>(row_ * WIDTH + col_);
     io::out32b(0x3D4, 0x0F);
-    io::out32b(0x3D5, (uint8_t)(pos & 0xFF));
+    io::out32b(0x3D5, static_cast<uint8_t>(pos & 0xFF));
     io::out32b(0x3D4, 0x0E);
-    io::out32b(0x3D5, (uint8_t)(pos >> 8));
+    io::out32b(0x3D5, static_cast<uint8_t>(pos >> 8));
 }
 
 void VGA::scroll()
@@ -180,7 +180,7 @@ void VGA::printf(const char *fmt, ...)
                     putchar('-');
                     v = -v;
                 }
-                print_uint((unsigned long long)v, 10, width, pad);
+                print_uint(static_cast<unsigned long long>(v), 10, width, pad);
                 break;
             }
             case 'u':
@@ -191,13 +191,13 @@ void VGA::printf(const char *fmt, ...)
                 break;
             case 'p':
                 puts("0x");
-                print_uint((unsigned long long)va_arg(ap, void *), 16, 16, '0');
+                print_uint(reinterpret_cast<unsigned long long>(va_arg(ap, void *)), 16, 16, '0');
                 break;
             case 's':
                 puts(va_arg(ap, const char *));
                 break;
             case 'c':
-                putchar((char)va_arg(ap, int));
+                putchar(static_cast<char>(va_arg(ap, int)));
                 break;
             case '%':
                 putchar('%');
