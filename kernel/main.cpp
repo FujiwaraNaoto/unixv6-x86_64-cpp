@@ -43,7 +43,7 @@ static void thread_A()
     for (int i = 0; i < 3; ++i)
     {
         vga::vga->set_color(Color::LightCyan, Color::Black);
-        vga::vga->printf("[THREAD-A] iteration %u\n", (unsigned)i);
+        vga::vga->printf("[THREAD-A] iteration %u\n", static_cast<unsigned>(i));
         vga::vga->set_color(Color::LightGrey, Color::Black);
         process::yield();
     }
@@ -54,7 +54,7 @@ static void thread_B()
     for (int i = 0; i < 3; ++i)
     {
         vga::vga->set_color(Color::LightCyan, Color::Black);
-        vga::vga->printf("[THREAD-B] iteration %u\n", (unsigned)i);
+        vga::vga->printf("[THREAD-B] iteration %u\n", static_cast<unsigned>(i));
         vga::vga->set_color(Color::LightGrey, Color::Black);
         process::yield();
     }
@@ -104,15 +104,18 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]]
     vga::vga->set_color(Color::LightGreen, Color::Black);
     vga::vga->puts("[PMM]  ");
     vga::vga->set_color(Color::LightGrey, Color::Black);
-    vga::vga->printf("alloc test: 0x%x  0x%x  0x%x\n", (unsigned)p1, (unsigned)p2, (unsigned)p3);
+    vga::vga->printf("alloc test: 0x%x  0x%x  0x%x\n",
+                     static_cast<unsigned>(p1),
+                     static_cast<unsigned>(p2),
+                     static_cast<unsigned>(p3));
     pmm.free(p2);
     uint64_t p4 = pmm.allocate();
     vga::vga->set_color(Color::LightGreen, Color::Black);
     vga::vga->puts("[PMM]  ");
     vga::vga->set_color(Color::LightGrey, Color::Black);
     vga::vga->printf("free+realloc: freed=0x%x  got=0x%x  %s\n",
-                     (unsigned)p2,
-                     (unsigned)p4,
+                     static_cast<unsigned>(p2),
+                     static_cast<unsigned>(p4),
                      p4 == p2 ? "OK" : "MISMATCH");
     {
         void *brk0 = heap::heap_ptr->sbrk(0);         // 現在の brk
@@ -121,9 +124,9 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]]
         vga::vga->puts("[SBRK] ");
         vga::vga->set_color(Color::LightGrey, Color::Black);
         vga::vga->printf("brk before=0x%x  returned=0x%x  now=0x%x\n",
-                         (unsigned)(uintptr_t)brk0,
-                         (unsigned)(uintptr_t)brk1,
-                         (unsigned)(uintptr_t)heap::heap_ptr->sbrk(0));
+                         static_cast<unsigned>(reinterpret_cast<uintptr_t>(brk0)),
+                         static_cast<unsigned>(reinterpret_cast<uintptr_t>(brk1)),
+                         static_cast<unsigned>(reinterpret_cast<uintptr_t>(heap::heap_ptr->sbrk(0))));
 
         // alloc/free テスト (morecore が自動で呼ばれる)
         void *p1 = heap::heap_ptr->alloc(64);
@@ -135,10 +138,10 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]]
         vga::vga->puts("[HEAP] ");
         vga::vga->set_color(Color::LightGrey, Color::Black);
         vga::vga->printf("p1=0x%x p2=0x%x p3=0x%x p4=0x%x reuse=%s\n",
-                         (unsigned)(uintptr_t)p1,
-                         (unsigned)(uintptr_t)p2,
-                         (unsigned)(uintptr_t)p3,
-                         (unsigned)(uintptr_t)p4,
+                         static_cast<unsigned>(reinterpret_cast<uintptr_t>(p1)),
+                         static_cast<unsigned>(reinterpret_cast<uintptr_t>(p2)),
+                         static_cast<unsigned>(reinterpret_cast<uintptr_t>(p3)),
+                         static_cast<unsigned>(reinterpret_cast<uintptr_t>(p4)),
                          p4 == p2 ? "OK" : "MISMATCH");
     }
 
@@ -146,10 +149,10 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]]
     Process *procA = process::create_process(thread_A, "Thread A");
     Process *procB = process::create_process(thread_B, "Thread B");
     vga::vga->printf("[DBG] procA=0x%x stateA=%d procB=0x%x stateB=%d\n",
-                     (unsigned)(uintptr_t)procA,
-                     procA ? (int)procA->state : -1,
-                     (unsigned)(uintptr_t)procB,
-                     procB ? (int)procB->state : -1);
+                     static_cast<unsigned>(reinterpret_cast<uintptr_t>(procA)),
+                     procA ? static_cast<int>(procA->state) : -1,
+                     static_cast<unsigned>(reinterpret_cast<uintptr_t>(procB)),
+                     procB ? static_cast<int>(procB->state) : -1);
     {
         process::yield(); // 最初のプロセスに切り替える
     }
