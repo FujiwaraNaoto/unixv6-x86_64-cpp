@@ -81,6 +81,8 @@ Process *create_process(EntryPoint entry, const char *name)
     proc->context->rbx = 0;
     proc->context->rbp = 0;
     proc->context->rip = reinterpret_cast<uint64_t>(trampoline);
+
+    proc->state = ProcessState::Ready; // 構築完了。これでスケジューラが拾えるようになる
     return proc;
 }
 
