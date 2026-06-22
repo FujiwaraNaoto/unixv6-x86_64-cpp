@@ -31,7 +31,7 @@ CPP_SRC  = kernel/main.cpp \
            $(wildcard include/*.cpp)
 
 OBJ_DIR  = build
-ASM_OBJ  = $(OBJ_DIR)/boot.o $(OBJ_DIR)/io.o $(OBJ_DIR)/isr.o $(OBJ_DIR)/switch.o $(OBJ_DIR)/syscall_entry.o
+ASM_OBJ  = $(addprefix $(OBJ_DIR)/, $(notdir $(ASM_SRC:.asm=.o)))
 CPP_OBJ  = $(CPP_SRC:%.cpp=$(OBJ_DIR)/%.o)
 OBJS     = $(ASM_OBJ) $(CPP_OBJ)
 
@@ -65,23 +65,11 @@ run-gui: $(ISO)
 run-gdb: $(ISO)
 	$(QEMU) $(QEMU_GDB_FLAGS)
 
-$(OBJ_DIR)/boot.o: boot/boot.asm
-	@mkdir -p $(@D)
-	$(NASM) $(NASMFLAGS) -o $@ $<
+# asm ソースは複数ディレクトリに散らばるが build/ 直下にベース名で出力する。
+# vpath で探索パスを教えてパターンルール1本にまとめる。
+vpath %.asm $(sort $(dir $(ASM_SRC)))
 
-$(OBJ_DIR)/io.o: io/io.asm
-	@mkdir -p $(@D)
-	$(NASM) $(NASMFLAGS) -o $@ $<
-
-$(OBJ_DIR)/isr.o: interrupt/isr.asm
-	@mkdir -p $(@D)
-	$(NASM) $(NASMFLAGS) -o $@ $<
-
-$(OBJ_DIR)/switch.o: boot/switch.asm
-	@mkdir -p $(@D)
-	$(NASM) $(NASMFLAGS) -o $@ $<
-
-$(OBJ_DIR)/syscall_entry.o: syscall/syscall_entry.asm
+$(OBJ_DIR)/%.o: %.asm
 	@mkdir -p $(@D)
 	$(NASM) $(NASMFLAGS) -o $@ $<
 
