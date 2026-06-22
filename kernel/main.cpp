@@ -155,18 +155,18 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]]
         // カーネルから syscall 命令を直接テスト (リング0→0)
         const char msg[] = "Hello from syscall!\n";
         uint64_t ret;
-        asm volatile(
-            "mov $1, %%rax\n"      // RAX = 1 (write)
-            "mov $1, %%rdi\n"      // RDI = 1 (stdout)
-            "mov %1, %%rsi\n"      // RSI = buf
-            "mov %2, %%rdx\n"      // RDX = len
-            "syscall\n"
-            "mov %%rax, %0\n"      // 戻り値
-            : "=r"(ret)
-            : "r"(msg), "r"((uint64_t)(sizeof(msg)-1))
-            : "rax", "rdi", "rsi", "rdx", "rcx", "r11", "memory");
-        vga::vga->set_color(Color::LightGreen, Color::Black); vga::vga->puts("[SYS]  ");
-        vga::vga->set_color(Color::LightGrey,  Color::Black);
+        asm volatile("mov $1, %%rax\n" // RAX = 1 (write)
+                     "mov $1, %%rdi\n" // RDI = 1 (stdout)
+                     "mov %1, %%rsi\n" // RSI = buf
+                     "mov %2, %%rdx\n" // RDX = len
+                     "syscall\n"
+                     "mov %%rax, %0\n" // 戻り値
+                     : "=r"(ret)
+                     : "r"(msg), "r"((uint64_t)(sizeof(msg) - 1))
+                     : "rax", "rdi", "rsi", "rdx", "rcx", "r11", "memory");
+        vga::vga->set_color(Color::LightGreen, Color::Black);
+        vga::vga->puts("[SYS]  ");
+        vga::vga->set_color(Color::LightGrey, Color::Black);
         vga::vga->printf("write() returned %u\n", (unsigned)ret);
     }
 
