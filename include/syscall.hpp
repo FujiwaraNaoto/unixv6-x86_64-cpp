@@ -9,12 +9,12 @@ namespace SyscallNo
     constexpr int kExit  = 60;
 }
 
-// MSR アドレス
+// MSR Address
 namespace MSR {
-    constexpr uint32_t EFER  = 0xC0000080;
-    constexpr uint32_t STAR  = 0xC0000081;
-    constexpr uint32_t LSTAR = 0xC0000082;
-    constexpr uint32_t FMASK = 0xC0000084;
+    constexpr uint32_t EFER  = 0xC0000080; // SCE (System Call Enable) bit, which enables syscall/sysret
+    constexpr uint32_t STAR  = 0xC0000081; // Segment selectors for syscall/sysret
+    constexpr uint32_t LSTAR = 0xC0000082; // Long mode syscall target. Address of the syscall entry point.
+    constexpr uint32_t FMASK = 0xC0000084; // Flags mask for syscall. A bitmask of RFLAGS bits to clear when syscall is executed.
 }
 
 
