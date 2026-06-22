@@ -26,7 +26,7 @@ CFLAGS   = -m64 -std=c++20 \
 LDFLAGS  = -T kernel.ld -nostdlib -z max-page-size=0x1000
 NASMFLAGS = -f elf64
 
-ASM_SRC  = boot/boot.asm io/io.asm interrupt/isr.asm boot/switch.asm syscall/syscall_entry.asm
+ASM_SRC  = boot/boot.asm io/io.asm interrupt/isr.asm boot/switch.asm syscall/syscall_entry.asm syscall/helper.asm
 CPP_SRC  = kernel/main.cpp \
            $(wildcard include/*.cpp)
 

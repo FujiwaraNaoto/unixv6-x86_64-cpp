@@ -1,20 +1,9 @@
 #include "syscall.hpp"
 #include "vga.hpp"
 
-// アセンブリのエントリポイント
 extern "C" void syscall_entry();
-
-// ─── MSR 読み書きヘルパー ─────────────────────────────────────────
-static inline uint64_t rdmsr(uint32_t msr) {
-    uint32_t lo, hi;
-    asm volatile("rdmsr" : "=a"(lo), "=d"(hi) : "c"(msr));
-    return ((uint64_t)hi << 32) | lo;
-}
-static inline void wrmsr(uint32_t msr, uint64_t value) {
-    uint32_t lo = (uint32_t)value;
-    uint32_t hi = (uint32_t)(value >> 32);
-    asm volatile("wrmsr" : : "c"(msr), "a"(lo), "d"(hi));
-}
+extern "C" uint64_t rdmsr(uint32_t msr);
+extern "C" void wrmsr(uint32_t msr, uint64_t value);
 
 // ─── 個別システムコール実装 ───────────────────────────────────────
 static uint64_t sys_write(uint64_t fd, uint64_t buf, uint64_t len) {
