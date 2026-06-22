@@ -31,7 +31,7 @@ syscall_entry:
     push r8
     push r9
 
-    ; System V 呼び出し規約に並べ替える
+    ; System V ABI呼び出し規約に並べ替える
     ; syscall_dispatch(num, a1, a2, a3, a4, a5)
     ;   第1引数 RDI <- RAX (番号)
     ;   第2引数 RSI <- RDI (a1)
@@ -39,7 +39,8 @@ syscall_entry:
     ;   第4引数 RCX <- RDX (a3)
     ;   第5引数 R8  <- R10 (a4)
     ;   第6引数 R9  <- R8  (a5)
-    ; ※ 元の値はスタックに退避済みなので順序に注意して組み替える
+    ; 元の値はスタックに退避済みなので順序に注意して組み替える
+    ; movの順番が重要
     mov r9,  r8       ; a5
     mov r8,  r10      ; a4
     mov rcx, rdx      ; a3
