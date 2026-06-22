@@ -10,7 +10,7 @@ namespace SyscallNo
 }
 
 // MSR アドレス
-namespace Msr {
+namespace MSR {
     constexpr uint32_t EFER  = 0xC0000080;
     constexpr uint32_t STAR  = 0xC0000081;
     constexpr uint32_t LSTAR = 0xC0000082;

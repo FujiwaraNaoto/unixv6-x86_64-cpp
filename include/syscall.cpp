@@ -53,9 +53,9 @@ extern "C" uint64_t syscall_dispatch(
 // ─── 初期化 ───────────────────────────────────────────────────────
 void init() {
     // 1. EFER.SCE (System Call Enable) を立てる
-    uint64_t efer = rdmsr(Msr::EFER);
+    uint64_t efer = rdmsr(MSR::EFER);
     efer |= 1;  // SCE = bit0
-    wrmsr(Msr::EFER, efer);
+    wrmsr(MSR::EFER, efer);
 
     // 2. STAR: セグメントセレクタを設定
     //    上位32bit [63:48]=ユーザー, [47:32]=カーネル
@@ -64,13 +64,13 @@ void init() {
     //    syscall 時: CS=STAR[47:32],    SS=STAR[47:32]+8
     uint64_t star = ((uint64_t)0x08 << 32)   // カーネルセグメント
                   | ((uint64_t)0x10 << 48);  // ユーザーセグメント (フェーズ7で本設定)
-    wrmsr(Msr::STAR, star);
+    wrmsr(MSR::STAR, star);
 
     // 3. LSTAR: syscall 時のジャンプ先
-    wrmsr(Msr::LSTAR, reinterpret_cast<uint64_t>(syscall_entry));
+    wrmsr(MSR::LSTAR, reinterpret_cast<uint64_t>(syscall_entry));
 
     // 4. FMASK: syscall 時にクリアするRFLAGSビット (割り込みフラグIFを落とす)
-    wrmsr(Msr::FMASK, 1 << 9);  // IF = bit9
+    wrmsr(MSR::FMASK, 1 << 9);  // IF = bit9
 
     vga::vga->set_color(Color::LightGreen, Color::Black);
     vga::vga->puts("[SYS]  ");
