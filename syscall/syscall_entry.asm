@@ -20,6 +20,7 @@ extern syscall_dispatch
 GLOBAL syscall_entry
 syscall_entry:
     ; ユーザーが使うかもしれない RCX(戻りRIP) と R11(RFLAGS) を退避
+    ; syscallは命令の次の命令アドレス(戻りRIP)をRCXに、ユーザーのRFLAGSをR11に積むので、これを退避しておく
     push rcx
     push r11
 
@@ -66,5 +67,5 @@ syscall_entry:
     ; STAR[63:48]+8/+16 のユーザーセグメントを要求するが、GDT に無い)。
     ; syscall が退避してくれた RCX(戻りRIP)/R11(RFLAGS) で手動復帰する。
     push r11
-    popfq             ; RFLAGS 復元 (FMASK で落とした IF もここで戻る)
-    jmp rcx           ; syscall の次の命令へ戻る
+    popfq             ; R11由来のRFLAGS 復元 (FMASK で落とした IF もここで戻る)
+    jmp rcx           ; syscall の次の命令(戻りRIP)へ戻る

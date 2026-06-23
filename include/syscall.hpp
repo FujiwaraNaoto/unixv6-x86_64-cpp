@@ -10,6 +10,7 @@ constexpr int kExit  = 60;
 } // namespace SyscallNo
 
 // MSR Address
+// see https://wiki.osdev.org/SYSENTER#AMD:_SYSCALL/SYSRET
 namespace MSR
 {
 constexpr uint32_t EFER  = 0xC0000080; // SCE (System Call Enable) bit, which enables syscall/sysret
