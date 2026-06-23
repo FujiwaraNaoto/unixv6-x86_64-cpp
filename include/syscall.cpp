@@ -5,7 +5,6 @@ extern "C" void syscall_entry();
 extern "C" uint64_t rdmsr(uint32_t msr);
 extern "C" void wrmsr(uint32_t msr, uint64_t value);
 
-// ─── 個別システムコール実装 ───────────────────────────────────────
 static long sys_write(uint64_t fd, uint64_t buf, uint64_t len)
 {
     if (fd != 1 && fd != 2)
@@ -30,7 +29,6 @@ static long sys_exit(uint64_t code)
 namespace syscall
 {
 
-// ─── ディスパッチャ ───────────────────────────────────────────────
 extern "C" long syscall_dispatch(uint64_t num, uint64_t a1, uint64_t a2, uint64_t a3, uint64_t /*a4*/, uint64_t /*a5*/)
 {
     switch (num)
@@ -47,7 +45,6 @@ extern "C" long syscall_dispatch(uint64_t num, uint64_t a1, uint64_t a2, uint64_
     }
 }
 
-// ─── 初期化 ───────────────────────────────────────────────────────
 void init()
 {
     // 1. EFER.SCE (System Call Enable) を立てる
