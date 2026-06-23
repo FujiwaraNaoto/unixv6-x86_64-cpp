@@ -6,17 +6,17 @@ extern "C" uint64_t rdmsr(uint32_t msr);
 extern "C" void wrmsr(uint32_t msr, uint64_t value);
 
 // ─── 個別システムコール実装 ───────────────────────────────────────
-static uint64_t sys_write(uint64_t fd, uint64_t buf, uint64_t len)
+static long sys_write(uint64_t fd, uint64_t buf, uint64_t len)
 {
     if (fd != 1 && fd != 2)
-        return (uint64_t)-1; // stdout/stderr のみ
+        return static_cast<long>(-1); // stdout/stderr のみ
     const char *p = reinterpret_cast<const char *>(buf);
     for (uint64_t i = 0; i < len; i++)
         vga::vga->putchar(p[i]);
-    return len;
+    return static_cast<long>(len);
 }
 
-static uint64_t sys_exit(uint64_t code)
+static long sys_exit(uint64_t code)
 {
     vga::vga->set_color(Color::Yellow, Color::Black);
     vga::vga->printf("\n[SYS]  exit(%u) called\n", (unsigned)code);
@@ -31,8 +31,7 @@ namespace syscall
 {
 
 // ─── ディスパッチャ ───────────────────────────────────────────────
-extern "C" uint64_t
-syscall_dispatch(uint64_t num, uint64_t a1, uint64_t a2, uint64_t a3, uint64_t /*a4*/, uint64_t /*a5*/)
+extern "C" long syscall_dispatch(uint64_t num, uint64_t a1, uint64_t a2, uint64_t a3, uint64_t /*a4*/, uint64_t /*a5*/)
 {
     switch (num)
     {
@@ -44,7 +43,7 @@ syscall_dispatch(uint64_t num, uint64_t a1, uint64_t a2, uint64_t a3, uint64_t /
             vga::vga->set_color(Color::LightRed, Color::Black);
             vga::vga->printf("[SYS]  unknown syscall %u\n", (unsigned)num);
             vga::vga->set_color(Color::LightGrey, Color::Black);
-            return (uint64_t)-1;
+            return static_cast<long>(-1);
     }
 }
 
