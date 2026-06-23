@@ -9,6 +9,7 @@
 #include "heap.hpp"
 #include "process.hpp"
 #include "multiboot2.hpp"
+#include "syscall.hpp"
 
 // CRT 相当: リンカが .init_array に並べたグローバルコンストラクタを
 // 先頭から末尾まで順に呼ぶ。境界シンボルは kernel.ld で定義している。
@@ -145,6 +146,30 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]]
                          p4 == p2 ? "OK" : "MISMATCH");
     }
 
+    // syscall テストは先に実行する。下のスレッドデモ (process::yield) は
+    // kernel_main のコンテキストを dummy に捨ててしまい二度と戻らないため、
+    // それより後ろに置くと到達しない。
+    {
+        syscall::init();
+
+        // カーネルから syscall 命令を直接テスト (リング0→0)
+        const char msg[] = "Hello from syscall!\n";
+        uint64_t ret;
+        asm volatile("mov $1, %%rax\n" // RAX = 1 (write)
+                     "mov $1, %%rdi\n" // RDI = 1 (stdout)
+                     "mov %1, %%rsi\n" // RSI = buf
+                     "mov %2, %%rdx\n" // RDX = len
+                     "syscall\n"
+                     "mov %%rax, %0\n" // 戻り値
+                     : "=r"(ret)
+                     : "r"(msg), "r"((uint64_t)(sizeof(msg) - 1))
+                     : "rax", "rdi", "rsi", "rdx", "rcx", "r11", "memory");
+        vga::vga->set_color(Color::LightGreen, Color::Black);
+        vga::vga->puts("[SYS]  ");
+        vga::vga->set_color(Color::LightGrey, Color::Black);
+        vga::vga->printf("write() returned %u\n", (unsigned)ret);
+    }
+
     process::ProcessManager process_manager(heap::heap_ptr);
     Process *procA = process::create_process(thread_A, "Thread A");
     Process *procB = process::create_process(thread_B, "Thread B");
@@ -156,6 +181,7 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]]
     {
         process::yield(); // 最初のプロセスに切り替える
     }
+
     while (1)
     {
         asm volatile("hlt");
