@@ -57,8 +57,8 @@ void init()
     //    カーネルCS=0x08, ユーザーCS base=0x10 (今は仮)
     //    syscret 時: CS=STAR[63:48]+16, SS=STAR[63:48]+8
     //    syscall 時: CS=STAR[47:32],    SS=STAR[47:32]+8
-    uint64_t star = ((uint64_t)0x08 << 32)    // カーネルセグメント
-                    | ((uint64_t)0x10 << 48); // ユーザーセグメント (フェーズ7で本設定)
+    uint64_t star = (static_cast<uint64_t>(0x08) << 32)    // カーネルセグメント
+                    | (static_cast<uint64_t>(0x10) << 48); // ユーザーセグメント (フェーズ7で本設定)
     wrmsr(MSR::STAR, star);
 
     // 3. LSTAR: syscall 時のジャンプ先
@@ -70,7 +70,7 @@ void init()
     vga::vga->set_color(Color::LightGreen, Color::Black);
     vga::vga->puts("[SYS]  ");
     vga::vga->set_color(Color::LightGrey, Color::Black);
-    vga::vga->printf("syscall enabled  LSTAR=0x%x\n", (unsigned)reinterpret_cast<uint64_t>(syscall_entry));
+    vga::vga->printf("syscall enabled  LSTAR=0x%x\n", static_cast<unsigned>(reinterpret_cast<uint64_t>(syscall_entry)));
 }
 
 } // namespace syscall
