@@ -3,6 +3,7 @@
 #include "vga.hpp"
 #include "pic.hpp"
 #include "process.hpp"
+#include "keyboard.hpp"
 
 namespace exception
 {
@@ -63,9 +64,11 @@ extern "C" void irq0_handler()
     timer_ticks++;
     if (timer_ticks % 100 == 0)
     {
+    #ifdef TIMER_TEST
         vga::vga->set_color(Color::DarkGrey, Color::Black);
         vga::vga->printf("[TIMER] %u sec\n", timer_ticks / 100);
         vga::vga->set_color(Color::LightGrey, Color::Black);
+    #endif
     }
     pic::send_eoi(0);
     // 注意: 割り込みゲートでは IF=0 で入るため、ここから yield()/switch_context
@@ -73,9 +76,11 @@ extern "C" void irq0_handler()
     // スケジューリングは各スレッドが自分で yield() を呼ぶ協調型に任せる。
 }
 
-// TODO: IRQ1 (キーボード) 以降のハンドラも実装する。 --- IGNORE ---
 extern "C" void irq_handler(uint64_t irq_no)
 {
+    if(irq_no == 1) {
+        keyboard::handle_irq();
+    }
     pic::send_eoi(static_cast<uint8_t>(irq_no));
 }
 

@@ -1,9 +1,31 @@
 #include "syscall.hpp"
 #include "vga.hpp"
+#include "keyboard.hpp"
 
 extern "C" void syscall_entry();
 extern "C" uint64_t rdmsr(uint32_t msr);
 extern "C" void wrmsr(uint32_t msr, uint64_t value);
+
+static long sys_read(uint64_t fd, uint64_t buf, uint64_t len)
+{
+    if (fd != 0)
+        return static_cast<long>(-1); // stdin のみ
+    char *p = reinterpret_cast<char *>(buf);
+    size_t idx = 0;
+    while(idx<len){
+        while(!keyboard::has_input()){
+            // wait for input
+            asm volatile("hlt");
+        }
+        char c = keyboard::getchar();
+        if (c == 0)
+            break; // no more input
+        p[idx] = c;
+        idx++;
+        if(c == '\n') break; // stop reading after newline
+    }
+    return static_cast<long>(idx);
+}
 
 static long sys_write(uint64_t fd, uint64_t buf, uint64_t len)
 {
@@ -33,6 +55,8 @@ extern "C" long syscall_dispatch(uint64_t num, uint64_t a1, uint64_t a2, uint64_
 {
     switch (num)
     {
+        case SyscallNo::kRead:
+            return sys_read(a1, a2, a3);
         case SyscallNo::kWrite:
             return sys_write(a1, a2, a3);
         case SyscallNo::kExit:
