@@ -10,10 +10,12 @@ static long sys_read(uint64_t fd, uint64_t buf, uint64_t len)
 {
     if (fd != 0)
         return static_cast<long>(-1); // stdin のみ
-    char *p = reinterpret_cast<char *>(buf);
+    char *p    = reinterpret_cast<char *>(buf);
     size_t idx = 0;
-    while(idx<len){
-        while(!keyboard::has_input()){
+    while (idx < len)
+    {
+        while (!keyboard::has_input())
+        {
             // wait for input
             asm volatile("hlt");
         }
@@ -22,7 +24,8 @@ static long sys_read(uint64_t fd, uint64_t buf, uint64_t len)
             break; // no more input
         p[idx] = c;
         idx++;
-        if(c == '\n') break; // stop reading after newline
+        if (c == '\n')
+            break; // stop reading after newline
     }
     return static_cast<long>(idx);
 }

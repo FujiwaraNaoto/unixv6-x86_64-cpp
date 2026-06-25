@@ -176,11 +176,14 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]]
         vga::vga->set_color(Color::LightCyan, Color::Black);
         vga::vga->puts("\n[KBD]  type something (echo test):\n> ");
         vga::vga->set_color(Color::LightGrey, Color::Black);
-        while(1){
-            if (keyboard::has_input()) {
+        while (1)
+        {
+            if (keyboard::has_input())
+            {
                 char c = keyboard::getchar();
                 vga::vga->putchar(c);
-                if (c == '\n') {
+                if (c == '\n')
+                {
                     vga::vga->puts("> ");
                 }
             }
