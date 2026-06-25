@@ -171,8 +171,9 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]]
         vga::vga->printf("write() returned %u\n", (unsigned)ret);
     }
 
+    keyboard::initialize();
+
     {
-        keyboard::initialize();
         vga::vga->set_color(Color::LightCyan, Color::Black);
         vga::vga->puts("\n[KBD]  type something (echo test):\n> ");
         vga::vga->set_color(Color::LightGrey, Color::Black);
@@ -190,6 +191,7 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]]
             asm volatile("hlt");
         }
     }
+
 
     process::ProcessManager process_manager(heap::heap_ptr);
     Process *procA = process::create_process(thread_A, "Thread A");

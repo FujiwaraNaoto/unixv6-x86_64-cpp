@@ -2,6 +2,7 @@
 #include "pic.hpp"
 #include "io.hpp"
 #include <array>
+#include <atomic>
 #include <cstdint>
 #include <cstddef>
 
@@ -35,10 +36,10 @@ constexpr uint8_t SC_R_SHIFT_UP   = 0xB6;
 // キーを離すとスキャンコードのbit7が1になるので、キーを離すスキャンコードを判定するためのマスク
 constexpr uint8_t SC_RELEASE_MASK = 0x80;
 
-static std::array<char, 256> buffer_ = {};
-static volatile size_t head_         = 0;
-static volatile size_t tail_         = 0;
-static volatile bool shift_pressed_  = false;
+std::array<char, 256> buffer_       = {};
+std::atomic<size_t> head_           = 0;
+std::atomic<size_t> tail_           = 0;
+std::atomic<bool> shift_pressed_    = false;
 } // namespace
 
 namespace keyboard
@@ -91,11 +92,17 @@ void handle_irq()
     // convert scancode to character using the appropriate map based on Shift key state
     char c = shift_pressed_ ? scancode_map_shift[scancode] : scancode_map[scancode];
 
-    // store the character in the buffer if it's valid
-    if (c != 0)
+    if (c == 0)
+        return;
+
+    // store the character in the buffer if it isn't full
+    // (満杯なら next == tail となり、空との区別がつかなくなるため新しいキーを捨てる)
+    size_t head = head_;
+    size_t next = (head + 1) % buffer_.size();
+    if (next != tail_)
     {
-        buffer_[head_] = c;
-        head_          = (head_ + 1) % buffer_.size();
+        buffer_[head] = c;
+        head_         = next;
     }
 }
 } // namespace keyboard

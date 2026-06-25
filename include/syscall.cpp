@@ -16,8 +16,11 @@ static long sys_read(uint64_t fd, uint64_t buf, uint64_t len)
     {
         while (!keyboard::has_input())
         {
-            // wait for input
-            asm volatile("hlt");
+            // syscall は FMASK で IF=0 (割り込み禁止) で入るため、ここで sti して
+            // キーボード割り込みを受けられるようにする。sti の直後に hlt を置くと
+            // sti から1命令ぶん割り込みが遅延する x86 の仕様により、check と hlt の
+            // 間に来た入力も取りこぼさずに wake できる (lost-wakeup 回避)。
+            asm volatile("sti; hlt");
         }
         char c = keyboard::getchar();
         if (c == 0)
