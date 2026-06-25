@@ -36,10 +36,29 @@ constexpr uint8_t SC_R_SHIFT_UP   = 0xB6;
 // キーを離すとスキャンコードのbit7が1になるので、キーを離すスキャンコードを判定するためのマスク
 constexpr uint8_t SC_RELEASE_MASK = 0x80;
 
+// 拡張キー (カーソルキー・Delete など) は 0xE0 を前置した2バイトで送られてくる
+constexpr uint8_t SC_EXTENDED_PREFIX = 0xE0;
+constexpr uint8_t SC_E0_DELETE       = 0x53; // 0xE0 0x53 = Delete
+
 std::array<char, 256> buffer_       = {};
 std::atomic<size_t> head_           = 0;
 std::atomic<size_t> tail_           = 0;
 std::atomic<bool> shift_pressed_    = false;
+std::atomic<bool> extended_         = false; // 直前に 0xE0 を受け取ったか
+
+// バッファが満杯でなければ文字を1つ積む (満杯なら捨てる)
+void enqueue(char c)
+{
+    if (c == 0)
+        return;
+    size_t head = head_;
+    size_t next = (head + 1) % buffer_.size();
+    if (next != tail_) // 満杯なら next == tail となり空と区別できないため捨てる
+    {
+        buffer_[head] = c;
+        head_         = next;
+    }
+}
 } // namespace
 
 namespace keyboard
@@ -49,6 +68,7 @@ void initialize()
     pic::unmask_irq(1); // IRQ1 (キーボード) の割り込みを有効化
     head_ = tail_  = 0;
     shift_pressed_ = false;
+    extended_      = false;
 }
 bool has_input()
 {
@@ -67,6 +87,25 @@ char getchar()
 void handle_irq()
 {
     uint8_t scancode = io::inb(0x60); // キーボードコントローラのデータポートからスキャンコードを読み取る
+
+    // 拡張キーは 0xE0 + 本体スキャンコードの2バイト。まず 0xE0 を覚えておき、
+    // 次の割り込みで本体を処理する。
+    if (scancode == SC_EXTENDED_PREFIX)
+    {
+        extended_ = true;
+        return;
+    }
+
+    if (extended_)
+    {
+        extended_ = false;
+        // 拡張キーは押下のみ扱う (離した時は bit7 が立つので無視)
+        if (!(scancode & SC_RELEASE_MASK) && scancode == SC_E0_DELETE)
+        {
+            enqueue('\b'); // Delete も Backspace と同じく直前の文字を消す
+        }
+        return;
+    }
 
     // update shift key state
     if (scancode == SC_L_SHIFT_DOWN || scancode == SC_R_SHIFT_DOWN)
@@ -91,18 +130,6 @@ void handle_irq()
 
     // convert scancode to character using the appropriate map based on Shift key state
     char c = shift_pressed_ ? scancode_map_shift[scancode] : scancode_map[scancode];
-
-    if (c == 0)
-        return;
-
-    // store the character in the buffer if it isn't full
-    // (満杯なら next == tail となり、空との区別がつかなくなるため新しいキーを捨てる)
-    size_t head = head_;
-    size_t next = (head + 1) % buffer_.size();
-    if (next != tail_)
-    {
-        buffer_[head] = c;
-        head_         = next;
-    }
+    enqueue(c);
 }
 } // namespace keyboard
