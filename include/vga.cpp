@@ -104,7 +104,7 @@ void VGA::putchar(char c)
                 scroll();
         }
     }
-    else if (c == '\b' || c == 0x7f) // Backspace / Delete: 直前の文字を消して戻る
+    else if (c == '\b') // Backspace: 直前の文字を消して戻る (Delete も keyboard 側で '\b' に正規化済み)
     {
         if (col_ > 0)
         {
