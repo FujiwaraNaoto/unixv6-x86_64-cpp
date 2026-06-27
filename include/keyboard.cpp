@@ -40,11 +40,11 @@ constexpr uint8_t SC_RELEASE_MASK = 0x80;
 constexpr uint8_t SC_EXTENDED_PREFIX = 0xE0;
 constexpr uint8_t SC_E0_DELETE       = 0x53; // 0xE0 0x53 = Delete
 
-std::array<char, 256> buffer_       = {};
-std::atomic<size_t> head_           = 0;
-std::atomic<size_t> tail_           = 0;
-std::atomic<bool> shift_pressed_    = false;
-std::atomic<bool> extended_         = false; // 直前に 0xE0 を受け取ったか
+std::array<char, 256> buffer_    = {};
+std::atomic<size_t> head_        = 0;
+std::atomic<size_t> tail_        = 0;
+std::atomic<bool> shift_pressed_ = false;
+std::atomic<bool> extended_      = false; // 直前に 0xE0 を受け取ったか
 
 // バッファが満杯でなければ文字を1つ積む (満杯なら捨てる)
 void enqueue(char c)
