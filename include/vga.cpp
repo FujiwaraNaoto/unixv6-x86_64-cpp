@@ -104,6 +104,19 @@ void VGA::putchar(char c)
                 scroll();
         }
     }
+    else if (c == '\b') // Backspace: 直前の文字を消して戻る (Delete も keyboard 側で '\b' に正規化済み)
+    {
+        if (col_ > 0)
+        {
+            col_--;
+        }
+        else if (row_ > 0)
+        {
+            row_--;
+            col_ = WIDTH - 1;
+        }
+        b[row_ * WIDTH + col_] = make_entry(' ', attr_);
+    }
     else
     {
         b[row_ * WIDTH + col_] = make_entry(c, attr_);

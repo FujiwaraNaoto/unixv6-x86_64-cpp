@@ -10,6 +10,7 @@
 #include "process.hpp"
 #include "multiboot2.hpp"
 #include "syscall.hpp"
+#include "keyboard.hpp"
 
 // CRT 相当: リンカが .init_array に並べたグローバルコンストラクタを
 // 先頭から末尾まで順に呼ぶ。境界シンボルは kernel.ld で定義している。
@@ -169,6 +170,28 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]]
         vga::vga->set_color(Color::LightGrey, Color::Black);
         vga::vga->printf("write() returned %u\n", (unsigned)ret);
     }
+
+    keyboard::initialize();
+
+    {
+        vga::vga->set_color(Color::LightCyan, Color::Black);
+        vga::vga->puts("\n[KBD]  type something (echo test):\n> ");
+        vga::vga->set_color(Color::LightGrey, Color::Black);
+        while (1)
+        {
+            if (keyboard::has_input())
+            {
+                char c = keyboard::getchar();
+                vga::vga->putchar(c);
+                if (c == '\n')
+                {
+                    vga::vga->puts("> ");
+                }
+            }
+            asm volatile("hlt");
+        }
+    }
+
 
     process::ProcessManager process_manager(heap::heap_ptr);
     Process *procA = process::create_process(thread_A, "Thread A");
