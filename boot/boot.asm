@@ -30,6 +30,7 @@ stack_bottom:
 stack_top:
 
 ; ─── GDT (64-bit 用) ──────────────────────────────────────────────
+; NOTE: This is the minimal GDT at boot. It will be rebuilt with user segments + TSS in kernel_main.
 section .rodata
 ALIGN 8
 gdt64:

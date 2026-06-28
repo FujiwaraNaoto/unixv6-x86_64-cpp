@@ -8,10 +8,12 @@ constexpr uint64_t PAGE_MASK = ~(PAGE_SIZE - 1);
 
 namespace vmm
 {
+
+// Intel SDM Volume 3A, Chapter 4 "Paging"
 namespace PageFlag
 {
 constexpr uint64_t Present   = 1ULL << 0;
-constexpr uint64_t Writable  = 1ULL << 1;
+constexpr uint64_t Writable  = 1ULL << 1;// R/Wbit
 constexpr uint64_t User      = 1ULL << 2; // リング3からアクセス可
 constexpr uint64_t Accessed  = 1ULL << 5;
 constexpr uint64_t Dirty     = 1ULL << 6;

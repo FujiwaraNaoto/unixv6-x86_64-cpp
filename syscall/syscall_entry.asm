@@ -60,12 +60,7 @@ syscall_entry:
     pop rsi
     pop rdi
 
+    ; フェーズ7: リング3セグメントがGDTに揃ったので sysret が使える
     pop r11
     pop rcx
-
-    ; リング0→0 のため sysret は使えない (sysret は必ず CPL=3 へ戻り、
-    ; STAR[63:48]+8/+16 のユーザーセグメントを要求するが、GDT に無い)。
-    ; syscall が退避してくれた RCX(戻りRIP)/R11(RFLAGS) で手動復帰する。
-    push r11
-    popfq             ; R11由来のRFLAGS 復元 (FMASK で落とした IF もここで戻る)
-    jmp rcx           ; syscall の次の命令(戻りRIP)へ戻る
+    o64 sysret        ; RCX->RIP, R11->RFLAGS, リング3へ復帰

@@ -11,6 +11,8 @@
 #include "multiboot2.hpp"
 #include "syscall.hpp"
 #include "keyboard.hpp"
+#include "gdt.hpp"
+#include "usermode.hpp"
 
 // CRT 相当: リンカが .init_array に並べたグローバルコンストラクタを
 // 先頭から末尾まで順に呼ぶ。境界シンボルは kernel.ld で定義している。
@@ -19,6 +21,29 @@ extern "C"
     using ctor_t = void (*)();
     extern ctor_t __init_array_start[];
     extern ctor_t __init_array_end[];
+}
+
+// リング3で実行されるユーザープログラム
+ // (カーネル内に置くが、User許可ページにマップして実行する)
+ [[gnu::section(".user")]]
+ static void user_program() {
+     const char msg[] = "Hello from ring 3!\n";
+     asm volatile(
+         "mov $1, %%rax\n"     // write
+         "mov $1, %%rdi\n"     // stdout
+         "mov %0, %%rsi\n"     // buf
+         "mov $19, %%rdx\n"    // len
+         "syscall\n"
+         : : "r"(msg) : "rax","rdi","rsi","rdx","rcx","r11","memory");
+     asm volatile(
+         "mov $60, %%rax\n"    // exit
+         "xor %%rdi, %%rdi\n"
+         "syscall\n"
+         : : : "rax","rdi");
+    // 念のため
+    while (1) {
+        asm volatile("hlt");
+     }  
 }
 
 static void call_global_constructors()
@@ -171,7 +196,31 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]]
         vga::vga->printf("write() returned %u\n", (unsigned)ret);
     }
 
+
     keyboard::initialize();
+    
+    gdt::initialize_gdt();
+    static uint8_t kernel_stack[8192]; // 8KB のカーネルスタック
+    gdt::set_kernel_stack(reinterpret_cast<uint64_t>(kernel_stack + sizeof(kernel_stack)));
+
+
+    uint64_t code_page = reinterpret_cast<uint64_t>(&user_program) & PAGE_MASK;
+    vmm::vmm_ptr->map_page(code_page, vmm::vmm_ptr->virtual_to_physical(code_page), vmm::PageFlag::User | vmm::PageFlag::Present | vmm::PageFlag::Writable);
+
+        // ユーザースタックを確保して User許可でマップ
+        uint64_t ustack_phys = pmm.allocate();
+        uint64_t ustack_virt = 0x600000;
+        vmm::vmm_ptr->map_page(ustack_virt, ustack_phys,
+                      vmm::PageFlag::Present | vmm::PageFlag::Writable | vmm::PageFlag::User);
+
+        // リング3へ遷移 (16バイト境界に揃える)
+        usermode::enter(
+            reinterpret_cast<uint64_t>(&user_program),
+            (ustack_virt + PAGE_SIZE - 16));
+    
+
+
+    
 
     {
         vga::vga->set_color(Color::LightCyan, Color::Black);
@@ -191,6 +240,7 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]]
             asm volatile("hlt");
         }
     }
+
 
 
     process::ProcessManager process_manager(heap::heap_ptr);
