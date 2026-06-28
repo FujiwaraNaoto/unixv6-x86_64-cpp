@@ -172,33 +172,33 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]]
                          p4 == p2 ? "OK" : "MISMATCH");
     }
 
-    // syscall テストは先に実行する。下のスレッドデモ (process::yield) は
-    // kernel_main のコンテキストを dummy に捨ててしまい二度と戻らないため、
-    // それより後ろに置くと到達しない。
-    {
-        syscall::init();
+    // syscall の MSR (LSTAR/STAR/SFMASK) を設定する。
+    // 注意: ハンドラは sysret でリング3へ戻るため、カーネル(リング0)から
+    //       直接 syscall を撃つことはできない (sysret が CPL=3 を強制し、
+    //       カーネルコードページに User 権限がないため #PF→#DF→トリプルフォルト
+    //       になる)。実際の syscall テストは下の user_program (リング3) で行う。
+    syscall::init();
 
-        // カーネルから syscall 命令を直接テスト (リング0→0)
-        const char msg[] = "Hello from syscall!\n";
-        uint64_t ret;
-        asm volatile("mov $1, %%rax\n" // RAX = 1 (write)
-                     "mov $1, %%rdi\n" // RDI = 1 (stdout)
-                     "mov %1, %%rsi\n" // RSI = buf
-                     "mov %2, %%rdx\n" // RDX = len
-                     "syscall\n"
-                     "mov %%rax, %0\n" // 戻り値
-                     : "=r"(ret)
-                     : "r"(msg), "r"((uint64_t)(sizeof(msg) - 1))
-                     : "rax", "rdi", "rsi", "rdx", "rcx", "r11", "memory");
-        vga::vga->set_color(Color::LightGreen, Color::Black);
-        vga::vga->puts("[SYS]  ");
-        vga::vga->set_color(Color::LightGrey, Color::Black);
-        vga::vga->printf("write() returned %u\n", (unsigned)ret);
-    }
+    // // カーネルから syscall 命令を直接テスト (リング0→0)
+    //     const char msg[] = "Hello from syscall!\n";
+    //     uint64_t ret;
+    //     asm volatile("mov $1, %%rax\n" // RAX = 1 (write)
+    //                  "mov $1, %%rdi\n" // RDI = 1 (stdout)
+    //                  "mov %1, %%rsi\n" // RSI = buf
+    //                  "mov %2, %%rdx\n" // RDX = len
+    //                  "syscall\n"
+    //                  "mov %%rax, %0\n" // 戻り値
+    //                  : "=r"(ret)
+    //                  : "r"(msg), "r"((uint64_t)(sizeof(msg) - 1))
+    //                  : "rax", "rdi", "rsi", "rdx", "rcx", "r11", "memory");
+    //     vga::vga->set_color(Color::LightGreen, Color::Black);
+    //     vga::vga->puts("[SYS]  ");
+    //     vga::vga->set_color(Color::LightGrey, Color::Black);
+    //     vga::vga->printf("write() returned %u\n", (unsigned)ret);
 
 
     keyboard::initialize();
-    
+
     gdt::initialize_gdt();
     static uint8_t kernel_stack[8192]; // 8KB のカーネルスタック
     gdt::set_kernel_stack(reinterpret_cast<uint64_t>(kernel_stack + sizeof(kernel_stack)));

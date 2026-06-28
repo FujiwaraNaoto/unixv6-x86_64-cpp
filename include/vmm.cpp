@@ -50,17 +50,21 @@ bool VirtualMemoryManager::map_page(uint64_t virtual_address, uint64_t physical_
     {
         return false; // PML4が存在しない場合はマッピングできない
     }
-    uint64_t *pdpt = get_or_create_table(pml4, pml4_index(virtual_address), PageFlag::Present | PageFlag::Writable);
+    // 中間テーブル(PDPT/PD/PT)にも User ビットを伝播させる必要がある。
+    // 最終 PTE だけ User にしても、上位エントリのどれか一つでも User=0 なら
+    // CPL=3 からのアクセスは拒否される (Intel SDM Vol.3A 4.6 "Access Rights")。
+    const uint64_t table_flags = PageFlag::Present | PageFlag::Writable | (flags & PageFlag::User);
+    uint64_t *pdpt = get_or_create_table(pml4, pml4_index(virtual_address), table_flags);
     if (!pdpt)
     {
         return false; // PDPTが存在しない場合はマッピングできない
     }
-    uint64_t *pd = get_or_create_table(pdpt, pdpt_index(virtual_address), PageFlag::Present | PageFlag::Writable);
+    uint64_t *pd = get_or_create_table(pdpt, pdpt_index(virtual_address), table_flags);
     if (!pd)
     {
         return false; // PDが存在しない場合はマッピングできない
     }
-    uint64_t *pt = get_or_create_table(pd, pd_index(virtual_address), PageFlag::Present | PageFlag::Writable);
+    uint64_t *pt = get_or_create_table(pd, pd_index(virtual_address), table_flags);
     if (!pt)
     {
         return false; // PTが存在しない場合はマッピングできない
@@ -143,6 +147,13 @@ uint64_t *VirtualMemoryManager::get_or_create_table(uint64_t *parent_table, uint
         // 新しいテーブルを割り当てる
         uint64_t new_table_phys = pmm_ptr_->allocate(); // 物理ページの割り当て関数
         parent_table[index]     = new_table_phys | flags;
+    }
+    else
+    {
+        // 既存エントリには User / Writable を追加で立てる。
+        // ブートローダが作った中間テーブルは User=0 なので、これをしないと
+        // 配下を User マップしても CPL=3 からアクセスできない。
+        parent_table[index] |= (flags & (PageFlag::User | PageFlag::Writable));
     }
     return physical_to_virtual(entry_to_phys(parent_table[index]));
 }

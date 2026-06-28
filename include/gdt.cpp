@@ -45,8 +45,9 @@ namespace gdt
         set_entry(0, 0x00, 0x00); // Null descriptor
         set_entry(1, 0x9A, 0x20); // Kernel code segment P,S,E,RW+L=1
         set_entry(2, 0x92, 0x00); // Kernel data segment P,S,E,RW+L=0
-        set_entry(4, 0xF2, 0x00); // User data segment P,S,E,RW+L=0
-        set_entry(3, 0xFA, 0x20); // User code segment P,S,E,RW+L=1
+        // セレクタ番号と一致させる: 0x1B(index3)=User Data, 0x23(index4)=User Code
+        set_entry(3, 0xF2, 0x00); // User data segment P,S,E,RW+L=0
+        set_entry(4, 0xFA, 0x20); // User code segment P,S,E,RW+L=1
        
 
         memset(&tss, 0, sizeof(TaskStateSegment));
