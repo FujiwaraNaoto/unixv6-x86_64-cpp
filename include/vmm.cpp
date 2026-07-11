@@ -1,6 +1,7 @@
 
 #include <cstdint>
 #include "vmm.hpp"
+#include <cstring>
 
 namespace
 {
@@ -157,5 +158,45 @@ uint64_t *VirtualMemoryManager::get_or_create_table(uint64_t *parent_table, uint
     }
     return physical_to_virtual(entry_to_phys(parent_table[index]));
 }
+
+uint64_t VirtualMemoryManager::create_address_space()
+{
+    uint64_t new_pml4_phys = pmm_ptr_->allocate();
+    if (new_pml4_phys == 0)
+    {
+        return 0; // メモリ不足
+    }
+    uint64_t *new_pml4 = physical_to_virtual(new_pml4_phys);
+    auto *current_pml4 = physical_to_virtual(pml4_phys_);
+
+    memset(new_pml4, 0, 512 * sizeof(uint64_t)); // 新しいPML4をゼロクリア
+    
+    
+    // カーネル空間を共有:
+    // PML4[0] : カーネルコード/データ(identity mapping)を共有
+    // PML4[256..511] : 上位半分(将来のカーネル空間)を共有
+    new_pml4[0] = current_pml4[0]; // カーネル空間のマッピングをコピー
+    memcpy(&new_pml4[256], &current_pml4[256], 256 * sizeof(uint64_t)); // カーネル空間のマッピングをコピー
+    return new_pml4_phys;
+}
+
+// ─── アドレス空間の切り替え ──────────────────────────────────────
+void VirtualMemoryManager::switch_address_space(uint64_t pml4_phys)
+{
+    if(pml4_phys == 0)
+    {
+        return; // 無効なPML4物理アドレスは無視
+    }
+    pml4_phys_ = pml4_phys;
+    asm volatile("mov %0, %%cr3" : : "r"(pml4_phys) : "memory");
+}
+
+
+bool VirtualMemoryManager::map_page_in(uint64_t pml4_phys, uint64_t virtual_address, uint64_t physical_address, uint64_t flags)
+{
+   
+
+}
+
 
 } // namespace vmm

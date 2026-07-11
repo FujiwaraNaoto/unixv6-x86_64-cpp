@@ -88,6 +88,25 @@ static void thread_B()
 }
 
 
+// PML4分離テスト用スレッド
+// 同じ仮想アドレス 0x700000 に別の値を書いて確認する
+static volatile uint64_t test_result_a = 0;
+static volatile uint64_t test_result_b = 0;
+
+static void addrspace_thread_a() {
+    volatile uint64_t *p = reinterpret_cast<volatile uint64_t *>(0x700000);
+    *p = 0xAAAA;
+    process::yield();           // Bに切り替わる
+    test_result_a = *p;         // 戻ってきて自分の値を再確認
+}
+
+static void addrspace_thread_b() {
+    volatile uint64_t *p = reinterpret_cast<volatile uint64_t *>(0x700000);
+    *p = 0xBBBB;
+    process::yield();           // Aに切り替わる
+    test_result_b = *p;
+}
+
 extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]] uint32_t mb_addr)
 {
     // 他のどのグローバル変数を使う前に、コンストラクタを実行する。
@@ -222,39 +241,59 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]]
 
     
 
-    {
-        vga::vga->set_color(Color::LightCyan, Color::Black);
-        vga::vga->puts("\n[KBD]  type something (echo test):\n> ");
-        vga::vga->set_color(Color::LightGrey, Color::Black);
-        while (1)
-        {
-            if (keyboard::has_input())
-            {
-                char c = keyboard::getchar();
-                vga::vga->putchar(c);
-                if (c == '\n')
-                {
-                    vga::vga->puts("> ");
-                }
-            }
-            asm volatile("hlt");
-        }
-    }
+    // {
+    //     vga::vga->set_color(Color::LightCyan, Color::Black);
+    //     vga::vga->puts("\n[KBD]  type something (echo test):\n> ");
+    //     vga::vga->set_color(Color::LightGrey, Color::Black);
+    //     while (1)
+    //     {
+    //         if (keyboard::has_input())
+    //         {
+    //             char c = keyboard::getchar();
+    //             vga::vga->putchar(c);
+    //             if (c == '\n')
+    //             {
+    //                 vga::vga->puts("> ");
+    //             }
+    //         }
+    //         asm volatile("hlt");
+    //     }
+    // }
 
 
 
-    process::ProcessManager process_manager(heap::heap_ptr);
-    Process *procA = process::create_process(thread_A, "Thread A");
-    Process *procB = process::create_process(thread_B, "Thread B");
-    vga::vga->printf("[DBG] procA=0x%x stateA=%d procB=0x%x stateB=%d\n",
-                     static_cast<unsigned>(reinterpret_cast<uintptr_t>(procA)),
-                     procA ? static_cast<int>(procA->state) : -1,
-                     static_cast<unsigned>(reinterpret_cast<uintptr_t>(procB)),
-                     procB ? static_cast<int>(procB->state) : -1);
-    {
-        process::yield(); // 最初のプロセスに切り替える
-    }
+    // process::ProcessManager process_manager(heap::heap_ptr);
+    // Process *procA = process::create_process(thread_A, "Thread A");
+    // Process *procB = process::create_process(thread_B, "Thread B");
+    // vga::vga->printf("[DBG] procA=0x%x stateA=%d procB=0x%x stateB=%d\n",
+    //                  static_cast<unsigned>(reinterpret_cast<uintptr_t>(procA)),
+    //                  procA ? static_cast<int>(procA->state) : -1,
+    //                  static_cast<unsigned>(reinterpret_cast<uintptr_t>(procB)),
+    //                  procB ? static_cast<int>(procB->state) : -1);
+    // {
+    //     process::yield(); // 最初のプロセスに切り替える
+    // }
 
+        Process *pa = process::create_process(addrspace_thread_a, "addr-a");
+        Process *pb = process::create_process(addrspace_thread_b, "addr-b");
+
+        // 各プロセスの 0x700000 に物理ページを別々にマップ
+        uint64_t phys_a = pmm.allocate();
+        uint64_t phys_b = pmm.allocate();
+        vmm::vmm_ptr->map_page_in(pa->pml4, 0x700000, phys_a,
+                         vmm::PageFlag::Present | vmm::PageFlag::Writable);
+        vmm::vmm_ptr->map_page_in(pb->pml4, 0x700000, phys_b,
+                         vmm::PageFlag::Present | vmm::PageFlag::Writable);
+
+        //process::print_table();
+        process::yield();   // スケジューラ起動
+
+        vga::vga->set_color(Color::LightGreen, Color::Black); vga::vga->puts("[ADDR] ");
+        vga::vga->set_color(Color::LightGrey,  Color::Black);
+        vga::vga->printf("A wrote 0xAAAA read 0x%x / B wrote 0xBBBB read 0x%x  %s\n",
+                   (unsigned)test_result_a, (unsigned)test_result_b,
+                   (test_result_a == 0xAAAA && test_result_b == 0xBBBB)
+                       ? "SEPARATED-OK" : "SHARED-FAIL");
     while (1)
     {
         asm volatile("hlt");

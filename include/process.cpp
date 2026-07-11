@@ -2,6 +2,7 @@
 #include <array>
 #include "process.hpp"
 #include "heap.hpp"
+#include "gdt.hpp"
 
 extern "C" void switch_context(ProcessContext **old_ctx, ProcessContext *new_ctx);
 
@@ -71,6 +72,13 @@ Process *create_process(EntryPoint entry, const char *name)
     }
     proc->kernel_stack = reinterpret_cast<uint64_t>(stack);
 
+    // allocate a new page table for each processes
+    proc->pml4 = vmm::vmm_ptr->create_address_space();
+    if(not proc->pml4){
+        proc->state = ProcessState::Unused; // ページテーブル確保失敗した
+        return nullptr;
+    }
+
     uint8_t *stack_top = stack + KERNEL_STACK_SIZE;
     stack_top -= sizeof(ProcessContext);
     proc->context      = reinterpret_cast<ProcessContext *>(stack_top);
@@ -104,6 +112,17 @@ void yield()
             {
                 prev_proc->state = ProcessState::Ready;
             }
+
+            //アドレス空間を切り替える カーネル領域は共有されているので、プロセスのページテーブルを切り替えるだけでよい
+            if(current_proc_->pml4 != 0)
+            {
+                vmm::vmm_ptr->switch_address_space(current_proc_->pml4);
+            }
+
+
+            gdt::set_kernel_stack(current_proc_->kernel_stack + KERNEL_STACK_SIZE);
+
+
             ProcessContext **old_ctx = (prev_proc) ? &prev_proc->context : nullptr;
 
             // intentionally use static so that the dummy context is shared across all calls to yield() and doesn't
