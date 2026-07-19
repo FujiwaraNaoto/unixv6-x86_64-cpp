@@ -195,7 +195,28 @@ void VirtualMemoryManager::switch_address_space(uint64_t pml4_phys)
 bool VirtualMemoryManager::map_page_in(uint64_t pml4_phys, uint64_t virtual_address, uint64_t physical_address, uint64_t flags)
 {
    
+    auto *original_pml4 = physical_to_virtual(pml4_phys);
 
+    auto *pdpt = get_or_create_table(original_pml4, pml4_index(virtual_address), PageFlag::Present | PageFlag::Writable | PageFlag::User);
+
+    if(!pdpt)
+    {
+        return false; // PDPTが存在しない場合はマッピングできない
+    }
+    auto *pd = get_or_create_table(pdpt, pdpt_index(virtual_address), PageFlag::Present | PageFlag::Writable | PageFlag::User);
+    if(!pd)
+    {
+        return false; // PDが存在しない場合はマッピングできない
+    }
+
+    auto *pt = get_or_create_table(pd, pd_index(virtual_address), PageFlag::Present | PageFlag::Writable | PageFlag::User);
+    if(!pt)
+    {
+        return false; // PTが存在しない場合はマッピングできない
+    }
+
+    pt[pt_index(virtual_address)] = (physical_address & PAGE_MASK) | flags | PageFlag::Present;
+    return true;
 }
 
 

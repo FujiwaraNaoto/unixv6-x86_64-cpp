@@ -223,21 +223,22 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]]
     gdt::set_kernel_stack(reinterpret_cast<uint64_t>(kernel_stack + sizeof(kernel_stack)));
 
 
-    uint64_t code_page = reinterpret_cast<uint64_t>(&user_program) & PAGE_MASK;
-    vmm::vmm_ptr->map_page(code_page, vmm::vmm_ptr->virtual_to_physical(code_page), vmm::PageFlag::User | vmm::PageFlag::Present | vmm::PageFlag::Writable);
+    // {
+    // uint64_t code_page = reinterpret_cast<uint64_t>(&user_program) & PAGE_MASK;
+    // vmm::vmm_ptr->map_page(code_page, vmm::vmm_ptr->virtual_to_physical(code_page), vmm::PageFlag::User | vmm::PageFlag::Present | vmm::PageFlag::Writable);
 
-        // ユーザースタックを確保して User許可でマップ
-        uint64_t ustack_phys = pmm.allocate();
-        uint64_t ustack_virt = 0x600000;
-        vmm::vmm_ptr->map_page(ustack_virt, ustack_phys,
-                      vmm::PageFlag::Present | vmm::PageFlag::Writable | vmm::PageFlag::User);
+    //     // ユーザースタックを確保して User許可でマップ
+    //     uint64_t ustack_phys = pmm.allocate();
+    //     uint64_t ustack_virt = 0x600000;
+    //     vmm::vmm_ptr->map_page(ustack_virt, ustack_phys,
+    //                   vmm::PageFlag::Present | vmm::PageFlag::Writable | vmm::PageFlag::User);
 
-        // リング3へ遷移 (16バイト境界に揃える)
-        usermode::enter(
-            reinterpret_cast<uint64_t>(&user_program),
-            (ustack_virt + PAGE_SIZE - 16));
+    //     // リング3へ遷移 (16バイト境界に揃える)
+    //     usermode::enter(
+    //         reinterpret_cast<uint64_t>(&user_program),
+    //         (ustack_virt + PAGE_SIZE - 16));
     
-
+    // }
 
     
 
@@ -262,7 +263,7 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]]
 
 
 
-    // process::ProcessManager process_manager(heap::heap_ptr);
+    process::ProcessManager process_manager(heap::heap_ptr);
     // Process *procA = process::create_process(thread_A, "Thread A");
     // Process *procB = process::create_process(thread_B, "Thread B");
     // vga::vga->printf("[DBG] procA=0x%x stateA=%d procB=0x%x stateB=%d\n",
@@ -273,6 +274,8 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]]
     // {
     //     process::yield(); // 最初のプロセスに切り替える
     // }
+
+        // Process::init();
 
         Process *pa = process::create_process(addrspace_thread_a, "addr-a");
         Process *pb = process::create_process(addrspace_thread_b, "addr-b");
@@ -288,6 +291,7 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]]
         //process::print_table();
         process::yield();   // スケジューラ起動
 
+        //両方のスレッド終了後に結果を確認
         vga::vga->set_color(Color::LightGreen, Color::Black); vga::vga->puts("[ADDR] ");
         vga::vga->set_color(Color::LightGrey,  Color::Black);
         vga::vga->printf("A wrote 0xAAAA read 0x%x / B wrote 0xBBBB read 0x%x  %s\n",

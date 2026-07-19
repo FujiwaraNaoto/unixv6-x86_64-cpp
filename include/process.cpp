@@ -91,6 +91,7 @@ Process *create_process(EntryPoint entry, const char *name)
     proc->context->rip = reinterpret_cast<uint64_t>(trampoline);
 
     proc->state = ProcessState::Ready; // 構築完了。これでスケジューラが拾えるようになる
+    vga::vga->printf("[PROCESS] Created process %s (pid=%llu)\n", proc->name.c_str(), proc->pid);
     return proc;
 }
 
@@ -119,7 +120,7 @@ void yield()
                 vmm::vmm_ptr->switch_address_space(current_proc_->pml4);
             }
 
-
+            // set TSS's RSP0 to the top of the current process's kernel stack, so that when an interrupt occurs, the CPU will switch to this stack.
             gdt::set_kernel_stack(current_proc_->kernel_stack + KERNEL_STACK_SIZE);
 
 
