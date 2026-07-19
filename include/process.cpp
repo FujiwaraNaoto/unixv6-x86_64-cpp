@@ -74,7 +74,8 @@ Process *create_process(EntryPoint entry, const char *name)
 
     // allocate a new page table for each processes
     proc->pml4 = vmm::vmm_ptr->create_address_space();
-    if(not proc->pml4){
+    if (not proc->pml4)
+    {
         proc->state = ProcessState::Unused; // ページテーブル確保失敗した
         return nullptr;
     }
@@ -115,12 +116,13 @@ void yield()
             }
 
             //アドレス空間を切り替える カーネル領域は共有されているので、プロセスのページテーブルを切り替えるだけでよい
-            if(current_proc_->pml4 != 0)
+            if (current_proc_->pml4 != 0)
             {
                 vmm::vmm_ptr->switch_address_space(current_proc_->pml4);
             }
 
-            // set TSS's RSP0 to the top of the current process's kernel stack, so that when an interrupt occurs, the CPU will switch to this stack.
+            // set TSS's RSP0 to the top of the current process's kernel stack, so that when an interrupt occurs, the
+            // CPU will switch to this stack.
             gdt::set_kernel_stack(current_proc_->kernel_stack + KERNEL_STACK_SIZE);
 
 

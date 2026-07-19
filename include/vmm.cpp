@@ -57,7 +57,7 @@ bool VirtualMemoryManager::map_page(uint64_t virtual_address, uint64_t physical_
     // 最終 PTE だけ User にしても、上位エントリのどれか一つでも User=0 なら
     // CPL=3 からのアクセスは拒否される (Intel SDM Vol.3A 4.6 "Access Rights")。
     const uint64_t table_flags = PageFlag::Present | PageFlag::Writable | (flags & PageFlag::User);
-    uint64_t *pdpt = get_or_create_table(pml4, pml4_index(virtual_address), table_flags);
+    uint64_t *pdpt             = get_or_create_table(pml4, pml4_index(virtual_address), table_flags);
     if (!pdpt)
     {
         return false; // PDPTが存在しない場合はマッピングできない
@@ -170,8 +170,8 @@ uint64_t VirtualMemoryManager::create_address_space()
     auto *current_pml4 = physical_to_virtual(pml4_phys_);
 
     memset(new_pml4, 0, 512 * sizeof(uint64_t)); // 新しいPML4をゼロクリア
-    
-    
+
+
     // カーネル空間を共有:
     // PML4[0] : カーネルコード/データ(identity mapping)を共有
     // PML4[256..511] : 上位半分(将来のカーネル空間)を共有
@@ -183,7 +183,7 @@ uint64_t VirtualMemoryManager::create_address_space()
 // ─── アドレス空間の切り替え ──────────────────────────────────────
 void VirtualMemoryManager::switch_address_space(uint64_t pml4_phys)
 {
-    if(pml4_phys == 0)
+    if (pml4_phys == 0)
     {
         return; // 無効なPML4物理アドレスは無視
     }
@@ -192,25 +192,32 @@ void VirtualMemoryManager::switch_address_space(uint64_t pml4_phys)
 }
 
 
-bool VirtualMemoryManager::map_page_in(uint64_t pml4_phys, uint64_t virtual_address, uint64_t physical_address, uint64_t flags)
+bool VirtualMemoryManager::map_page_in(uint64_t pml4_phys,
+                                       uint64_t virtual_address,
+                                       uint64_t physical_address,
+                                       uint64_t flags)
 {
-   
+
     auto *original_pml4 = physical_to_virtual(pml4_phys);
 
-    auto *pdpt = get_or_create_table(original_pml4, pml4_index(virtual_address), PageFlag::Present | PageFlag::Writable | PageFlag::User);
+    auto *pdpt = get_or_create_table(original_pml4,
+                                     pml4_index(virtual_address),
+                                     PageFlag::Present | PageFlag::Writable | PageFlag::User);
 
-    if(!pdpt)
+    if (!pdpt)
     {
         return false; // PDPTが存在しない場合はマッピングできない
     }
-    auto *pd = get_or_create_table(pdpt, pdpt_index(virtual_address), PageFlag::Present | PageFlag::Writable | PageFlag::User);
-    if(!pd)
+    auto *pd =
+        get_or_create_table(pdpt, pdpt_index(virtual_address), PageFlag::Present | PageFlag::Writable | PageFlag::User);
+    if (!pd)
     {
         return false; // PDが存在しない場合はマッピングできない
     }
 
-    auto *pt = get_or_create_table(pd, pd_index(virtual_address), PageFlag::Present | PageFlag::Writable | PageFlag::User);
-    if(!pt)
+    auto *pt =
+        get_or_create_table(pd, pd_index(virtual_address), PageFlag::Present | PageFlag::Writable | PageFlag::User);
+    if (!pt)
     {
         return false; // PTが存在しない場合はマッピングできない
     }
