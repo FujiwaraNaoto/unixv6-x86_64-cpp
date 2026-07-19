@@ -89,19 +89,23 @@ static void thread_B()
 
 
 // PML4分離テスト用スレッド
-// 同じ仮想アドレス 0x700000 に別の値を書いて確認する
+// 同じ仮想アドレスに別の値を書いて確認する。
+// アドレスは PML4 スロット1 (512GiB〜) に置く。スロット0は
+// create_address_space() がカーネル空間 (identity map) として全プロセスで
+// 共有するため、スロット0内のアドレスではプロセスごとに分離できない。
+static constexpr uint64_t kAddrTestVirt = 0x8000000000; // PML4 index 1
 static volatile uint64_t test_result_a = 0;
 static volatile uint64_t test_result_b = 0;
 
 static void addrspace_thread_a() {
-    volatile uint64_t *p = reinterpret_cast<volatile uint64_t *>(0x700000);
+    volatile uint64_t *p = reinterpret_cast<volatile uint64_t *>(kAddrTestVirt);
     *p = 0xAAAA;
     process::yield();           // Bに切り替わる
     test_result_a = *p;         // 戻ってきて自分の値を再確認
 }
 
 static void addrspace_thread_b() {
-    volatile uint64_t *p = reinterpret_cast<volatile uint64_t *>(0x700000);
+    volatile uint64_t *p = reinterpret_cast<volatile uint64_t *>(kAddrTestVirt);
     *p = 0xBBBB;
     process::yield();           // Aに切り替わる
     test_result_b = *p;
@@ -280,12 +284,12 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]]
         Process *pa = process::create_process(addrspace_thread_a, "addr-a");
         Process *pb = process::create_process(addrspace_thread_b, "addr-b");
 
-        // 各プロセスの 0x700000 に物理ページを別々にマップ
+        // 各プロセスの同一仮想アドレスに物理ページを別々にマップ
         uint64_t phys_a = pmm.allocate();
         uint64_t phys_b = pmm.allocate();
-        vmm::vmm_ptr->map_page_in(pa->pml4, 0x700000, phys_a,
+        vmm::vmm_ptr->map_page_in(pa->pml4, kAddrTestVirt, phys_a,
                          vmm::PageFlag::Present | vmm::PageFlag::Writable);
-        vmm::vmm_ptr->map_page_in(pb->pml4, 0x700000, phys_b,
+        vmm::vmm_ptr->map_page_in(pb->pml4, kAddrTestVirt, phys_b,
                          vmm::PageFlag::Present | vmm::PageFlag::Writable);
 
         //process::print_table();

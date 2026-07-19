@@ -91,7 +91,7 @@ Process *create_process(EntryPoint entry, const char *name)
     proc->context->rip = reinterpret_cast<uint64_t>(trampoline);
 
     proc->state = ProcessState::Ready; // 構築完了。これでスケジューラが拾えるようになる
-    vga::vga->printf("[PROCESS] Created process %s (pid=%llu)\n", proc->name.c_str(), proc->pid);
+    vga::vga->printf("[PROCESS] Created process %s (pid=%u)\n", proc->name.c_str(), static_cast<unsigned>(proc->pid));
     return proc;
 }
 
@@ -124,19 +124,22 @@ void yield()
             gdt::set_kernel_stack(current_proc_->kernel_stack + KERNEL_STACK_SIZE);
 
 
-            ProcessContext **old_ctx = (prev_proc) ? &prev_proc->context : nullptr;
+            // prev がプロセスならそのコンテキストへ、kernel_main (スケジューラ) からの
+            // 呼び出しなら scheduler_context_ へ保存する。後者は Ready が尽きたときの
+            // 復帰先になる
+            ProcessContext **old_ctx = (prev_proc) ? &prev_proc->context : &scheduler_context_;
 
-            // intentionally use static so that the dummy context is shared across all calls to yield() and doesn't
-            // consume stack space, and it wll continue to exist until the program ends. I use it as a place to write,
-            // but it's a dumping ground that no one reads
-            static ProcessContext *dummy; // A dummy context to pass when `prev` is `nullptr`
-
-            switch_context((old_ctx) ? old_ctx : &dummy, current_proc_->context);
+            switch_context(old_ctx, current_proc_->context);
             return;
         }
     }
-    // This point is reached when there are no executable processes (=Ready Status)
-    asm volatile("hlt");
+    // Ready なプロセスがない。プロセス内から呼ばれた場合は、最初の yield() で
+    // 保存しておいたスケジューラ (kernel_main) のコンテキストへ戻る
+    if (prev_proc)
+    {
+        current_proc_ = nullptr;
+        switch_context(&prev_proc->context, scheduler_context_);
+    }
 }
 
 } // namespace process
