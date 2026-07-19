@@ -32,6 +32,8 @@ uint64_t *physical_to_virtual(uint64_t phys)
     return reinterpret_cast<uint64_t *>(phys);
 }
 
+extern "C" void load_cr3(uint64_t value);
+extern "C" void asm_flush_tlb();
 
 } // namespace
 
@@ -135,9 +137,7 @@ uint64_t VirtualMemoryManager::virtual_to_physical(uint64_t virtual_address) con
 
 void VirtualMemoryManager::flush_tlb()
 {
-    uint64_t cr3;
-    asm volatile("mov %%cr3, %0" : "=r"(cr3));
-    asm volatile("mov %0, %%cr3" : : "r"(cr3) : "memory"); // CR3を再ロードしてTLBをフラッシュ
+    asm_flush_tlb(); // CR3を再ロードしてTLBをフラッシュする
 }
 
 
@@ -188,7 +188,7 @@ void VirtualMemoryManager::switch_address_space(uint64_t pml4_phys)
         return; // 無効なPML4物理アドレスは無視
     }
     pml4_phys_ = pml4_phys;
-    asm volatile("mov %0, %%cr3" : : "r"(pml4_phys) : "memory");
+    load_cr3(pml4_phys); // CR3を切り替えてTLB(=Translation Lookaside Buffer)をフラッシュ
 }
 
 

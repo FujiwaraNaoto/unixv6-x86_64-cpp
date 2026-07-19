@@ -4,6 +4,10 @@ section .text
 GLOBAL rdmsr
 GLOBAL wrmsr
 
+GLOBAL load_cr3
+
+GLOBAL asm_flush_tlb
+
 ; uint64_t rdmsr(uint32_t msr)
 ;   RDI = msr番号
 ; rdmsr命令は 入力をECX, 出力を EDX:EAX に返すので、RDI -> ECX, EDX:EAX -> RAX に変換する
@@ -23,4 +27,17 @@ wrmsr:
     mov rdx, rsi
     shr rdx, 32         ; 上位32bit -> EDX  実行前[上位32bit H][下位32bit L] -> 実行後[    00000000][上位32bit H]
     wrmsr
+    ret
+
+; void load_cr3(uint64_t value)
+; RDI = value
+load_cr3:
+    mov cr3, rdi
+    ret
+
+; void asm_flush_tlb()
+asm_flush_tlb:
+    ; CR3を再ロードしてTLBをフラッシュする
+    mov rax, cr3
+    mov cr3, rax
     ret
