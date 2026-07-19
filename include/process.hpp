@@ -39,9 +39,10 @@ struct Process
     ProcessContext *context; // カーネルスタック上の保存コンテキストを指す
     uint64_t kernel_stack;
     EntryPoint entry;
-    kstring<16> name; // NOTE: kstring は固定容量の文字列で、容量超過分は切り捨てられる.
-                      // C++の標準ライブラリは使えないので、std::string は使えない
-    uint64_t pml4;    // プロセスのページテーブルの物理アドレス
+    kstring<16> name;    // NOTE: kstring は固定容量の文字列で、容量超過分は切り捨てられる.
+                         // C++の標準ライブラリは使えないので、std::string は使えない
+    uint64_t pml4;       // プロセスのページテーブルの物理アドレス
+    void *sleep_channel; // プロセスが sleep している場合のチャネル (待機理由) 0=起きている
 };
 
 namespace process
@@ -59,4 +60,12 @@ class ProcessManager
 Process *create_process(EntryPoint entry, const char *name);
 void yield();
 Process *current_process();
+
+// 現在プロセスをchannelを理由にしてSleeping状態にしスケジューラへ制御を渡す
+// wakeup()でchannelを理由にしてSleeping状態のプロセスをReady状態にする
+void sleep(void *channel);
+
+// channelを理由にしてSleeping状態のプロセスをReady状態にする
+void wakeup(void *channel);
+
 } // namespace process

@@ -116,6 +116,36 @@ static void addrspace_thread_b()
     test_result_b = *p;
 }
 
+// sleep/wakeup デモ用の待機理由 (任意のポインタ値)
+static int sleep_channel;
+static volatile bool sleeper_woke = false;
+static void sleeper_thread()
+{
+    vga::vga->set_color(Color::LightCyan, Color::Black);
+    vga::vga->puts("[SLEEP] sleeper going to sleep...\n");
+    vga::vga->set_color(Color::LightGrey, Color::Black);
+
+    process::sleep(&sleep_channel); // ここで寝る
+
+    // 起こされたら再開
+    sleeper_woke = true;
+    vga::vga->set_color(Color::LightCyan, Color::Black);
+    vga::vga->puts("[SLEEP] sleeper woke up!\n");
+    vga::vga->set_color(Color::LightGrey, Color::Black);
+}
+
+static void waker_thread()
+{
+    // 少し他の処理を挟んでから起こす
+    for (int i = 0; i < 3; i++)
+        process::yield();
+
+    vga::vga->set_color(Color::LightMagenta, Color::Black);
+    vga::vga->puts("[WAKE]  waking sleeper...\n");
+    vga::vga->set_color(Color::LightGrey, Color::Black);
+    process::wakeup(&sleep_channel);
+}
+
 extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]] uint32_t mb_addr)
 {
     // 他のどのグローバル変数を使う前に、コンストラクタを実行する。
@@ -285,26 +315,42 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]]
 
     // Process::init();
 
-    Process *pa = process::create_process(addrspace_thread_a, "addr-a");
-    Process *pb = process::create_process(addrspace_thread_b, "addr-b");
+    // {
 
-    // 各プロセスの同一仮想アドレスに物理ページを別々にマップ
-    uint64_t phys_a = pmm.allocate();
-    uint64_t phys_b = pmm.allocate();
-    vmm::vmm_ptr->map_page_in(pa->pml4, kAddrTestVirt, phys_a, vmm::PageFlag::Present | vmm::PageFlag::Writable);
-    vmm::vmm_ptr->map_page_in(pb->pml4, kAddrTestVirt, phys_b, vmm::PageFlag::Present | vmm::PageFlag::Writable);
+    //     Process *pa = process::create_process(addrspace_thread_a, "addr-a");
+    //     Process *pb = process::create_process(addrspace_thread_b, "addr-b");
 
-    // process::print_table();
-    process::yield(); // スケジューラ起動
+    //     // 各プロセスの同一仮想アドレスに物理ページを別々にマップ
+    //     uint64_t phys_a = pmm.allocate();
+    //     uint64_t phys_b = pmm.allocate();
+    //     vmm::vmm_ptr->map_page_in(pa->pml4, kAddrTestVirt, phys_a, vmm::PageFlag::Present | vmm::PageFlag::Writable);
+    //     vmm::vmm_ptr->map_page_in(pb->pml4, kAddrTestVirt, phys_b, vmm::PageFlag::Present | vmm::PageFlag::Writable);
 
-    //両方のスレッド終了後に結果を確認
+    //     // process::print_table();
+    //     process::yield(); // スケジューラ起動
+
+    //     //両方のスレッド終了後に結果を確認
+    //     vga::vga->set_color(Color::LightGreen, Color::Black);
+    //     vga::vga->puts("[ADDR] ");
+    //     vga::vga->set_color(Color::LightGrey, Color::Black);
+    //     vga::vga->printf("A wrote 0xAAAA read 0x%x / B wrote 0xBBBB read 0x%x  %s\n",
+    //                     (unsigned)test_result_a,
+    //                     (unsigned)test_result_b,
+    //                     (test_result_a == 0xAAAA && test_result_b == 0xBBBB) ? "SEPARATED-OK" : "SHARED-FAIL");
+
+    // }
+
+    // ─── Phase 7 セット3(前半): sleep/wakeup テスト ───
+    process::create_process(sleeper_thread, "sleeper");
+    process::create_process(waker_thread, "waker");
+    process::yield();
+
     vga::vga->set_color(Color::LightGreen, Color::Black);
-    vga::vga->puts("[ADDR] ");
+    vga::vga->puts("[SLEEP] ");
     vga::vga->set_color(Color::LightGrey, Color::Black);
-    vga::vga->printf("A wrote 0xAAAA read 0x%x / B wrote 0xBBBB read 0x%x  %s\n",
-                     (unsigned)test_result_a,
-                     (unsigned)test_result_b,
-                     (test_result_a == 0xAAAA && test_result_b == 0xBBBB) ? "SEPARATED-OK" : "SHARED-FAIL");
+    vga::vga->printf("result: sleeper %s\n", sleeper_woke ? "WOKE-OK" : "STILL-SLEEPING-FAIL");
+
+
     while (1)
     {
         asm volatile("hlt");
