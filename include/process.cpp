@@ -18,7 +18,8 @@ ProcessManager::ProcessManager(heap::Heap *heap_ptr)
 {
     for (size_t idx = 0; idx < process_table_.size(); ++idx)
     {
-        process_table_[idx].state = ProcessState::Unused;
+        process_table_[idx].state         = ProcessState::Unused;
+        process_table_[idx].sleep_channel = nullptr;
     }
     current_proc_ = nullptr;
     heap_ptr_     = heap_ptr;
@@ -41,6 +42,53 @@ static void trampoline()
     // and won't be scheduled again, but it will still consume CPU time if we don't halt here.
     while (1)
         asm volatile("hlt");
+}
+
+static void schedule(Process *prev_proc)
+{
+    size_t start = prev_proc ? (prev_proc - &process_table_[0]) :- 1;
+    for (size_t off = 1; off <= process_table_.size(); ++off)
+    {
+        int idx = (start + off) % process_table_.size();
+        if (process_table_[idx].state != ProcessState::Ready)
+            continue;
+
+
+        current_proc_        = &process_table_[idx];
+        current_proc_->state = ProcessState::Running;
+
+        // 選ばれたのが今動いていたプロセス自身なら切り替え不要。
+        // ここで switch_context(&self->context, self->context) をやると
+        // 既に破棄された古いコンテキストへ ret して暴走するため、そのまま続行する。
+        if (current_proc_ == prev_proc)
+            return;
+
+        if (current_proc_->pml4 != 0)
+        {
+            vmm::vmm_ptr->switch_address_space(current_proc_->pml4);
+        }
+
+        gdt::set_kernel_stack(current_proc_->kernel_stack + KERNEL_STACK_SIZE);
+
+        ProcessContext **old_ctx = prev_proc ? &prev_proc->context
+                                                    : reinterpret_cast<ProcessContext **>(&scheduler_context_);
+
+        switch_context(old_ctx, current_proc_->context);
+        return;
+    }
+
+    if (prev_proc)
+    {
+        current_proc_ = nullptr;
+        switch_context(&prev_proc->context, scheduler_context_);
+    }
+
+
+    // if (!prev_proc || prev_proc->state != ProcessState::Running)
+    // {
+    //     asm volatile("sti"); //割り込みは受け付ける
+    //     asm volatile("hlt");
+    // }
 }
 
 Process *create_process(EntryPoint entry, const char *name)
@@ -82,14 +130,15 @@ Process *create_process(EntryPoint entry, const char *name)
 
     uint8_t *stack_top = stack + KERNEL_STACK_SIZE;
     stack_top -= sizeof(ProcessContext);
-    proc->context      = reinterpret_cast<ProcessContext *>(stack_top);
-    proc->context->r15 = 0;
-    proc->context->r14 = 0;
-    proc->context->r13 = 0;
-    proc->context->r12 = 0;
-    proc->context->rbx = 0;
-    proc->context->rbp = 0;
-    proc->context->rip = reinterpret_cast<uint64_t>(trampoline);
+    proc->context       = reinterpret_cast<ProcessContext *>(stack_top);
+    proc->context->r15  = 0;
+    proc->context->r14  = 0;
+    proc->context->r13  = 0;
+    proc->context->r12  = 0;
+    proc->context->rbx  = 0;
+    proc->context->rbp  = 0;
+    proc->context->rip  = reinterpret_cast<uint64_t>(trampoline);
+    proc->sleep_channel = nullptr; // 初期状態では起きている
 
     proc->state = ProcessState::Ready; // 構築完了。これでスケジューラが拾えるようになる
     vga::vga->printf("[PROCESS] Created process %s (pid=%u)\n", proc->name.c_str(), static_cast<unsigned>(proc->pid));
@@ -100,48 +149,53 @@ Process *create_process(EntryPoint entry, const char *name)
 void yield()
 {
     Process *prev_proc = current_proc_;
-    int start          = (prev_proc) ? (prev_proc - &process_table_[0]) : -1;
-
-    for (std::size_t off = 1; off <= process_table_.size(); ++off)
+    if (prev_proc && prev_proc->state == ProcessState::Running)
     {
+        prev_proc->state = ProcessState::Ready; // Running -> Ready
+    }
+    schedule(prev_proc);
+}
 
-        std::size_t idx = (start + off) % process_table_.size();
-        if (process_table_[idx].state == ProcessState::Ready)
+
+// ─── sleep ────────────────────────────────────────────────────────
+//
+// 現プロセスを chan を理由に Sleeping にして、別プロセスへ切り替える。
+// wakeup(chan) で Ready に戻され、再スケジュールされると
+// swtch がこの続きに戻ってくる (= sleep から return する)。
+//
+void sleep(void *chan)
+{
+    Process *p = current_proc_;
+    if (!p)
+        return; // カーネル初期文脈では sleep しない
+    // lost wakeup 対策: 状態変更中は割り込みを止める
+    asm volatile("cli");
+
+    p->sleep_channel = chan;
+    p->state         = ProcessState::Sleeping;
+
+    schedule(p); // 別プロセスへ。ここで一旦戻らない
+
+    // ─── wakeup されて再開したらここに戻る ───
+    p->sleep_channel = nullptr;
+    asm volatile("sti");
+}
+
+// ─── wakeup ───────────────────────────────────────────────────────
+//
+// chan を理由に Sleeping な全プロセスを Ready に戻す。
+// 実際に走り出すのは次のスケジュールのタイミング。
+//
+void wakeup(void *chan)
+{
+    for (size_t i = 0; i < process_table_.size(); ++i)
+    {
+        if (process_table_[i].state == ProcessState::Sleeping && process_table_[i].sleep_channel == chan)
         {
-            current_proc_        = &process_table_[idx];
-            current_proc_->state = ProcessState::Running;
-            if (prev_proc && prev_proc->state == ProcessState::Running)
-            {
-                prev_proc->state = ProcessState::Ready;
-            }
-
-            //アドレス空間を切り替える カーネル領域は共有されているので、プロセスのページテーブルを切り替えるだけでよい
-            if (current_proc_->pml4 != 0)
-            {
-                vmm::vmm_ptr->switch_address_space(current_proc_->pml4);
-            }
-
-            // set TSS's RSP0 to the top of the current process's kernel stack, so that when an interrupt occurs, the
-            // CPU will switch to this stack.
-            gdt::set_kernel_stack(current_proc_->kernel_stack + KERNEL_STACK_SIZE);
-
-
-            // prev がプロセスならそのコンテキストへ、kernel_main (スケジューラ) からの
-            // 呼び出しなら scheduler_context_ へ保存する。後者は Ready が尽きたときの
-            // 復帰先になる
-            ProcessContext **old_ctx = (prev_proc) ? &prev_proc->context : &scheduler_context_;
-
-            switch_context(old_ctx, current_proc_->context);
-            return;
+            process_table_[i].state = ProcessState::Ready;
         }
     }
-    // Ready なプロセスがない。プロセス内から呼ばれた場合は、最初の yield() で
-    // 保存しておいたスケジューラ (kernel_main) のコンテキストへ戻る
-    if (prev_proc)
-    {
-        current_proc_ = nullptr;
-        switch_context(&prev_proc->context, scheduler_context_);
-    }
 }
+
 
 } // namespace process
