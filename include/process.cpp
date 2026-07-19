@@ -67,9 +67,14 @@ static void schedule(Process *prev_proc)
         {
             vmm::vmm_ptr->switch_address_space(current_proc_->pml4);
         }
-
+        
+        // set TSS's RSP0 to the top of the current process's kernel stack, so that when an interrupt occurs, the
+        // CPU will switch to this stack.
         gdt::set_kernel_stack(current_proc_->kernel_stack + KERNEL_STACK_SIZE);
 
+        // prev がプロセスならそのコンテキストへ、kernel_main (スケジューラ) からの
+        // 呼び出しなら scheduler_context_ へ保存する。後者は Ready が尽きたときの
+        // 復帰先になる
         ProcessContext **old_ctx = prev_proc ? &prev_proc->context
                                                     : reinterpret_cast<ProcessContext **>(&scheduler_context_);
 
