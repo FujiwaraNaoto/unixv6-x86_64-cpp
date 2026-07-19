@@ -1,6 +1,7 @@
 
 #include <cstdint>
 #include "vmm.hpp"
+#include <cstring>
 
 namespace
 {
@@ -31,6 +32,8 @@ uint64_t *physical_to_virtual(uint64_t phys)
     return reinterpret_cast<uint64_t *>(phys);
 }
 
+extern "C" void load_cr3(uint64_t value);
+extern "C" void asm_flush_tlb();
 
 } // namespace
 
@@ -54,7 +57,7 @@ bool VirtualMemoryManager::map_page(uint64_t virtual_address, uint64_t physical_
     // 最終 PTE だけ User にしても、上位エントリのどれか一つでも User=0 なら
     // CPL=3 からのアクセスは拒否される (Intel SDM Vol.3A 4.6 "Access Rights")。
     const uint64_t table_flags = PageFlag::Present | PageFlag::Writable | (flags & PageFlag::User);
-    uint64_t *pdpt = get_or_create_table(pml4, pml4_index(virtual_address), table_flags);
+    uint64_t *pdpt             = get_or_create_table(pml4, pml4_index(virtual_address), table_flags);
     if (!pdpt)
     {
         return false; // PDPTが存在しない場合はマッピングできない
@@ -134,9 +137,7 @@ uint64_t VirtualMemoryManager::virtual_to_physical(uint64_t virtual_address) con
 
 void VirtualMemoryManager::flush_tlb()
 {
-    uint64_t cr3;
-    asm volatile("mov %%cr3, %0" : "=r"(cr3));
-    asm volatile("mov %0, %%cr3" : : "r"(cr3) : "memory"); // CR3を再ロードしてTLBをフラッシュ
+    asm_flush_tlb(); // CR3を再ロードしてTLBをフラッシュする
 }
 
 
@@ -157,5 +158,73 @@ uint64_t *VirtualMemoryManager::get_or_create_table(uint64_t *parent_table, uint
     }
     return physical_to_virtual(entry_to_phys(parent_table[index]));
 }
+
+uint64_t VirtualMemoryManager::create_address_space()
+{
+    uint64_t new_pml4_phys = pmm_ptr_->allocate();
+    if (new_pml4_phys == 0)
+    {
+        return 0; // メモリ不足
+    }
+    uint64_t *new_pml4 = physical_to_virtual(new_pml4_phys);
+    auto *current_pml4 = physical_to_virtual(pml4_phys_);
+
+    memset(new_pml4, 0, 512 * sizeof(uint64_t)); // 新しいPML4をゼロクリア
+
+
+    // カーネル空間を共有:
+    // PML4[0] : カーネルコード/データ(identity mapping)を共有
+    // PML4[256..511] : 上位半分(将来のカーネル空間)を共有
+    new_pml4[0] = current_pml4[0]; // カーネル空間のマッピングをコピー
+    memcpy(&new_pml4[256], &current_pml4[256], 256 * sizeof(uint64_t)); // カーネル空間のマッピングをコピー
+    return new_pml4_phys;
+}
+
+// ─── アドレス空間の切り替え ──────────────────────────────────────
+void VirtualMemoryManager::switch_address_space(uint64_t pml4_phys)
+{
+    if (pml4_phys == 0)
+    {
+        return; // 無効なPML4物理アドレスは無視
+    }
+    pml4_phys_ = pml4_phys;
+    load_cr3(pml4_phys); // CR3を切り替えてTLB(=Translation Lookaside Buffer)をフラッシュ
+}
+
+
+bool VirtualMemoryManager::map_page_in(uint64_t pml4_phys,
+                                       uint64_t virtual_address,
+                                       uint64_t physical_address,
+                                       uint64_t flags)
+{
+
+    auto *original_pml4 = physical_to_virtual(pml4_phys);
+
+    auto *pdpt = get_or_create_table(original_pml4,
+                                     pml4_index(virtual_address),
+                                     PageFlag::Present | PageFlag::Writable | PageFlag::User);
+
+    if (!pdpt)
+    {
+        return false; // PDPTが存在しない場合はマッピングできない
+    }
+    auto *pd =
+        get_or_create_table(pdpt, pdpt_index(virtual_address), PageFlag::Present | PageFlag::Writable | PageFlag::User);
+    if (!pd)
+    {
+        return false; // PDが存在しない場合はマッピングできない
+    }
+
+    auto *pt =
+        get_or_create_table(pd, pd_index(virtual_address), PageFlag::Present | PageFlag::Writable | PageFlag::User);
+    if (!pt)
+    {
+        return false; // PTが存在しない場合はマッピングできない
+    }
+
+    pt[pt_index(virtual_address)] = (physical_address & PAGE_MASK) | flags | PageFlag::Present;
+    return true;
+}
+
 
 } // namespace vmm

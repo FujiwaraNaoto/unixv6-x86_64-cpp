@@ -2,6 +2,7 @@
 #include <array>
 #include "process.hpp"
 #include "heap.hpp"
+#include "gdt.hpp"
 
 extern "C" void switch_context(ProcessContext **old_ctx, ProcessContext *new_ctx);
 
@@ -71,6 +72,14 @@ Process *create_process(EntryPoint entry, const char *name)
     }
     proc->kernel_stack = reinterpret_cast<uint64_t>(stack);
 
+    // allocate a new page table for each processes
+    proc->pml4 = vmm::vmm_ptr->create_address_space();
+    if (not proc->pml4)
+    {
+        proc->state = ProcessState::Unused; // ページテーブル確保失敗した
+        return nullptr;
+    }
+
     uint8_t *stack_top = stack + KERNEL_STACK_SIZE;
     stack_top -= sizeof(ProcessContext);
     proc->context      = reinterpret_cast<ProcessContext *>(stack_top);
@@ -83,6 +92,7 @@ Process *create_process(EntryPoint entry, const char *name)
     proc->context->rip = reinterpret_cast<uint64_t>(trampoline);
 
     proc->state = ProcessState::Ready; // 構築完了。これでスケジューラが拾えるようになる
+    vga::vga->printf("[PROCESS] Created process %s (pid=%u)\n", proc->name.c_str(), static_cast<unsigned>(proc->pid));
     return proc;
 }
 
@@ -104,19 +114,34 @@ void yield()
             {
                 prev_proc->state = ProcessState::Ready;
             }
-            ProcessContext **old_ctx = (prev_proc) ? &prev_proc->context : nullptr;
 
-            // intentionally use static so that the dummy context is shared across all calls to yield() and doesn't
-            // consume stack space, and it wll continue to exist until the program ends. I use it as a place to write,
-            // but it's a dumping ground that no one reads
-            static ProcessContext *dummy; // A dummy context to pass when `prev` is `nullptr`
+            //アドレス空間を切り替える カーネル領域は共有されているので、プロセスのページテーブルを切り替えるだけでよい
+            if (current_proc_->pml4 != 0)
+            {
+                vmm::vmm_ptr->switch_address_space(current_proc_->pml4);
+            }
 
-            switch_context((old_ctx) ? old_ctx : &dummy, current_proc_->context);
+            // set TSS's RSP0 to the top of the current process's kernel stack, so that when an interrupt occurs, the
+            // CPU will switch to this stack.
+            gdt::set_kernel_stack(current_proc_->kernel_stack + KERNEL_STACK_SIZE);
+
+
+            // prev がプロセスならそのコンテキストへ、kernel_main (スケジューラ) からの
+            // 呼び出しなら scheduler_context_ へ保存する。後者は Ready が尽きたときの
+            // 復帰先になる
+            ProcessContext **old_ctx = (prev_proc) ? &prev_proc->context : &scheduler_context_;
+
+            switch_context(old_ctx, current_proc_->context);
             return;
         }
     }
-    // This point is reached when there are no executable processes (=Ready Status)
-    asm volatile("hlt");
+    // Ready なプロセスがない。プロセス内から呼ばれた場合は、最初の yield() で
+    // 保存しておいたスケジューラ (kernel_main) のコンテキストへ戻る
+    if (prev_proc)
+    {
+        current_proc_ = nullptr;
+        switch_context(&prev_proc->context, scheduler_context_);
+    }
 }
 
 } // namespace process

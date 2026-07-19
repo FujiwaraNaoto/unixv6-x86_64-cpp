@@ -23,6 +23,10 @@ SECTIONS {
         *(.text.*)
     }
 
+    .user ALIGN(4096) : {
+        *(.user)
+    }
+
     /* 読み取り専用データ (GDT など) */
     .rodata ALIGN(4096) : {
         *(.rodata)

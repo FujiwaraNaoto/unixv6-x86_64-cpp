@@ -24,26 +24,29 @@ extern "C"
 }
 
 // リング3で実行されるユーザープログラム
- // (カーネル内に置くが、User許可ページにマップして実行する)
- [[gnu::section(".user")]]
- static void user_program() {
-     const char msg[] = "Hello from ring 3!\n";
-     asm volatile(
-         "mov $1, %%rax\n"     // write
-         "mov $1, %%rdi\n"     // stdout
-         "mov %0, %%rsi\n"     // buf
-         "mov $19, %%rdx\n"    // len
-         "syscall\n"
-         : : "r"(msg) : "rax","rdi","rsi","rdx","rcx","r11","memory");
-     asm volatile(
-         "mov $60, %%rax\n"    // exit
-         "xor %%rdi, %%rdi\n"
-         "syscall\n"
-         : : : "rax","rdi");
+// (カーネル内に置くが、User許可ページにマップして実行する)
+[[gnu::section(".user")]] static void user_program()
+{
+    const char msg[] = "Hello from ring 3!\n";
+    asm volatile("mov $1, %%rax\n"  // write
+                 "mov $1, %%rdi\n"  // stdout
+                 "mov %0, %%rsi\n"  // buf
+                 "mov $19, %%rdx\n" // len
+                 "syscall\n"
+                 :
+                 : "r"(msg)
+                 : "rax", "rdi", "rsi", "rdx", "rcx", "r11", "memory");
+    asm volatile("mov $60, %%rax\n" // exit
+                 "xor %%rdi, %%rdi\n"
+                 "syscall\n"
+                 :
+                 :
+                 : "rax", "rdi");
     // 念のため
-    while (1) {
+    while (1)
+    {
         asm volatile("hlt");
-     }  
+    }
 }
 
 static void call_global_constructors()
@@ -87,6 +90,31 @@ static void thread_B()
     }
 }
 
+
+// PML4分離テスト用スレッド
+// 同じ仮想アドレスに別の値を書いて確認する。
+// アドレスは PML4 スロット1 (512GiB〜) に置く。スロット0は
+// create_address_space() がカーネル空間 (identity map) として全プロセスで
+// 共有するため、スロット0内のアドレスではプロセスごとに分離できない。
+static constexpr uint64_t kAddrTestVirt = 0x8000000000; // PML4 index 1
+static volatile uint64_t test_result_a  = 0;
+static volatile uint64_t test_result_b  = 0;
+
+static void addrspace_thread_a()
+{
+    volatile uint64_t *p = reinterpret_cast<volatile uint64_t *>(kAddrTestVirt);
+    *p                   = 0xAAAA;
+    process::yield();   // Bに切り替わる
+    test_result_a = *p; // 戻ってきて自分の値を再確認
+}
+
+static void addrspace_thread_b()
+{
+    volatile uint64_t *p = reinterpret_cast<volatile uint64_t *>(kAddrTestVirt);
+    *p                   = 0xBBBB;
+    process::yield(); // Aに切り替わる
+    test_result_b = *p;
+}
 
 extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]] uint32_t mb_addr)
 {
@@ -204,57 +232,79 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]]
     gdt::set_kernel_stack(reinterpret_cast<uint64_t>(kernel_stack + sizeof(kernel_stack)));
 
 
-    uint64_t code_page = reinterpret_cast<uint64_t>(&user_program) & PAGE_MASK;
-    vmm::vmm_ptr->map_page(code_page, vmm::vmm_ptr->virtual_to_physical(code_page), vmm::PageFlag::User | vmm::PageFlag::Present | vmm::PageFlag::Writable);
+    // {
+    // uint64_t code_page = reinterpret_cast<uint64_t>(&user_program) & PAGE_MASK;
+    // vmm::vmm_ptr->map_page(code_page, vmm::vmm_ptr->virtual_to_physical(code_page), vmm::PageFlag::User |
+    // vmm::PageFlag::Present | vmm::PageFlag::Writable);
 
-        // ユーザースタックを確保して User許可でマップ
-        uint64_t ustack_phys = pmm.allocate();
-        uint64_t ustack_virt = 0x600000;
-        vmm::vmm_ptr->map_page(ustack_virt, ustack_phys,
-                      vmm::PageFlag::Present | vmm::PageFlag::Writable | vmm::PageFlag::User);
+    //     // ユーザースタックを確保して User許可でマップ
+    //     uint64_t ustack_phys = pmm.allocate();
+    //     uint64_t ustack_virt = 0x600000;
+    //     vmm::vmm_ptr->map_page(ustack_virt, ustack_phys,
+    //                   vmm::PageFlag::Present | vmm::PageFlag::Writable | vmm::PageFlag::User);
 
-        // リング3へ遷移 (16バイト境界に揃える)
-        usermode::enter(
-            reinterpret_cast<uint64_t>(&user_program),
-            (ustack_virt + PAGE_SIZE - 16));
-    
+    //     // リング3へ遷移 (16バイト境界に揃える)
+    //     usermode::enter(
+    //         reinterpret_cast<uint64_t>(&user_program),
+    //         (ustack_virt + PAGE_SIZE - 16));
+
+    // }
 
 
-    
-
-    {
-        vga::vga->set_color(Color::LightCyan, Color::Black);
-        vga::vga->puts("\n[KBD]  type something (echo test):\n> ");
-        vga::vga->set_color(Color::LightGrey, Color::Black);
-        while (1)
-        {
-            if (keyboard::has_input())
-            {
-                char c = keyboard::getchar();
-                vga::vga->putchar(c);
-                if (c == '\n')
-                {
-                    vga::vga->puts("> ");
-                }
-            }
-            asm volatile("hlt");
-        }
-    }
-
+    // {
+    //     vga::vga->set_color(Color::LightCyan, Color::Black);
+    //     vga::vga->puts("\n[KBD]  type something (echo test):\n> ");
+    //     vga::vga->set_color(Color::LightGrey, Color::Black);
+    //     while (1)
+    //     {
+    //         if (keyboard::has_input())
+    //         {
+    //             char c = keyboard::getchar();
+    //             vga::vga->putchar(c);
+    //             if (c == '\n')
+    //             {
+    //                 vga::vga->puts("> ");
+    //             }
+    //         }
+    //         asm volatile("hlt");
+    //     }
+    // }
 
 
     process::ProcessManager process_manager(heap::heap_ptr);
-    Process *procA = process::create_process(thread_A, "Thread A");
-    Process *procB = process::create_process(thread_B, "Thread B");
-    vga::vga->printf("[DBG] procA=0x%x stateA=%d procB=0x%x stateB=%d\n",
-                     static_cast<unsigned>(reinterpret_cast<uintptr_t>(procA)),
-                     procA ? static_cast<int>(procA->state) : -1,
-                     static_cast<unsigned>(reinterpret_cast<uintptr_t>(procB)),
-                     procB ? static_cast<int>(procB->state) : -1);
-    {
-        process::yield(); // 最初のプロセスに切り替える
-    }
+    // Process *procA = process::create_process(thread_A, "Thread A");
+    // Process *procB = process::create_process(thread_B, "Thread B");
+    // vga::vga->printf("[DBG] procA=0x%x stateA=%d procB=0x%x stateB=%d\n",
+    //                  static_cast<unsigned>(reinterpret_cast<uintptr_t>(procA)),
+    //                  procA ? static_cast<int>(procA->state) : -1,
+    //                  static_cast<unsigned>(reinterpret_cast<uintptr_t>(procB)),
+    //                  procB ? static_cast<int>(procB->state) : -1);
+    // {
+    //     process::yield(); // 最初のプロセスに切り替える
+    // }
 
+    // Process::init();
+
+    Process *pa = process::create_process(addrspace_thread_a, "addr-a");
+    Process *pb = process::create_process(addrspace_thread_b, "addr-b");
+
+    // 各プロセスの同一仮想アドレスに物理ページを別々にマップ
+    uint64_t phys_a = pmm.allocate();
+    uint64_t phys_b = pmm.allocate();
+    vmm::vmm_ptr->map_page_in(pa->pml4, kAddrTestVirt, phys_a, vmm::PageFlag::Present | vmm::PageFlag::Writable);
+    vmm::vmm_ptr->map_page_in(pb->pml4, kAddrTestVirt, phys_b, vmm::PageFlag::Present | vmm::PageFlag::Writable);
+
+    // process::print_table();
+    process::yield(); // スケジューラ起動
+
+    //両方のスレッド終了後に結果を確認
+    vga::vga->set_color(Color::LightGreen, Color::Black);
+    vga::vga->puts("[ADDR] ");
+    vga::vga->set_color(Color::LightGrey, Color::Black);
+    vga::vga->printf("A wrote 0xAAAA read 0x%x / B wrote 0xBBBB read 0x%x  %s\n",
+                     (unsigned)test_result_a,
+                     (unsigned)test_result_b,
+                     (test_result_a == 0xAAAA && test_result_b == 0xBBBB) ? "SEPARATED-OK" : "SHARED-FAIL");
     while (1)
     {
         asm volatile("hlt");

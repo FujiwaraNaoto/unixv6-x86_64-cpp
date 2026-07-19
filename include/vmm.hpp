@@ -13,7 +13,7 @@ namespace vmm
 namespace PageFlag
 {
 constexpr uint64_t Present   = 1ULL << 0;
-constexpr uint64_t Writable  = 1ULL << 1;// R/Wbit
+constexpr uint64_t Writable  = 1ULL << 1; // R/Wbit
 constexpr uint64_t User      = 1ULL << 2; // リング3からアクセス可
 constexpr uint64_t Accessed  = 1ULL << 5;
 constexpr uint64_t Dirty     = 1ULL << 6;
@@ -32,6 +32,18 @@ class VirtualMemoryManager final
     uint64_t virtual_to_physical(uint64_t virtual_address) const;
 
     void flush_tlb();
+
+
+    // 新しいアドレス空間(PML4)を作成し，その物理アドレスを返す
+    // カーネル領域のエントリは現在の PML4からコピーされる
+    uint64_t create_address_space();
+
+    // CR3を指定PML4に切り替える。
+    void switch_address_space(uint64_t pml4_phys);
+
+    // 指定PML4に対して、指定仮想アドレスを指定物理アドレスにマッピングする。(プロセスにアドレス空間構築用)
+    bool map_page_in(uint64_t pml4_phys, uint64_t virtual_address, uint64_t physical_address, uint64_t flags);
+
 
   private:
     uint64_t *get_or_create_table(uint64_t *parent_table, uint64_t index, uint64_t flags);
