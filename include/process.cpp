@@ -6,6 +6,7 @@
 
 extern "C" void switch_context(ProcessContext **old_ctx, ProcessContext *new_ctx);
 
+
 namespace process
 {
 static std::array<Process, MAX_PROCESSES> process_table_;
@@ -202,5 +203,166 @@ void wakeup(void *chan)
     }
 }
 
+ // zombie になったプロセスのコンテキストを破棄して、別プロセスへ切り替える。
+    static void schedule_from_zombie(ProcessContext **discard_context)
+    {
+        Process *prev_proc = current_proc_;
+        int start = prev_proc ? (prev_proc - &process_table_[0]) : -1;
+        for (size_t off = 1; off <= process_table_.size(); ++off)
+        {
+            int idx = (start + off) % process_table_.size();
+            if (process_table_[idx].state != ProcessState::Ready)
+                continue;
+
+            current_proc_        = &process_table_[idx];
+            current_proc_->state = ProcessState::Running;
+            if(current_proc_->pml4 != 0)
+            {
+                vmm::vmm_ptr->switch_address_space(current_proc_->pml4);
+            }
+            gdt::set_kernel_stack(current_proc_->kernel_stack + KERNEL_STACK_SIZE);
+            switch_context(discard_context, current_proc_->context);
+            return;
+        }
+
+        // Ready なプロセスがない場合は、カーネル初期文脈に戻す
+        current_proc_ = nullptr;
+        switch_context(discard_context, scheduler_context_);
+    }
+
+
+[[noreturn]] void exit(int status)
+{
+    Process *p = current_proc_;
+    if (!p)
+        return; // カーネル初期文脈では exit しない
+
+    asm volatile("cli"); // 状態変更中は割り込みを止める
+
+    p->exit_status = status;
+    p->state       = ProcessState::Zombie;
+
+    if(p->parent)
+    {
+        // 親プロセスが wait() している場合に備えて wakeup する -> なぜ?
+        wakeup(p->parent);
+    }
+    //二度と戻らないので、スケジューラに制御を渡す
+    static ProcessContext discard_context;
+    schedule_from_zombie(&discard_context);
+
+    // unreachable, but just in case, halt the CPU to avoid unexpected behavior. The process will be in Zombie state,
+    while(1)
+        asm volatile("hlt");
+}
+
+int wait(int *exit_code_out){
+    Process *p = current_proc_;
+
+    while(1){
+        bool has_child = false;
+
+        for(size_t i = 0; i < process_table_.size(); ++i){
+            Process *child = &process_table_[i];
+            if(child->parent != p)
+                continue;
+            has_child = true;
+            if(child->state == ProcessState::Zombie){
+                //zombieになった子プロセスを回収する
+                int exit_code = child->exit_status;
+                if(exit_code_out){
+                    *exit_code_out = exit_code;
+                }
+
+                int pid = child->pid;
+                free_process_resources(child);
+                
+                return pid;
+
+            }
+        }
+
+        if(!has_child){
+            return -1;
+        }
+
+        // when child processes exist but none of them are zombies, the parent process should sleep until a child process exits
+        // exit() will wake up the parent process when a child process exits, so the parent process can check again if any child processes are zombies.
+        sleep(p);
+    }
+}
+
+static void free_process_resources(Process *proc)
+{
+    if (proc->kernel_stack)
+    {
+        heap_ptr_->free(reinterpret_cast<void *>(proc->kernel_stack));
+        proc->kernel_stack = 0;
+    }
+    
+    proc->pml4 = 0;
+    proc->parent = nullptr;
+    proc->sleep_channel = nullptr;
+    proc->exit_status = static_cast<int>(ProcessState::Unused);
+}
+
+
+
+int fork()
+{
+    Process *parent = current_proc_;
+    Process *child = nullptr;
+    for(size_t i = 0; i < process_table_.size(); ++i){
+        if(process_table_[i].state == ProcessState::Unused){
+            child = &process_table_[i];
+            break;
+        }
+    }
+    if(!child){
+        return -1; // process table is full
+    }
+
+    //子供に親の情報をコピーする
+    child->pid = next_pid_++;
+    child->state = ProcessState::Embryo;
+    child->entry = parent->entry;
+    child->name = parent->name;
+    child->parent = parent;
+    child->entry = parent->entry;
+    child->name = parent->name;
+    child->sleep_channel = nullptr;
+
+    // allocate a new page table for the child process
+    uint8_t *child_stack = static_cast<uint8_t *>(heap_ptr_->alloc(KERNEL_STACK_SIZE));
+    if (!child_stack){
+        child->state = ProcessState::Unused; // スタック確保失敗した
+        return -1;
+    }
+    child->kernel_stack = reinterpret_cast<uint64_t>(child_stack);
+
+    // allocate a new page table for the child process
+    child->pml4 = vmm::vmm_ptr->create_address_space();
+    if (!child->pml4){
+        heap_ptr_->free(reinterpret_cast<void *>(child_stack));
+        child->state = ProcessState::Unused; // ページテーブル確保失敗
+        return -1;
+    }
+
+    // copy the parent's kernel stack to the child's kernel stack 
+    // (make the child process's kernel stack identical to the parent's kernel stack)
+    for(size_t i=0;i<KERNEL_STACK_SIZE;i++){
+        child_stack[i]=reinterpret_cast<uint8_t*>(parent->kernel_stack)[i];
+    }
+
+    // set the child's context to be identical to the parent's context
+    uint64_t offset = reinterpret_cast<uint64_t>(child_stack) - parent->kernel_stack;
+    child->context = reinterpret_cast<ProcessContext*>(reinterpret_cast<uint64_t>(parent->context) + offset);
+
+    child->context->rip =reinterpret_cast<uint64_t>(fork_child_return);
+
+    child->state = ProcessState::Ready;
+    return child->pid; // return the child's pid to the parent process
+}
 
 } // namespace process
+

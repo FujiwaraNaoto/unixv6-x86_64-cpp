@@ -44,6 +44,7 @@ class VirtualMemoryManager final
     // 指定PML4に対して、指定仮想アドレスを指定物理アドレスにマッピングする。(プロセスにアドレス空間構築用)
     bool map_page_in(uint64_t pml4_phys, uint64_t virtual_address, uint64_t physical_address, uint64_t flags);
 
+    void copy_user_pages(uint64_t src_pml4_phys, uint64_t dst_pml4_phys);
 
   private:
     uint64_t *get_or_create_table(uint64_t *parent_table, uint64_t index, uint64_t flags);

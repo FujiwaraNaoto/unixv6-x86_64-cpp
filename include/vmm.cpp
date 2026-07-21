@@ -226,5 +226,81 @@ bool VirtualMemoryManager::map_page_in(uint64_t pml4_phys,
     return true;
 }
 
+void copy_user_pages(uint64_t src_pml4_phys, uint64_t dst_pml4_phys)
+{
+    auto *src = physical_to_virtual(src_pml4_phys);
+
+    if(!(src[0] & PageFlag::Present))
+    {
+        return; // PML4エントリが存在しない場合はコピーできない
+    }
+
+    auto src_pdpt = physical_to_virtual(entry_to_phys(src[0]));
+
+
+    for(int i=0;i<512;i++){
+        if(!(src_pdpt[i] & PageFlag::Present)){
+            continue; // PDPTエントリが存在しない場合はコピーできない
+        }
+        auto* src_pd = physical_to_virtual(entry_to_phys(src_pdpt[i]));
+
+        for(int j=0;j<512;j++){
+            if(!(src_pd[j] & PageFlag::Present)){
+                continue; // PDエントリが存在しない場合はコピーできない
+            }
+            auto* src_pt = physical_to_virtual(entry_to_phys(src_pd[j]));
+
+            for(int k=0;k<512;k++){
+            
+                uint64_t e=src_pt[k];
+                if(!(e & PageFlag::Present)){
+                    continue; // PTエントリが存在しない場合はコピーできない
+                }
+                if(!(e & PageFlag::User)){
+                    continue; // Userページでない場合はコピーしない
+                }
+
+                auto shift = [](uint64_t e, int shift) -> uint64_t {
+                    return e<<shift;
+                };
+
+                uint64_t virtual_address = shift(i, 30) | shift(j, 21) | shift(k, 12); // PDPTのインデックスを仮想アドレスに変換
+                
+                uint64_t new_phys = vmm_ptr->allocate_page(); // 新しい物理ページを割り当てる
+                if(new_phys == 0){
+                    return; // メモリ不足
+                }
+
+                auto *dist_page = physical_to_virtual(new_phys);
+                auto *src_page = physical_to_virtual(entry_to_phys(e));
+                for(int l=0;l<512;l++){
+                    dist_page[l] = src_page[l]; // ページの内容をコピー
+                }
+
+                //子供のPML4に同じ仮想アドレスでマップ
+                uint64_t flags = e & 0xFFF;
+                map_page_in(dst_pml4_phys, virtual_address, new_phys, flags);
+            }
+        }
+    }
+
+    for(int i=0;i<512;i++){
+        uint64_t e=src_pdpt[i];
+        if(!(e & PageFlag::Present)){
+            continue; // PDPTエントリが存在しない場合はコピーできない
+        }
+        if(!(e & PageFlag::User)){
+            continue; // Userページでない場合はコピーしない
+        }
+
+        auto shift = [](uint64_t e, int shift) -> uint64_t {
+            return e<<shift;
+        };
+
+        uint64_t virtual_address = shift(i, 30) | shift(j, 21) | shift(k, 12); // PDPTのインデックスを仮想アドレスに変換
+    }
+}
+
+
 
 } // namespace vmm

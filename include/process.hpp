@@ -43,6 +43,8 @@ struct Process
                          // C++の標準ライブラリは使えないので、std::string は使えない
     uint64_t pml4;       // プロセスのページテーブルの物理アドレス
     void *sleep_channel; // プロセスが sleep している場合のチャネル (待機理由) 0=起きている
+    Process *parent;       // 親プロセスへのポインタ (fork などで使う)
+    int exit_status;       // プロセスの終了ステータス (exit() で設定される)
 };
 
 namespace process
@@ -67,5 +69,18 @@ void sleep(void *channel);
 
 // channelを理由にしてSleeping状態のプロセスをReady状態にする
 void wakeup(void *channel);
+
+
+// terminate the current process and set its exit status. This function does not return.
+[[noreturn]] void exit(int status);
+
+// wait for child process to exit. 
+// If a child process has exited, return its pid and write its exit status to *exit_code_out.
+// If there are no child processes, return -1.
+int wait(int *exit_code_out); // 子プロセスの終了を待つ。終了した子プロセスの exit_status を status に書き込む
+
+// fork the current process. Return the pid of the child process to the parent, and 0 to the child.
+// If fork fails, return -1.
+int fork();
 
 } // namespace process
