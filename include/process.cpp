@@ -256,7 +256,7 @@ static void schedule_from_zombie(ProcessContext **discard_context)
         wakeup(p->parent);
     }
     //二度と戻らないので、スケジューラに制御を渡す
-    static ProcessContext discard_context;
+    static ProcessContext *discard_context;
     schedule_from_zombie(&discard_context);
 
     // unreachable, but just in case, halt the CPU to avoid unexpected behavior. The process will be in Zombie state,

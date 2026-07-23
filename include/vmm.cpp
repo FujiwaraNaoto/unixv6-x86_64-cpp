@@ -33,6 +33,7 @@ uint64_t *physical_to_virtual(uint64_t phys)
 }
 
 extern "C" void load_cr3(uint64_t value);
+extern "C" uint64_t read_cr3();
 extern "C" void asm_flush_tlb();
 
 } // namespace
@@ -43,7 +44,8 @@ namespace vmm
 VirtualMemoryManager::VirtualMemoryManager(pmm::PhysicalMemoryManager *pmm_ptr)
 {
     this->pmm_ptr_ = pmm_ptr;
-    asm volatile("mov %%cr3, %0" : "=r"(pml4_phys_));
+    pml4_phys_ = read_cr3(); // CR3の値を読み込む
+
 }
 
 bool VirtualMemoryManager::map_page(uint64_t virtual_address, uint64_t physical_address, uint64_t flags)
@@ -272,14 +274,15 @@ void copy_user_pages(uint64_t src_pml4_phys, uint64_t dst_pml4_phys)
                 uint64_t virtual_address = shift(i, 30) | shift(j, 21) |
                                            shift(k, 12); // PDPTのインデックスを仮想アドレスに変換
 
-                uint64_t new_phys = vmm_ptr->allocate_page(); // 新しい物理ページを割り当てる
-                if (new_phys == 0)
+                uint64_t new_phys = pmm::pmm_ptr->allocate(); // 新しい物理ページを割り当てて内容をコピーする
+                if (not new_phys)
                 {
                     return; // メモリ不足
                 }
 
                 auto *dist_page = physical_to_virtual(new_phys);
                 auto *src_page  = physical_to_virtual(entry_to_phys(e));
+
                 for (int l = 0; l < 512; l++)
                 {
                     dist_page[l] = src_page[l]; // ページの内容をコピー
@@ -287,27 +290,11 @@ void copy_user_pages(uint64_t src_pml4_phys, uint64_t dst_pml4_phys)
 
                 //子供のPML4に同じ仮想アドレスでマップ
                 uint64_t flags = e & 0xFFF;
-                map_page_in(dst_pml4_phys, virtual_address, new_phys, flags);
+                vmm::vmm_ptr->map_page_in(dst_pml4_phys, virtual_address, new_phys, flags);
             }
         }
     }
 
-    for (int i = 0; i < 512; i++)
-    {
-        uint64_t e = src_pdpt[i];
-        if (!(e & PageFlag::Present))
-        {
-            continue; // PDPTエントリが存在しない場合はコピーできない
-        }
-        if (!(e & PageFlag::User))
-        {
-            continue; // Userページでない場合はコピーしない
-        }
-
-        auto shift = [](uint64_t e, int shift) -> uint64_t { return e << shift; };
-
-        uint64_t virtual_address = shift(i, 30) | shift(j, 21) | shift(k, 12); // PDPTのインデックスを仮想アドレスに変換
-    }
 }
 
 

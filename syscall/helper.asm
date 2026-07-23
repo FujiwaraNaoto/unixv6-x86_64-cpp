@@ -6,6 +6,8 @@ GLOBAL wrmsr
 
 GLOBAL load_cr3
 
+GLOBAL read_cr3
+
 GLOBAL asm_flush_tlb
 
 ; uint64_t rdmsr(uint32_t msr)
@@ -33,6 +35,10 @@ wrmsr:
 ; RDI = value
 load_cr3:
     mov cr3, rdi
+    ret
+; uint64_t read_cr3()
+read_cr3:
+    mov rax, cr3
     ret
 
 ; void asm_flush_tlb()

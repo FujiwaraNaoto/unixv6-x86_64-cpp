@@ -11,8 +11,6 @@
 ;   RDI, RSI, RDX, R10, R8, R9 = 引数
 ;   戻り値は RAX
 ;
-; 注意: フェーズ6では リング0→0 のテストに限定するため
-;       swapgs とユーザースタック切り替えは省略 (フェーズ7で追加)
 
 BITS 64
 section .text
@@ -52,6 +50,9 @@ syscall_entry:
     call syscall_dispatch
     ; 戻り値は RAX に入っている (そのまま使う)
 
+; fork した子はここに着地する (RAX=0 を設定済みで来る)
+GLOBAL syscall_return_path
+syscall_return_path:
     ; レジスタ復元
     pop r9
     pop r8
