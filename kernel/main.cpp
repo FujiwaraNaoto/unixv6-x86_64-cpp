@@ -146,6 +146,35 @@ static void waker_thread()
     process::wakeup(&sleep_channel);
 }
 
+// fork/exit/wait デモ用スレッド
+static void parent_thread() {
+    vga::vga->set_color(Color::LightCyan, Color::Black);
+    vga::vga->printf("[FORK] parent: calling fork()\n");
+    vga::vga->set_color(Color::LightGrey, Color::Black);
+
+    int pid = process::fork();
+    if (pid == 0) {
+        // 子
+        vga::vga->set_color(Color::LightGreen, Color::Black);
+        vga::vga->printf("[FORK] child: I am the child, exiting with 42\n");
+        vga::vga->set_color(Color::LightGrey, Color::Black);
+        process::exit(42);
+    } else {
+        // 親
+        vga::vga->set_color(Color::Yellow, Color::Black);
+        vga::vga->printf("[FORK] parent: forked child pid=%u, waiting...\n",
+                   (unsigned)pid);
+        vga::vga->set_color(Color::LightGrey, Color::Black);
+
+        int code;
+        int wpid = process::wait(&code);
+        vga::vga->set_color(Color::Yellow, Color::Black);
+        vga::vga->printf("[FORK] parent: child %u exited with code %u\n",
+                   (unsigned)wpid, (unsigned)code);
+        vga::vga->set_color(Color::LightGrey, Color::Black);
+    }
+}
+
 extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]] uint32_t mb_addr)
 {
     // 他のどのグローバル変数を使う前に、コンストラクタを実行する。
@@ -340,16 +369,17 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]]
 
     // }
 
-    // ─── Phase 7 セット3(前半): sleep/wakeup テスト ───
-    process::create_process(sleeper_thread, "sleeper");
-    process::create_process(waker_thread, "waker");
-    process::yield();
+    // // ─── Phase 7 セット3(前半): sleep/wakeup テスト ───
+    // process::create_process(sleeper_thread, "sleeper");
+    // process::create_process(waker_thread, "waker");
+    // process::yield();
 
-    vga::vga->set_color(Color::LightGreen, Color::Black);
-    vga::vga->puts("[SLEEP] ");
-    vga::vga->set_color(Color::LightGrey, Color::Black);
-    vga::vga->printf("result: sleeper %s\n", sleeper_woke ? "WOKE-OK" : "STILL-SLEEPING-FAIL");
+    // vga::vga->set_color(Color::LightGreen, Color::Black);
+    // vga::vga->puts("[SLEEP] ");
+    // vga::vga->set_color(Color::LightGrey, Color::Black);
+    // vga::vga->printf("result: sleeper %s\n", sleeper_woke ? "WOKE-OK" : "STILL-SLEEPING-FAIL");
 
+    parent_thread(); // fork/exit/wait デモ
 
     while (1)
     {
