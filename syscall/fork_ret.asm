@@ -29,14 +29,3 @@ fork_capture:
     mov     [rdi+48], rax   ; rip = 復帰ポイント
     lea     rax, [rsp+8]    ; 戻り値 = 呼び出し元(fork)の rsp
     ret
-
-; ─────────────────────────────────────────────────────────────────────────
-; 旧【A】実装(ユーザープロセスからの syscall fork を前提に sysret で戻る版)。
-; いまのデモはカーネルスレッド fork(案B)なので未使用だが、将来用に残す。
-; 詳細は fork.md 参照。
-; ─────────────────────────────────────────────────────────────────────────
-global fork_child_return
-extern syscall_return_path
-fork_child_return:
-    xor rax, rax
-    jmp syscall_return_path

@@ -10,9 +10,7 @@ namespace
 {
 
 
-extern "C" void fork_child_return(); // 【A】用(現在未使用)。fork.md 参照
-
-// 案B: 呼び出し時点の callee-saved と戻りアドレスを switch_context 形式で out に
+// 呼び出し時点の callee-saved と戻りアドレスを switch_context 形式で out に
 // 保存し、呼び出し元(fork)の rsp を返す setjmp 風ヘルパ (syscall/fork_ret.asm)。
 extern "C" uint64_t fork_capture(ProcessContext *out);
 
