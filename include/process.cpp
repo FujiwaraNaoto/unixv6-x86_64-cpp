@@ -324,6 +324,10 @@ int wait(int *exit_code_out)
 int fork()
 {
     Process *parent = current_proc_;
+    if(!parent)
+    {
+        return -1; // カーネル初期文脈では fork しない
+    }
     Process *child  = nullptr;
     for (size_t i = 0; i < process_table_.size(); ++i)
     {

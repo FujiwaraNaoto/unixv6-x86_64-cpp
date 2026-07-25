@@ -379,7 +379,8 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]]
     // vga::vga->set_color(Color::LightGrey, Color::Black);
     // vga::vga->printf("result: sleeper %s\n", sleeper_woke ? "WOKE-OK" : "STILL-SLEEPING-FAIL");
 
-    parent_thread(); // fork/exit/wait デモ
+    process::create_process(parent_thread, "parent");
+    process::yield();
 
     while (1)
     {
