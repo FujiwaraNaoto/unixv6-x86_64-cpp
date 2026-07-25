@@ -1,15 +1,42 @@
 
 BITS 64
 section .text
+
+; ─────────────────────────────────────────────────────────────────────────
+; extern "C" uint64_t fork_capture(ProcessContext* out);
+;   rdi = out  (7 qword バッファ。switch_context が pop する並びで書き込む)
+;
+; setjmp 風のヘルパ。呼び出し時点の callee-saved レジスタと「呼び出し元へ戻る
+; アドレス(= fork() 内の復帰ポイント)」を out に保存し、呼び出し元(fork)の rsp を返す。
+;
+; 後で scheduler が switch_context(&child->context) でこのバッファをロードして
+; ret すると、子は「fork_capture を呼んだ直後」から復帰する。復帰時には
+; callee-saved が親と同じ値に復元され、rsp も子スタック上のミラー位置になるので、
+; そのまま fork() の続きを実行できる(= リング0のカーネルスレッドとして続行)。
+;
+; メモリ配置(boot/switch.asm の restore と一致させる):
+;   [out+0]=rbp [out+8]=rbx [out+16]=r12 [out+24]=r13 [out+32]=r14 [out+40]=r15 [out+48]=rip
+; ─────────────────────────────────────────────────────────────────────────
+global fork_capture
+fork_capture:
+    mov     rax, [rsp]      ; rax = 戻りアドレス(fork() 内の復帰ポイント)
+    mov     [rdi+0],  rbp
+    mov     [rdi+8],  rbx
+    mov     [rdi+16], r12
+    mov     [rdi+24], r13
+    mov     [rdi+32], r14
+    mov     [rdi+40], r15
+    mov     [rdi+48], rax   ; rip = 復帰ポイント
+    lea     rax, [rsp+8]    ; 戻り値 = 呼び出し元(fork)の rsp
+    ret
+
+; ─────────────────────────────────────────────────────────────────────────
+; 旧【A】実装(ユーザープロセスからの syscall fork を前提に sysret で戻る版)。
+; いまのデモはカーネルスレッド fork(案B)なので未使用だが、将来用に残す。
+; 詳細は fork.md 参照。
+; ─────────────────────────────────────────────────────────────────────────
 global fork_child_return
-extern fork_child_setup
 extern syscall_return_path
 fork_child_return:
-    ; 子のカーネルスタックは親のコピー。
-    ; syscallフレームが積まれた状態なので、RAX=0 にして
-    ; syscall_entry の復帰処理と同じ手順でユーザーへ戻る。
-    xor rax,rax ; fork() の戻り値は 0
-    ; 以降は syscall_entry のレジスタ復元 + sysret と同じ
-    ; (実装は fork_child_setup で調整するか、
-    ;  syscall_entry の復帰部分を共有する)
-    jmp syscall_return_path ; syscall_return へジャンプ
+    xor rax, rax
+    jmp syscall_return_path

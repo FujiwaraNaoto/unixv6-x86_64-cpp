@@ -10,7 +10,11 @@ namespace
 {
 
 
-extern "C" void fork_child_return();
+extern "C" void fork_child_return(); // 【A】用(現在未使用)。fork.md 参照
+
+// 案B: 呼び出し時点の callee-saved と戻りアドレスを switch_context 形式で out に
+// 保存し、呼び出し元(fork)の rsp を返す setjmp 風ヘルパ (syscall/fork_ret.asm)。
+extern "C" uint64_t fork_capture(ProcessContext *out);
 
 } // namespace
 
@@ -377,11 +381,31 @@ int fork()
         child_stack[i] = reinterpret_cast<uint8_t *>(parent->kernel_stack)[i];
     }
 
-    // set the child's context to be identical to the parent's context
-    uint64_t offset = reinterpret_cast<uint64_t>(child_stack) - parent->kernel_stack;
-    child->context  = reinterpret_cast<ProcessContext *>(reinterpret_cast<uint64_t>(parent->context) + offset);
+    // ── 案B: カーネルスレッド fork ─────────────────────────────────────
+    // 子は sysret を使わず、リング0のまま「fork_capture を呼んだ直後」から復帰し、
+    // current_proc_ で親子を判定して 0 を返す。あとは fork の通常エピローグが
+    // コピー済みスタック上で parent_thread へ ret する。詳細は fork.md 【B】。
+    //
+    // fork_capture は現在の callee-saved と復帰ポイント(=直後の★)を switch_context
+    // 形式で snap に保存し、呼び出し元(この fork)の rsp を返す。
+    ProcessContext snap;
+    uint64_t caller_rsp = fork_capture(&snap);
 
-    child->context->rip = reinterpret_cast<uint64_t>(fork_child_return);
+    // ★復帰ポイント: 親(current_proc_==parent)はここを素通り。
+    //   子は後で switch_context 経由でここへ復帰し、current_proc_==child となる。
+    if (current_proc_ == child)
+    {
+        return 0; // 子: fork() は 0 を返す
+    }
+
+    // ── 以降は親のみ実行 ──
+    // 子スタック上に context ブロックを配置する。switch_context は
+    //   rsp=context → pop 6本 → ret で ★へ着地し、着地後 rsp=context+56。
+    // これを「親の fork の rsp をミラーした位置(caller_rsp+offset)」に一致させたいので、
+    //   child->context = caller_rsp + offset - 56 に置き、snap を書き込む。
+    uint64_t offset = reinterpret_cast<uint64_t>(child_stack) - parent->kernel_stack;
+    child->context  = reinterpret_cast<ProcessContext *>(caller_rsp + offset - sizeof(ProcessContext));
+    *child->context = snap;
 
     child->state = ProcessState::Ready;
     return child->pid; // return the child's pid to the parent process
