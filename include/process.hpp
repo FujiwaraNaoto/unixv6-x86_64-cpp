@@ -19,7 +19,7 @@ enum class ProcessState
 {
     Unused,
     Embryo,
-    Ready,
+    Runnable,
     Running,
     Sleeping,
     Zombie,

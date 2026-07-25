@@ -61,7 +61,7 @@ static void schedule(Process *prev_proc)
     for (size_t off = 1; off <= process_table_.size(); ++off)
     {
         int idx = (start + off) % process_table_.size();
-        if (process_table_[idx].state != ProcessState::Ready)
+        if (process_table_[idx].state != ProcessState::Runnable)
             continue;
 
 
@@ -84,7 +84,7 @@ static void schedule(Process *prev_proc)
         gdt::set_kernel_stack(current_proc_->kernel_stack + KERNEL_STACK_SIZE);
 
         // prev がプロセスならそのコンテキストへ、kernel_main (スケジューラ) からの
-        // 呼び出しなら scheduler_context_ へ保存する。後者は Ready が尽きたときの
+        // 呼び出しなら scheduler_context_ へ保存する。後者は Runnable が尽きたときの
         // 復帰先になる
         ProcessContext **old_ctx = prev_proc ? &prev_proc->context
                                              : reinterpret_cast<ProcessContext **>(&scheduler_context_);
@@ -156,18 +156,18 @@ Process *create_process(EntryPoint entry, const char *name)
     proc->context->rip  = reinterpret_cast<uint64_t>(trampoline);
     proc->sleep_channel = nullptr; // 初期状態では起きている
 
-    proc->state = ProcessState::Ready; // 構築完了。これでスケジューラが拾えるようになる
+    proc->state = ProcessState::Runnable; // 構築完了。これでスケジューラが拾えるようになる
     vga::vga->printf("[PROCESS] Created process %s (pid=%u)\n", proc->name.c_str(), static_cast<unsigned>(proc->pid));
     return proc;
 }
 
-// Switch to the next process in the “Ready” state using round-robin scheduling
+// Switch to the next process in the “Runnable” state using round-robin scheduling
 void yield()
 {
     Process *prev_proc = current_proc_;
     if (prev_proc && prev_proc->state == ProcessState::Running)
     {
-        prev_proc->state = ProcessState::Ready; // Running -> Ready
+        prev_proc->state = ProcessState::Runnable; // Running -> Runnable
     }
     schedule(prev_proc);
 }
@@ -176,7 +176,7 @@ void yield()
 // ─── sleep ────────────────────────────────────────────────────────
 //
 // 現プロセスを chan を理由に Sleeping にして、別プロセスへ切り替える。
-// wakeup(chan) で Ready に戻され、再スケジュールされると
+// wakeup(chan) で Runnable に戻され、再スケジュールされると
 // swtch がこの続きに戻ってくる (= sleep から return する)。
 //
 void sleep(void *chan)
@@ -199,7 +199,7 @@ void sleep(void *chan)
 
 // ─── wakeup ───────────────────────────────────────────────────────
 //
-// chan を理由に Sleeping な全プロセスを Ready に戻す。
+// chan を理由に Sleeping な全プロセスを Runnable に戻す。
 // 実際に走り出すのは次のスケジュールのタイミング。
 //
 void wakeup(void *chan)
@@ -208,7 +208,7 @@ void wakeup(void *chan)
     {
         if (process_table_[i].state == ProcessState::Sleeping && process_table_[i].sleep_channel == chan)
         {
-            process_table_[i].state = ProcessState::Ready;
+            process_table_[i].state = ProcessState::Runnable;
         }
     }
 }
@@ -221,7 +221,7 @@ static void schedule_from_zombie(ProcessContext **discard_context)
     for (size_t off = 1; off <= process_table_.size(); ++off)
     {
         int idx = (start + off) % process_table_.size();
-        if (process_table_[idx].state != ProcessState::Ready)
+        if (process_table_[idx].state != ProcessState::Runnable)
             continue;
 
         current_proc_        = &process_table_[idx];
@@ -235,7 +235,7 @@ static void schedule_from_zombie(ProcessContext **discard_context)
         return;
     }
 
-    // Ready なプロセスがない場合は、カーネル初期文脈に戻す
+    // Runnable なプロセスがない場合は、カーネル初期文脈に戻す
     current_proc_ = nullptr;
     switch_context(discard_context, scheduler_context_);
 }
@@ -405,7 +405,7 @@ int fork()
     child->context  = reinterpret_cast<ProcessContext *>(caller_rsp + offset - sizeof(ProcessContext));
     *child->context = snap;
 
-    child->state = ProcessState::Ready;
+    child->state = ProcessState::Runnable;
     return child->pid; // return the child's pid to the parent process
 }
 
