@@ -30,7 +30,7 @@ syscall_entry:
     push r8
     push r9
 
-    ; System V ABI呼び出し規約に並べ替える
+    ; System V ABI呼び出し規約に並べ替える. syscall_dispatch()は普通のC関数であるためSystem V ABIに従う必要がある
     ; syscall_dispatch(num, a1, a2, a3, a4, a5)
     ;   第1引数 RDI <- RAX (番号)
     ;   第2引数 RSI <- RDI (a1)
