@@ -44,8 +44,7 @@ namespace vmm
 VirtualMemoryManager::VirtualMemoryManager(pmm::PhysicalMemoryManager *pmm_ptr)
 {
     this->pmm_ptr_ = pmm_ptr;
-    pml4_phys_ = read_cr3(); // CR3の値を読み込む
-
+    pml4_phys_     = read_cr3(); // CR3の値を読み込む
 }
 
 bool VirtualMemoryManager::map_page(uint64_t virtual_address, uint64_t physical_address, uint64_t flags)
@@ -294,7 +293,6 @@ void copy_user_pages(uint64_t src_pml4_phys, uint64_t dst_pml4_phys)
             }
         }
     }
-
 }
 
 
