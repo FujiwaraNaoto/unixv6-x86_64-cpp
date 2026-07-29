@@ -5,6 +5,11 @@
 
 namespace
 {
+extern "C" void LoadTR(uint16_t sel); // Load Task Register with the given selector
+}
+
+namespace
+{
 static std::array<gdt::GlobalDescriptorTableEntry, 7> gdt_entries;
 static gdt::TaskStateSegment tss;
 static gdt::GlobalDescriptorTablePointer gdt_ptr;
@@ -86,7 +91,7 @@ void initialize_gdt()
 
 
     // TSS を Task Register にロード
-    asm volatile("ltr %0" : : "r"((uint16_t)gdt::SegmentSelector::kTSS));
+    LoadTR(gdt::SegmentSelector::kTSS);
 
     vga::vga->set_color(Color::LightGreen, Color::Black);
     vga::vga->puts("[GDT]  ");

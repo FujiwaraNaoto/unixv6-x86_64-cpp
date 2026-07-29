@@ -26,12 +26,12 @@ CFLAGS   = -m64 -std=c++20 -g \
 LDFLAGS  = -T kernel.ld -nostdlib -z max-page-size=0x1000
 NASMFLAGS = -f elf64
 
-ASM_SRC  = boot/boot.asm io/io.asm interrupt/isr.asm boot/switch.asm syscall/syscall_entry.asm syscall/helper.asm user/usermode_entry.asm syscall/fork_ret.asm
+ASM_SRC  = boot/boot.asm io/io.asm interrupt/isr.asm interrupt/helper.asm boot/switch.asm syscall/syscall_entry.asm syscall/helper.asm user/usermode_entry.asm syscall/fork_ret.asm
 CPP_SRC  = kernel/main.cpp \
            $(wildcard include/*.cpp)
 
 OBJ_DIR  = build
-ASM_OBJ  = $(addprefix $(OBJ_DIR)/, $(notdir $(ASM_SRC:.asm=.o)))
+ASM_OBJ  = $(ASM_SRC:%.asm=$(OBJ_DIR)/%.o)
 CPP_OBJ  = $(CPP_SRC:%.cpp=$(OBJ_DIR)/%.o)
 OBJS     = $(ASM_OBJ) $(CPP_OBJ)
 
@@ -65,10 +65,9 @@ run-gui: $(ISO)
 run-gdb: $(ISO)
 	$(QEMU) $(QEMU_GDB_FLAGS)
 
-# asm ソースは複数ディレクトリに散らばるが build/ 直下にベース名で出力する。
-# vpath で探索パスを教えてパターンルール1本にまとめる。
-vpath %.asm $(sort $(dir $(ASM_SRC)))
-
+# asm/cpp とも build/ 以下にソースのディレクトリ構造をそのまま掘って出力する。
+# (ベース名だけにすると interrupt/helper.asm と syscall/helper.asm のように
+#  別ディレクトリの同名ファイルが同じ .o に潰れてシンボルが消える)
 $(OBJ_DIR)/%.o: %.asm
 	@mkdir -p $(@D)
 	$(NASM) $(NASMFLAGS) -o $@ $<

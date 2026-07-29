@@ -51,7 +51,6 @@ struct [[gnu::packed]] TaskStateSegment
     uint16_t io_map_base_address;
 };
 
-
 void initialize_gdt();
 void set_kernel_stack(uint64_t rsp0); // Update TSS's RSP0 field to the given value, which is used when switching from
                                       // user mode to kernel mode.
