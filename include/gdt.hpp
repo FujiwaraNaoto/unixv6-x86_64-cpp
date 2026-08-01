@@ -5,11 +5,11 @@ namespace gdt
 {
 namespace SegmentSelector
 {
-constexpr uint16_t kKernelCode = 0x08;
-constexpr uint16_t kKernelData = 0x10;
-constexpr uint16_t kUserData   = 0x18 | 0x03; // 0x1B(RPL=3)
-constexpr uint16_t kUserCode   = 0x20 | 0x03; // 0x23(RPL=3)
-constexpr uint16_t kTSS        = 0x28;        // 0x28(RPL=0)
+constexpr uint16_t kKernelCode = 1<<3; // 0x08
+constexpr uint16_t kKernelData = 2<<3; // 0x10
+constexpr uint16_t kUserData   = 3<<3 | 0x03; // 0x1B(RPL=3)
+constexpr uint16_t kUserCode   = 4<<3 | 0x03; // 0x23(RPL=3)
+constexpr uint16_t kTSS        = 5<<3; // 0x28(RPL=0)
 } // namespace SegmentSelector
 
 struct [[gnu::packed]] GlobalDescriptorTableEntry
