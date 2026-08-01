@@ -6,6 +6,8 @@
 namespace
 {
 extern "C" void LoadTR(uint16_t sel); // Load Task Register with the given selector
+// GDTR を差し替え、ds/es/ss/fs/gs と cs を新しい GDT の内容で再ロードする (gdt_helper.asm)
+extern "C" void LoadGDT(const gdt::GlobalDescriptorTablePointer *ptr);
 }
 
 namespace
@@ -51,7 +53,7 @@ void initialize_gdt()
     set_entry(0, 0x00, 0x00); // Null descriptor
     set_entry(1, 0x9A, 0x20); // Kernel code segment P,S,E,RW+L=1
     set_entry(2, 0x92, 0x00); // Kernel data segment P,S,E,RW+L=0
-    // セレクタ番号と一致させる: 0x1B(index3)=User Data, 0x23(index4)=User Code
+    // セレクタ番号と一致させる: 0x1B(0x1B>>3=index3)=User Data, 0x23(0x23>>3=index4)=User Code
     set_entry(3, 0xF2, 0x00); // User data segment P,S,E,RW+L=0
     set_entry(4, 0xFA, 0x20); // User code segment P,S,E,RW+L=1
 
@@ -65,29 +67,8 @@ void initialize_gdt()
     gdt_ptr.limit = sizeof(GlobalDescriptorTableEntry) * gdt_entries.size() - 1;
     gdt_ptr.base  = reinterpret_cast<uint64_t>(&gdt_entries[0]);
 
-    asm volatile("lgdt %0" : : "m"(gdt_ptr));
-
-
-    // セグメントレジスタを再ロード
-    asm volatile("mov $0x10, %%ax\n"
-                 "mov %%ax, %%ds\n"
-                 "mov %%ax, %%es\n"
-                 "mov %%ax, %%ss\n"
-                 "mov %%ax, %%fs\n"
-                 "mov %%ax, %%gs\n"
-                 :
-                 :
-                 : "ax");
-
-    // CS は far return で再ロード
-    asm volatile("pushq $0x08\n"
-                 "leaq 1f(%%rip), %%rax\n"
-                 "pushq %%rax\n"
-                 "lretq\n"
-                 "1:\n"
-                 :
-                 :
-                 : "rax", "memory");
+    // GDTR の差し替えと、ds/es/ss/fs/gs・cs の再ロード
+    LoadGDT(&gdt_ptr);
 
 
     // TSS を Task Register にロード
