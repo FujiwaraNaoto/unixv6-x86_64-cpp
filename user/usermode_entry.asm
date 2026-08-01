@@ -4,6 +4,8 @@
 ;   rdi = entry      (ユーザープログラムのRIP)
 ;   rsi = user_stack (ユーザースタックの先頭)
 
+%include "gdt_selectors.inc"
+
 BITS 64
 section .text
 GLOBAL enter_usermode
@@ -17,7 +19,8 @@ GLOBAL enter_usermode
 ;        0x1B = 0b00011011 : ユーザーData セグメント (index=3(=0x1B>>3), DPL=3, L=0)
 ;        0x23 = 0b00100011 : ユーザーCode セグメント (index=4(=0x23>>3), DPL=3, L=1)
 ;      Data が先・Code が後という並びは syscall/sysret が要求する GDT 順序に
-;      合わせたもの。GDT がこの順でなければここのセレクタ値も変更が必要。
+;      合わせたもの。GDT がこの順でなければセレクタ値の変更が必要
+;      (値は gdt_selectors.inc の SEL_UserData / SEL_UserCode で定義)。
 ;   2. TSS の RSP0 にカーネルスタックが設定済みであること
 ;      (gdt::set_kernel_stack)。リング3へ移った後の割り込み/例外で
 ;      カーネルスタックへ切り替えるために必要で、この関数自体は設定しない。
@@ -39,17 +42,17 @@ GLOBAL enter_usermode
 ; ---------------------------------------------------------------------------
 enter_usermode:
     ; データセグメントをユーザー用に切り替え
-    mov ax, 0x1B        ; ユーザーData (RPL=3)
+    mov ax, SEL_UserData    ; ユーザーData (RPL=3)
     mov ds, ax
     mov es, ax
     mov fs, ax
     mov gs, ax
 
     ; iretq が読むフレームをスタックに積む (逆順)
-    push 0x1B           ; SS  = ユーザーData (RPL=3)
+    push SEL_UserData   ; SS  = ユーザーData (RPL=3)
     push rsi            ; RSP = ユーザースタック
     push 0x202          ; RFLAGS (IF=1)
-    push 0x23           ; CS  = ユーザーCode (RPL=3)
+    push SEL_UserCode   ; CS  = ユーザーCode (RPL=3)
     push rdi            ; RIP = エントリ
 
     iretq               ; リング3へ降りる

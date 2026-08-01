@@ -21,10 +21,9 @@
 ;   1. rdi が有効な GlobalDescriptorTablePointer (limit:2byte + base:8byte, packed) を
 ;      指していること。指す先の GDT は関数から戻った後も生存し続けること
 ;      (CPU は例外/割り込みのたびにこのテーブルを引くので、スタック上の一時変数は不可)。
-;   2. その GDT が以下のセレクタ配置であること。ここのセレクタ値は決め打ちなので、
-;      並びを変えたらこのファイルも直す必要がある:
-;        0x08 : カーネルCode (index=1, DPL=0, L=1)
-;        0x10 : カーネルData (index=2, DPL=0)
+;   2. その GDT が以下のセレクタ配置であること (値は gdt_selectors.inc で定義):
+;        SEL_KernelCode = 0x08 : カーネルCode (index=1, DPL=0, L=1)
+;        SEL_KernelData = 0x10 : カーネルData (index=2, DPL=0)
 ;   3. 呼び出し時点で実行中のコードが、上記 0x08 と等価な (少なくとも矛盾しない)
 ;      コードセグメントで動いていること。boot.asm の暫定 GDT も index1=Code /
 ;      index2=Data で同じ並びなので、この条件は満たされている。
@@ -44,6 +43,8 @@
 ;   - 戻り先は呼び出し元の次の命令 (通常の関数と同じく戻る)。CPL は 0 のまま変わらない。
 ;   - 破壊するレジスタは rax のみ。rsp は呼び出し時の値に戻っている。
 
+%include "gdt_selectors.inc"
+
 BITS 64
 section .text
 GLOBAL LoadGDT
@@ -53,7 +54,7 @@ LoadGDT:
     ; データセグメントを再ロード (隠しレジスタを新GDTの内容で埋め直す)
     ; 注意: 64bitモードでは mov fs/gs が IA32_FS_BASE / IA32_GS_BASE MSR を
     ;       ゼロクリアする。将来 swapgs 用にベースを設定するなら、必ずこの後で行うこと。
-    mov ax, 0x10                ; カーネルData (index=2(0x10>>3 = 2), RPL=0)
+    mov ax, SEL_KernelData      ; カーネルData (index=2(0x10>>3 = 2), RPL=0)
     mov ds, ax
     mov es, ax
     mov ss, ax
@@ -63,7 +64,7 @@ LoadGDT:
     ; CS は mov で書けない (CS の変更は RIP の変更と同時でなければならず、
     ; far jmp/call/ret・iret・syscall/sysret でしか変えられない)。
     ; 64bitモードでは即値の far jmp が無効命令なので far return を使う。
-    push 0x08                   ; CS  = カーネルCode (index=1(0x08>>3 = 1), RPL=0)
+    push SEL_KernelCode         ; CS  = カーネルCode (index=1(0x08>>3 = 1), RPL=0)
     lea  rax, [rel .reload_cs]
     push rax                    ; RIP = 着地点
     o64  retf                   ; far return: RIP を pop -> CS を pop

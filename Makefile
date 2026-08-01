@@ -24,7 +24,7 @@ CFLAGS   = -m64 -std=c++20 -g \
            -Iinclude $(STD_INC)
 
 LDFLAGS  = -T kernel.ld -nostdlib -z max-page-size=0x1000
-NASMFLAGS = -f elf64
+NASMFLAGS = -f elf64 -Iinclude
 
 ASM_SRC  = boot/boot.asm io/io.asm interrupt/isr.asm interrupt/helper.asm boot/switch.asm syscall/syscall_entry.asm syscall/helper.asm user/usermode_entry.asm syscall/fork_ret.asm include/gdt_helper.asm
 CPP_SRC  = kernel/main.cpp \
@@ -71,6 +71,12 @@ run-gdb: $(ISO)
 $(OBJ_DIR)/%.o: %.asm
 	@mkdir -p $(@D)
 	$(NASM) $(NASMFLAGS) -o $@ $<
+
+# NASM の %include 依存は Make からは見えないので、明示的に依存を張っておく。
+# (これが無いと .inc を書き換えても再アセンブルされず、古いセレクタ値が残る)
+# 注意: この行は `all:` より後に置くこと。レシピの無いルールでも「最初のターゲット」に
+#       なりうるため、上の方に書くと make の既定ゴールが .o に奪われる。
+$(ASM_OBJ): include/gdt_selectors.inc
 
 $(OBJ_DIR)/%.o: %.cpp
 	@mkdir -p $(@D)
