@@ -10,6 +10,13 @@ constexpr uint16_t kKernelData = 2<<3; // 0x10
 constexpr uint16_t kUserData   = 3<<3 | 0x03; // 0x1B(RPL=3)
 constexpr uint16_t kUserCode   = 4<<3 | 0x03; // 0x23(RPL=3)
 constexpr uint16_t kTSS        = 5<<3; // 0x28(RPL=0)
+
+// セレクタから GDT のエントリ番号を取り出す (下位3bitは RPL と TI なので落とす)。
+// これを使って GDT を組めば、セレクタ定数とエントリ位置が食い違うことがなくなる。
+constexpr int index_of(uint16_t selector)
+{
+    return selector >> 3;
+}
 } // namespace SegmentSelector
 
 struct [[gnu::packed]] GlobalDescriptorTableEntry

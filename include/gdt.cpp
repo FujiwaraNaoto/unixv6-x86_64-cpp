@@ -50,12 +50,16 @@ namespace gdt
 
 void initialize_gdt()
 {
-    set_entry(0, 0x00, 0x00); // Null descriptor
-    set_entry(1, 0x9A, 0x20); // Kernel code segment P,S,E,RW+L=1
-    set_entry(2, 0x92, 0x00); // Kernel data segment P,S,E,RW+L=0
-    // セレクタ番号と一致させる: 0x1B(0x1B>>3=index3)=User Data, 0x23(0x23>>3=index4)=User Code
-    set_entry(3, 0xF2, 0x00); // User data segment P,S,E,RW+L=0
-    set_entry(4, 0xFA, 0x20); // User code segment P,S,E,RW+L=1
+    using namespace SegmentSelector;
+
+    // エントリ位置はセレクタ定数から導く。こうしておけば gdt.hpp のセレクタを変えたとき
+    // 「定数は変えたが GDT の並びは古いまま」というズレが起きない。
+    // User Data(index3) が User Code(index4) より先に来ているのは sysret が要求する順序。
+    set_entry(0, 0x00, 0x00);                        // Null descriptor
+    set_entry(index_of(kKernelCode), 0x9A, 0x20);    // Kernel code segment P,S,E,RW+L=1
+    set_entry(index_of(kKernelData), 0x92, 0x00);    // Kernel data segment P,S,E,RW+L=0
+    set_entry(index_of(kUserData), 0xF2, 0x00);      // User data segment P,S,E,RW+L=0
+    set_entry(index_of(kUserCode), 0xFA, 0x20);      // User code segment P,S,E,RW+L=1
 
 
     memset(&tss, 0, sizeof(TaskStateSegment));
@@ -63,7 +67,8 @@ void initialize_gdt()
     tss.rsp[0]              = 0;
     tss.io_map_base_address = sizeof(TaskStateSegment);
 
-    set_tss_entry(5, reinterpret_cast<uint64_t>(&tss), sizeof(TaskStateSegment) - 1);
+    // TSS ディスクリプタは 16 バイトなので、index_of(kTSS)=5 と 6 の 2 エントリ分を占める
+    set_tss_entry(index_of(kTSS), reinterpret_cast<uint64_t>(&tss), sizeof(TaskStateSegment) - 1);
     gdt_ptr.limit = sizeof(GlobalDescriptorTableEntry) * gdt_entries.size() - 1;
     gdt_ptr.base  = reinterpret_cast<uint64_t>(&gdt_entries[0]);
 
