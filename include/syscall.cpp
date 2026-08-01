@@ -90,7 +90,8 @@ void init()
     //
     //    CPU が「+8」「+16」で勝手に隣を拾う仕様なので、STAR に入れるのはセレクタそのもの
     //    ではなく「基準値」である点に注意。[63:48] の 0x10 はカーネルDataと同じ値になるが
-    //    偶然の一致で、意味は「ユーザーDataの1つ前」。GDT の並びが変わればここも変わる。
+    //    偶然の一致で、意味は「ユーザーDataの1つ前」。
+    // NOTE: kSysretBase の値は GDT のレイアウトから導出される従属値なので、GDT の順序を変更すればこの値も変わる
     constexpr uint64_t kSyscallBase = gdt::SegmentSelector::kKernelCode;                        // 0x08
     constexpr uint64_t kSysretBase  = (gdt::SegmentSelector::kUserData & ~0x03) - 0x08;         // 0x10
 
