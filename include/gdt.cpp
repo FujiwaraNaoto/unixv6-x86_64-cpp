@@ -8,7 +8,7 @@ namespace
 extern "C" void LoadTR(uint16_t sel); // Load Task Register with the given selector
 // GDTR を差し替え、ds/es/ss/fs/gs と cs を新しい GDT の内容で再ロードする (gdt_helper.asm)
 extern "C" void LoadGDT(const gdt::GlobalDescriptorTablePointer *ptr);
-}
+} // namespace
 
 namespace
 {
@@ -55,11 +55,11 @@ void initialize_gdt()
     // エントリ位置はセレクタ定数から導く。こうしておけば gdt.hpp のセレクタを変えたとき
     // 「定数は変えたが GDT の並びは古いまま」というズレが起きない。
     // User Data(index3) が User Code(index4) より先に来ているのは sysret が要求する順序。
-    set_entry(0, 0x00, 0x00);                        // Null descriptor
-    set_entry(index_of(kKernelCode), 0x9A, 0x20);    // Kernel code segment P,S,E,RW+L=1
-    set_entry(index_of(kKernelData), 0x92, 0x00);    // Kernel data segment P,S,E,RW+L=0
-    set_entry(index_of(kUserData), 0xF2, 0x00);      // User data segment P,S,E,RW+L=0
-    set_entry(index_of(kUserCode), 0xFA, 0x20);      // User code segment P,S,E,RW+L=1
+    set_entry(0, 0x00, 0x00);                     // Null descriptor
+    set_entry(index_of(kKernelCode), 0x9A, 0x20); // Kernel code segment P,S,E,RW+L=1
+    set_entry(index_of(kKernelData), 0x92, 0x00); // Kernel data segment P,S,E,RW+L=0
+    set_entry(index_of(kUserData), 0xF2, 0x00);   // User data segment P,S,E,RW+L=0
+    set_entry(index_of(kUserCode), 0xFA, 0x20);   // User code segment P,S,E,RW+L=1
 
 
     memset(&tss, 0, sizeof(TaskStateSegment));

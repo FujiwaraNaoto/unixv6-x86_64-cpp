@@ -52,7 +52,7 @@ InterruptDescriptorTable::InterruptDescriptorTable()
 
 void InterruptDescriptorTable::set_idt(uint8_t idx, InterruptDescriptorAttribute attribute, uint64_t handler)
 {
-    entries[idx].offset_low       = handler & 0xFFFF;
+    entries[idx].offset_low = handler & 0xFFFF;
     // 割り込みハンドラは常にリング0のコードセグメントで動く
     entries[idx].segment_selector = gdt::SegmentSelector::kKernelCode;
 

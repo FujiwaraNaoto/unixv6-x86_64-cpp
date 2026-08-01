@@ -92,20 +92,19 @@ void init()
     //    ではなく「基準値」である点に注意。[63:48] の 0x10 はカーネルDataと同じ値になるが
     //    偶然の一致で、意味は「ユーザーDataの1つ前」。
     // NOTE: kSysretBase の値は GDT のレイアウトから導出される従属値なので、GDT の順序を変更すればこの値も変わる
-    constexpr uint64_t kSyscallBase = gdt::SegmentSelector::kKernelCode;                        // 0x08
-    constexpr uint64_t kSysretBase  = (gdt::SegmentSelector::kUserData & ~0x03) - 0x08;         // 0x10
+    constexpr uint64_t kSyscallBase = gdt::SegmentSelector::kKernelCode;                // 0x08
+    constexpr uint64_t kSysretBase  = (gdt::SegmentSelector::kUserData & ~0x03) - 0x08; // 0x10
 
     // 上の +8/+16 が実際に gdt.hpp のセレクタに着地することを保証する
     // (GDT の並びを崩したらリンク前に落ちる)
     static_assert(kSyscallBase + 0x08 == gdt::SegmentSelector::kKernelData,
                   "syscall は SS=CS+8 を要求する: Kernel Data は Kernel Code の直後でなければならない");
-    static_assert(((kSysretBase + 0x08) | 0x03) == gdt::SegmentSelector::kUserData,
-                  "sysret は SS=base+8 を要求する");
+    static_assert(((kSysretBase + 0x08) | 0x03) == gdt::SegmentSelector::kUserData, "sysret は SS=base+8 を要求する");
     static_assert(((kSysretBase + 0x10) | 0x03) == gdt::SegmentSelector::kUserCode,
                   "sysret は CS=base+16 を要求する: User Code は User Data の直後でなければならない");
 
-    uint64_t star = (kSyscallBase << 32)    // カーネルセグメント
-                    | (kSysretBase << 48);  // ユーザーセグメント
+    uint64_t star = (kSyscallBase << 32)   // カーネルセグメント
+                    | (kSysretBase << 48); // ユーザーセグメント
     wrmsr(MSR::STAR, star);
 
     // 3. LSTAR: syscall 時のジャンプ先
