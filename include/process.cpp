@@ -254,7 +254,21 @@ static void schedule_from_zombie(ProcessContext **discard_context)
 
     if (p->parent)
     {
-        // 親プロセスが wait() している場合に備えて wakeup する -> なぜ?
+        // 親プロセスが wait() している場合に備えて wakeup する。
+        //
+        // wait() は回収できる Zombie の子がいないとき sleep(p) で寝る。この p は
+        // 「親自身の Process*」であり、ここでの p->parent と同じ値になる。つまり
+        // このチャネルの一致が wait() 側 sleep() との対応関係そのもので、これを
+        // 呼ばないと Sleeping な親は schedule() に永久にスキップされ、子も Zombie
+        // のまま回収されずカーネルスタックが漏れる。
+        //
+        // 子の側からは親が今 wait() で寝ているか分からないので、判定せず無条件に
+        // 呼ぶ。wakeup() は Sleeping かつチャネル一致のプロセスだけを対象にするため、
+        // 親が寝ていなければ何もしない。親がまだ wait() を呼んでいない場合も、後で
+        // 呼んだ時点で Zombie が走査で見つかり sleep() に到達しないので問題ない。
+        //
+        // 上の state = Zombie より後に呼ぶこと。逆順だと起こされた親が走査しても
+        // まだ Zombie でなく、再び寝てしまい今度は誰も起こさない。
         wakeup(p->parent);
     }
     //二度と戻らないので、スケジューラに制御を渡す
