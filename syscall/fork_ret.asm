@@ -19,7 +19,7 @@ section .text
 ; ─────────────────────────────────────────────────────────────────────────
 global fork_capture
 fork_capture:
-    mov     rax, [rsp]      ; rax = 戻りアドレス(fork() 内の復帰ポイント)
+    mov     rax, [rsp]      ; rax = 戻りアドレス(fork() 内の復帰ポイント). call直後なので[rsp]=戻りアドレス
     mov     [rdi+0],  rbp
     mov     [rdi+8],  rbx
     mov     [rdi+16], r12
@@ -27,5 +27,5 @@ fork_capture:
     mov     [rdi+32], r14
     mov     [rdi+40], r15
     mov     [rdi+48], rax   ; rip = 復帰ポイント
-    lea     rax, [rsp+8]    ; 戻り値 = 呼び出し元(fork)の rsp
+    lea     rax, [rsp+8]    ; 戻り値 = 呼び出し元(fork)の rsp. 戻りアドレス分(8byte)を飛ばしたアドレス=ret実行後に呼び出しもとfork()が持つことになるrspの値
     ret
