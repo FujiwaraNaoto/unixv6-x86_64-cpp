@@ -189,6 +189,15 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]]
     // print_banner();
     vga::vga->puts("Hello World\n");
 
+    uint64_t rip;
+    asm volatile("lea (%%rip), %0" : "=r"(rip));
+    vga::vga->set_color(Color::LightMagenta, Color::Black);
+    vga::vga->puts("[HIGH] ");
+    vga::vga->set_color(Color::LightGrey, Color::Black);
+    vga::vga->printf("running at RIP=0x%x (high-half if >0xFFFFFFFF80000000)\n",
+                     (unsigned)(rip >> 32)); // 上位32bitを表示
+
+
     pic::InitializePIC(0x20, 0x28); // IRQ0-7は0x20-0x27、IRQ8-15は0x28-0x2Fに割り当てる
 
     pic::InitializePIT(100); // タイマー割り込みを約100Hzで発生させる
