@@ -170,7 +170,7 @@ enable_long_mode:
 ; ─── 64-bit エントリ ──────────────────────────────────────────────
 BITS 64
 long_mode_entry:
-    ; データセグメント更新
+    ; まだ低位で実行中。データセグメントを設定
     mov ax, gdt64.data
     mov ds, ax
     mov es, ax
@@ -180,8 +180,26 @@ long_mode_entry:
 
     ; ─── 高位アドレスへジャンプ ───
     ; 高位の higher_half_entry のアドレスを取得して jmp
-    mov rax, higher_half_entry   ; リンカが高位アドレスを入れる
-    jmp rax                      ; ここで RIP が高位に移る
+    ; ここまでは物理 (低位) アドレスで実行中。RIP を高位に移す。
+    ;
+    ; なぜ rax を経由するのか:
+    ;   `jmp higher_half_entry` と直接書くと、x86-64 の直接 near jmp は
+    ;   rel8/rel32 (次命令からの相対距離) しか形式が無いため、
+    ;   NASM は「+N バイト先」という差分を焼き込む。この差分は
+    ;   long_mode_entry と higher_half_entry が同一 .text 内にある以上
+    ;   リンカが高位アドレスを割り当てても変わらないので、低位で実行中に
+    ;   踏むと 低位RIP + 差分 = 低位のまま となり高位へ移れない。
+    ;   (そもそも 0x100000 → 0xFFFFFFFF80100000 は rel32 の ±2GiB 外)
+    ;
+    ;   64-bit 絶対アドレスへ飛ぶには間接 jmp (FF /4) しか無く、
+    ;   その値は imm64 を取れる唯一の命令 mov r64, imm64 で用意する。
+    ;   この即値はオブジェクト中では 0 で空けられ、リンカが再配置
+    ;   (R_X86_64_64) により最終仮想アドレス 0xFFFFFFFF801010xx を書き込む。
+    ;
+    ; 前提: この瞬間は低位 identity map (命令フェッチ用) と高位マップ
+    ;       (ジャンプ先用) の両方が有効。setup_paging で両方張ってある。
+    mov rax, higher_half_entry   ; リンカが絶対アドレス(高位)を即値に埋める
+    jmp rax                      ; 間接 jmp: RIP ← rax で高位に移る
 
 
 ; ─── 以降は高位アドレスで実行 ───
