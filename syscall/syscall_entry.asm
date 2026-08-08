@@ -11,8 +11,6 @@
 ;   RDI, RSI, RDX, R10, R8, R9 = 引数
 ;   戻り値は RAX
 ;
-; 注意: フェーズ6では リング0→0 のテストに限定するため
-;       swapgs とユーザースタック切り替えは省略 (フェーズ7で追加)
 
 BITS 64
 section .text
@@ -32,7 +30,7 @@ syscall_entry:
     push r8
     push r9
 
-    ; System V ABI呼び出し規約に並べ替える
+    ; System V ABI呼び出し規約に並べ替える. syscall_dispatch()は普通のC関数であるためSystem V ABIに従う必要がある
     ; syscall_dispatch(num, a1, a2, a3, a4, a5)
     ;   第1引数 RDI <- RAX (番号)
     ;   第2引数 RSI <- RDI (a1)
@@ -52,6 +50,9 @@ syscall_entry:
     call syscall_dispatch
     ; 戻り値は RAX に入っている (そのまま使う)
 
+; fork した子はここに着地する (RAX=0 を設定済みで来る)
+GLOBAL syscall_return_path
+syscall_return_path:
     ; レジスタ復元
     pop r9
     pop r8
@@ -60,12 +61,7 @@ syscall_entry:
     pop rsi
     pop rdi
 
+    ; フェーズ7: リング3セグメントがGDTに揃ったので sysret が使える
     pop r11
     pop rcx
-
-    ; リング0→0 のため sysret は使えない (sysret は必ず CPL=3 へ戻り、
-    ; STAR[63:48]+8/+16 のユーザーセグメントを要求するが、GDT に無い)。
-    ; syscall が退避してくれた RCX(戻りRIP)/R11(RFLAGS) で手動復帰する。
-    push r11
-    popfq             ; R11由来のRFLAGS 復元 (FMASK で落とした IF もここで戻る)
-    jmp rcx           ; syscall の次の命令(戻りRIP)へ戻る
+    o64 sysret        ; RCX->RIP, R11->RFLAGS, リング3へ復帰

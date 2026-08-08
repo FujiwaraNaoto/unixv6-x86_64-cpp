@@ -11,6 +11,8 @@
 #include "multiboot2.hpp"
 #include "syscall.hpp"
 #include "keyboard.hpp"
+#include "gdt.hpp"
+#include "usermode.hpp"
 
 // CRT 相当: リンカが .init_array に並べたグローバルコンストラクタを
 // 先頭から末尾まで順に呼ぶ。境界シンボルは kernel.ld で定義している。
@@ -19,6 +21,32 @@ extern "C"
     using ctor_t = void (*)();
     extern ctor_t __init_array_start[];
     extern ctor_t __init_array_end[];
+}
+
+// リング3で実行されるユーザープログラム
+// (カーネル内に置くが、User許可ページにマップして実行する)
+[[gnu::section(".user")]] static void user_program()
+{
+    const char msg[] = "Hello from ring 3!\n";
+    asm volatile("mov $1, %%rax\n"  // write
+                 "mov $1, %%rdi\n"  // stdout
+                 "mov %0, %%rsi\n"  // buf
+                 "mov $19, %%rdx\n" // len
+                 "syscall\n"
+                 :
+                 : "r"(msg)
+                 : "rax", "rdi", "rsi", "rdx", "rcx", "r11", "memory");
+    asm volatile("mov $60, %%rax\n" // exit
+                 "xor %%rdi, %%rdi\n"
+                 "syscall\n"
+                 :
+                 :
+                 : "rax", "rdi");
+    // 念のため
+    while (1)
+    {
+        asm volatile("hlt");
+    }
 }
 
 static void call_global_constructors()
@@ -62,6 +90,92 @@ static void thread_B()
     }
 }
 
+
+// PML4分離テスト用スレッド
+// 同じ仮想アドレスに別の値を書いて確認する。
+// アドレスは PML4 スロット1 (512GiB〜) に置く。スロット0は
+// create_address_space() がカーネル空間 (identity map) として全プロセスで
+// 共有するため、スロット0内のアドレスではプロセスごとに分離できない。
+static constexpr uint64_t kAddrTestVirt = 0x8000000000; // PML4 index 1
+static volatile uint64_t test_result_a  = 0;
+static volatile uint64_t test_result_b  = 0;
+
+static void addrspace_thread_a()
+{
+    volatile uint64_t *p = reinterpret_cast<volatile uint64_t *>(kAddrTestVirt);
+    *p                   = 0xAAAA;
+    process::yield();   // Bに切り替わる
+    test_result_a = *p; // 戻ってきて自分の値を再確認
+}
+
+static void addrspace_thread_b()
+{
+    volatile uint64_t *p = reinterpret_cast<volatile uint64_t *>(kAddrTestVirt);
+    *p                   = 0xBBBB;
+    process::yield(); // Aに切り替わる
+    test_result_b = *p;
+}
+
+// sleep/wakeup デモ用の待機理由 (任意のポインタ値)
+static int sleep_channel;
+static volatile bool sleeper_woke = false;
+static void sleeper_thread()
+{
+    vga::vga->set_color(Color::LightCyan, Color::Black);
+    vga::vga->puts("[SLEEP] sleeper going to sleep...\n");
+    vga::vga->set_color(Color::LightGrey, Color::Black);
+
+    process::sleep(&sleep_channel); // ここで寝る
+
+    // 起こされたら再開
+    sleeper_woke = true;
+    vga::vga->set_color(Color::LightCyan, Color::Black);
+    vga::vga->puts("[SLEEP] sleeper woke up!\n");
+    vga::vga->set_color(Color::LightGrey, Color::Black);
+}
+
+static void waker_thread()
+{
+    // 少し他の処理を挟んでから起こす
+    for (int i = 0; i < 3; i++)
+        process::yield();
+
+    vga::vga->set_color(Color::LightMagenta, Color::Black);
+    vga::vga->puts("[WAKE]  waking sleeper...\n");
+    vga::vga->set_color(Color::LightGrey, Color::Black);
+    process::wakeup(&sleep_channel);
+}
+
+// fork/exit/wait デモ用スレッド
+static void parent_thread()
+{
+    vga::vga->set_color(Color::LightCyan, Color::Black);
+    vga::vga->printf("[FORK] parent: calling fork()\n");
+    vga::vga->set_color(Color::LightGrey, Color::Black);
+
+    int pid = process::fork();
+    if (pid == 0)
+    {
+        // 子
+        vga::vga->set_color(Color::LightGreen, Color::Black);
+        vga::vga->printf("[FORK] child: I am the child, exiting with 42\n");
+        vga::vga->set_color(Color::LightGrey, Color::Black);
+        process::exit(42);
+    }
+    else
+    {
+        // 親
+        vga::vga->set_color(Color::Yellow, Color::Black);
+        vga::vga->printf("[FORK] parent: forked child pid=%u, waiting...\n", (unsigned)pid);
+        vga::vga->set_color(Color::LightGrey, Color::Black);
+
+        int code;
+        int wpid = process::wait(&code);
+        vga::vga->set_color(Color::Yellow, Color::Black);
+        vga::vga->printf("[FORK] parent: child %u exited with code %u\n", (unsigned)wpid, (unsigned)code);
+        vga::vga->set_color(Color::LightGrey, Color::Black);
+    }
+}
 
 extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]] uint32_t mb_addr)
 {
@@ -147,63 +261,128 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]]
                          p4 == p2 ? "OK" : "MISMATCH");
     }
 
-    // syscall テストは先に実行する。下のスレッドデモ (process::yield) は
-    // kernel_main のコンテキストを dummy に捨ててしまい二度と戻らないため、
-    // それより後ろに置くと到達しない。
-    {
-        syscall::init();
+    // syscall の MSR (LSTAR/STAR/SFMASK) を設定する。
+    // 注意: ハンドラは sysret でリング3へ戻るため、カーネル(リング0)から
+    //       直接 syscall を撃つことはできない (sysret が CPL=3 を強制し、
+    //       カーネルコードページに User 権限がないため #PF→#DF→トリプルフォルト
+    //       になる)。実際の syscall テストは下の user_program (リング3) で行う。
+    syscall::init();
 
-        // カーネルから syscall 命令を直接テスト (リング0→0)
-        const char msg[] = "Hello from syscall!\n";
-        uint64_t ret;
-        asm volatile("mov $1, %%rax\n" // RAX = 1 (write)
-                     "mov $1, %%rdi\n" // RDI = 1 (stdout)
-                     "mov %1, %%rsi\n" // RSI = buf
-                     "mov %2, %%rdx\n" // RDX = len
-                     "syscall\n"
-                     "mov %%rax, %0\n" // 戻り値
-                     : "=r"(ret)
-                     : "r"(msg), "r"((uint64_t)(sizeof(msg) - 1))
-                     : "rax", "rdi", "rsi", "rdx", "rcx", "r11", "memory");
-        vga::vga->set_color(Color::LightGreen, Color::Black);
-        vga::vga->puts("[SYS]  ");
-        vga::vga->set_color(Color::LightGrey, Color::Black);
-        vga::vga->printf("write() returned %u\n", (unsigned)ret);
-    }
+    // // カーネルから syscall 命令を直接テスト (リング0→0)
+    //     const char msg[] = "Hello from syscall!\n";
+    //     uint64_t ret;
+    //     asm volatile("mov $1, %%rax\n" // RAX = 1 (write)
+    //                  "mov $1, %%rdi\n" // RDI = 1 (stdout)
+    //                  "mov %1, %%rsi\n" // RSI = buf
+    //                  "mov %2, %%rdx\n" // RDX = len
+    //                  "syscall\n"
+    //                  "mov %%rax, %0\n" // 戻り値
+    //                  : "=r"(ret)
+    //                  : "r"(msg), "r"((uint64_t)(sizeof(msg) - 1))
+    //                  : "rax", "rdi", "rsi", "rdx", "rcx", "r11", "memory");
+    //     vga::vga->set_color(Color::LightGreen, Color::Black);
+    //     vga::vga->puts("[SYS]  ");
+    //     vga::vga->set_color(Color::LightGrey, Color::Black);
+    //     vga::vga->printf("write() returned %u\n", (unsigned)ret);
+
 
     keyboard::initialize();
 
-    {
-        vga::vga->set_color(Color::LightCyan, Color::Black);
-        vga::vga->puts("\n[KBD]  type something (echo test):\n> ");
-        vga::vga->set_color(Color::LightGrey, Color::Black);
-        while (1)
-        {
-            if (keyboard::has_input())
-            {
-                char c = keyboard::getchar();
-                vga::vga->putchar(c);
-                if (c == '\n')
-                {
-                    vga::vga->puts("> ");
-                }
-            }
-            asm volatile("hlt");
-        }
-    }
+    gdt::initialize_gdt();
+    static uint8_t kernel_stack[8192]; // 8KB のカーネルスタック
+    gdt::set_kernel_stack(reinterpret_cast<uint64_t>(kernel_stack + sizeof(kernel_stack)));
+
+
+    // {
+    // uint64_t code_page = reinterpret_cast<uint64_t>(&user_program) & PAGE_MASK;
+    // vmm::vmm_ptr->map_page(code_page, vmm::vmm_ptr->virtual_to_physical(code_page), vmm::PageFlag::User |
+    // vmm::PageFlag::Present | vmm::PageFlag::Writable);
+
+    //     // ユーザースタックを確保して User許可でマップ
+    //     uint64_t ustack_phys = pmm.allocate();
+    //     uint64_t ustack_virt = 0x600000;
+    //     vmm::vmm_ptr->map_page(ustack_virt, ustack_phys,
+    //                   vmm::PageFlag::Present | vmm::PageFlag::Writable | vmm::PageFlag::User);
+
+    //     // リング3へ遷移 (16バイト境界に揃える)
+    //     usermode::enter(
+    //         reinterpret_cast<uint64_t>(&user_program),
+    //         (ustack_virt + PAGE_SIZE - 16));
+
+    // }
+
+
+    // {
+    //     vga::vga->set_color(Color::LightCyan, Color::Black);
+    //     vga::vga->puts("\n[KBD]  type something (echo test):\n> ");
+    //     vga::vga->set_color(Color::LightGrey, Color::Black);
+    //     while (1)
+    //     {
+    //         if (keyboard::has_input())
+    //         {
+    //             char c = keyboard::getchar();
+    //             vga::vga->putchar(c);
+    //             if (c == '\n')
+    //             {
+    //                 vga::vga->puts("> ");
+    //             }
+    //         }
+    //         asm volatile("hlt");
+    //     }
+    // }
 
 
     process::ProcessManager process_manager(heap::heap_ptr);
-    Process *procA = process::create_process(thread_A, "Thread A");
-    Process *procB = process::create_process(thread_B, "Thread B");
-    vga::vga->printf("[DBG] procA=0x%x stateA=%d procB=0x%x stateB=%d\n",
-                     static_cast<unsigned>(reinterpret_cast<uintptr_t>(procA)),
-                     procA ? static_cast<int>(procA->state) : -1,
-                     static_cast<unsigned>(reinterpret_cast<uintptr_t>(procB)),
-                     procB ? static_cast<int>(procB->state) : -1);
-    {
-        process::yield(); // 最初のプロセスに切り替える
-    }
+    // Process *procA = process::create_process(thread_A, "Thread A");
+    // Process *procB = process::create_process(thread_B, "Thread B");
+    // vga::vga->printf("[DBG] procA=0x%x stateA=%d procB=0x%x stateB=%d\n",
+    //                  static_cast<unsigned>(reinterpret_cast<uintptr_t>(procA)),
+    //                  procA ? static_cast<int>(procA->state) : -1,
+    //                  static_cast<unsigned>(reinterpret_cast<uintptr_t>(procB)),
+    //                  procB ? static_cast<int>(procB->state) : -1);
+    // {
+    //     process::yield(); // 最初のプロセスに切り替える
+    // }
+
+    // Process::init();
+
+    // {
+
+    //     Process *pa = process::create_process(addrspace_thread_a, "addr-a");
+    //     Process *pb = process::create_process(addrspace_thread_b, "addr-b");
+
+    //     // 各プロセスの同一仮想アドレスに物理ページを別々にマップ
+    //     uint64_t phys_a = pmm.allocate();
+    //     uint64_t phys_b = pmm.allocate();
+    //     vmm::vmm_ptr->map_page_in(pa->pml4, kAddrTestVirt, phys_a, vmm::PageFlag::Present | vmm::PageFlag::Writable);
+    //     vmm::vmm_ptr->map_page_in(pb->pml4, kAddrTestVirt, phys_b, vmm::PageFlag::Present | vmm::PageFlag::Writable);
+
+    //     // process::print_table();
+    //     process::yield(); // スケジューラ起動
+
+    //     //両方のスレッド終了後に結果を確認
+    //     vga::vga->set_color(Color::LightGreen, Color::Black);
+    //     vga::vga->puts("[ADDR] ");
+    //     vga::vga->set_color(Color::LightGrey, Color::Black);
+    //     vga::vga->printf("A wrote 0xAAAA read 0x%x / B wrote 0xBBBB read 0x%x  %s\n",
+    //                     (unsigned)test_result_a,
+    //                     (unsigned)test_result_b,
+    //                     (test_result_a == 0xAAAA && test_result_b == 0xBBBB) ? "SEPARATED-OK" : "SHARED-FAIL");
+
+    // }
+
+    // // ─── Phase 7 セット3(前半): sleep/wakeup テスト ───
+    // process::create_process(sleeper_thread, "sleeper");
+    // process::create_process(waker_thread, "waker");
+    // process::yield();
+
+    // vga::vga->set_color(Color::LightGreen, Color::Black);
+    // vga::vga->puts("[SLEEP] ");
+    // vga::vga->set_color(Color::LightGrey, Color::Black);
+    // vga::vga->printf("result: sleeper %s\n", sleeper_woke ? "WOKE-OK" : "STILL-SLEEPING-FAIL");
+
+    process::create_process(parent_thread, "parent");
+    process::yield();
 
     while (1)
     {

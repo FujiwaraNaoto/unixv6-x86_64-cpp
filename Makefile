@@ -15,7 +15,7 @@ STD_INC    = -isystem /usr/include/c++/$(GCC_VER) \
              -isystem /usr/include/$(GCC_TRIPLE) \
              -isystem /usr/include
 
-CFLAGS   = -m64 -std=c++20 \
+CFLAGS   = -m64 -std=c++20 -g \
            -ffreestanding -fno-stack-protector -fno-builtin \
            -fno-exceptions -fno-rtti \
            -nostdlib -nostdinc \
@@ -24,14 +24,14 @@ CFLAGS   = -m64 -std=c++20 \
            -Iinclude $(STD_INC)
 
 LDFLAGS  = -T kernel.ld -nostdlib -z max-page-size=0x1000
-NASMFLAGS = -f elf64
+NASMFLAGS = -f elf64 -Iinclude
 
-ASM_SRC  = boot/boot.asm io/io.asm interrupt/isr.asm boot/switch.asm syscall/syscall_entry.asm syscall/helper.asm
+ASM_SRC  = boot/boot.asm io/io.asm interrupt/isr.asm interrupt/helper.asm boot/switch.asm syscall/syscall_entry.asm syscall/helper.asm user/usermode_entry.asm syscall/fork_ret.asm include/gdt_helper.asm
 CPP_SRC  = kernel/main.cpp \
            $(wildcard include/*.cpp)
 
 OBJ_DIR  = build
-ASM_OBJ  = $(addprefix $(OBJ_DIR)/, $(notdir $(ASM_SRC:.asm=.o)))
+ASM_OBJ  = $(ASM_SRC:%.asm=$(OBJ_DIR)/%.o)
 CPP_OBJ  = $(CPP_SRC:%.cpp=$(OBJ_DIR)/%.o)
 OBJS     = $(ASM_OBJ) $(CPP_OBJ)
 
@@ -65,13 +65,18 @@ run-gui: $(ISO)
 run-gdb: $(ISO)
 	$(QEMU) $(QEMU_GDB_FLAGS)
 
-# asm ソースは複数ディレクトリに散らばるが build/ 直下にベース名で出力する。
-# vpath で探索パスを教えてパターンルール1本にまとめる。
-vpath %.asm $(sort $(dir $(ASM_SRC)))
-
+# asm/cpp とも build/ 以下にソースのディレクトリ構造をそのまま掘って出力する。
+# (ベース名だけにすると interrupt/helper.asm と syscall/helper.asm のように
+#  別ディレクトリの同名ファイルが同じ .o に潰れてシンボルが消える)
 $(OBJ_DIR)/%.o: %.asm
 	@mkdir -p $(@D)
 	$(NASM) $(NASMFLAGS) -o $@ $<
+
+# NASM の %include 依存は Make からは見えないので、明示的に依存を張っておく。
+# (これが無いと .inc を書き換えても再アセンブルされず、古いセレクタ値が残る)
+# 注意: この行は `all:` より後に置くこと。レシピの無いルールでも「最初のターゲット」に
+#       なりうるため、上の方に書くと make の既定ゴールが .o に奪われる。
+$(ASM_OBJ): include/gdt_selectors.inc
 
 $(OBJ_DIR)/%.o: %.cpp
 	@mkdir -p $(@D)

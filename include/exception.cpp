@@ -47,8 +47,8 @@ void isr_common_handler(register_state_t *regs)
         vga::vga->printf(": Unknown Exception\n");
     }
 
-    vga::vga->printf("RIP: %016llx,CS=0x%016llx, RFLAGS=0x%016llx\n", regs->rip, regs->cs, regs->rflags);
-    vga::vga->printf("RSP: %016llx, SS=0x%016llx\n", regs->rsp, regs->ss);
+    vga::vga->printf("RIP: 0x%016x, CS=0x%016x, RFLAGS=0x%016x\n", regs->rip, regs->cs, regs->rflags);
+    vga::vga->printf("RSP: 0x%016x, SS=0x%016x, ERR=0x%x, INT=%u\n", regs->rsp, regs->ss, regs->err_code, regs->int_no);
     while (1)
     {
         asm volatile("hlt");

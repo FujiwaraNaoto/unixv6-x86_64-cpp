@@ -1,6 +1,7 @@
 #include "syscall.hpp"
 #include "vga.hpp"
 #include "keyboard.hpp"
+#include "gdt.hpp"
 
 extern "C" void syscall_entry();
 extern "C" uint64_t rdmsr(uint32_t msr);
@@ -84,11 +85,26 @@ void init()
 
     // 2. STAR: セグメントセレクタを設定
     //    上位32bit [63:48]=ユーザー, [47:32]=カーネル
-    //    カーネルCS=0x08, ユーザーCS base=0x10 (今は仮)
-    //    syscret 時: CS=STAR[63:48]+16, SS=STAR[63:48]+8
     //    syscall 時: CS=STAR[47:32],    SS=STAR[47:32]+8
-    uint64_t star = (static_cast<uint64_t>(0x08) << 32)    // カーネルセグメント
-                    | (static_cast<uint64_t>(0x10) << 48); // ユーザーセグメント (フェーズ7で本設定)
+    //    sysret 時: CS=STAR[63:48]+16, SS=STAR[63:48]+8 (どちらも RPL=3 が強制される)
+    //
+    //    CPU が「+8」「+16」で勝手に隣を拾う仕様なので、STAR に入れるのはセレクタそのもの
+    //    ではなく「基準値」である点に注意。[63:48] の 0x10 はカーネルDataと同じ値になるが
+    //    偶然の一致で、意味は「ユーザーDataの1つ前」。
+    // NOTE: kSysretBase の値は GDT のレイアウトから導出される従属値なので、GDT の順序を変更すればこの値も変わる
+    constexpr uint64_t kSyscallBase = gdt::SegmentSelector::kKernelCode;                // 0x08
+    constexpr uint64_t kSysretBase  = (gdt::SegmentSelector::kUserData & ~0x03) - 0x08; // 0x10
+
+    // 上の +8/+16 が実際に gdt.hpp のセレクタに着地することを保証する
+    // (GDT の並びを崩したらリンク前に落ちる)
+    static_assert(kSyscallBase + 0x08 == gdt::SegmentSelector::kKernelData,
+                  "syscall は SS=CS+8 を要求する: Kernel Data は Kernel Code の直後でなければならない");
+    static_assert(((kSysretBase + 0x08) | 0x03) == gdt::SegmentSelector::kUserData, "sysret は SS=base+8 を要求する");
+    static_assert(((kSysretBase + 0x10) | 0x03) == gdt::SegmentSelector::kUserCode,
+                  "sysret は CS=base+16 を要求する: User Code は User Data の直後でなければならない");
+
+    uint64_t star = (kSyscallBase << 32)   // カーネルセグメント
+                    | (kSysretBase << 48); // ユーザーセグメント
     wrmsr(MSR::STAR, star);
 
     // 3. LSTAR: syscall 時のジャンプ先

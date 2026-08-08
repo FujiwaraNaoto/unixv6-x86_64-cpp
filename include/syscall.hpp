@@ -9,7 +9,7 @@ constexpr int kWrite = 1;
 constexpr int kExit  = 60;
 } // namespace SyscallNo
 
-// MSR Address
+// MSR 番号(識別子)
 // see https://wiki.osdev.org/SYSENTER#AMD:_SYSCALL/SYSRET
 namespace MSR
 {
