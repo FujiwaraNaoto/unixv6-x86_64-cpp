@@ -197,6 +197,11 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]]
     vga::vga->printf("running at RIP=0x%x (high-half if >0xFFFFFFFF80000000)\n",
                      (unsigned)(rip >> 32)); // 上位32bitを表示
 
+    //見えない
+    vga::vga->set_color(Color::LightMagenta, Color::Black); vga::vga->puts("[HIGH] ");
+    vga::vga->set_color(Color::LightGrey,   Color::Black);
+    vga::vga->puts("VGA via direct map OK\n");
+
 
     pic::InitializePIC(0x20, 0x28); // IRQ0-7は0x20-0x27、IRQ8-15は0x28-0x2Fに割り当てる
 
