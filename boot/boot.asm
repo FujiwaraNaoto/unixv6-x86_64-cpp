@@ -70,6 +70,7 @@ pdpt_high:   resb 4096
 pd_high:     resb 4096
 ; direct map 用 (段階2で使うが先に確保)
 pdpt_direct: resb 4096
+pd_direct:   resb 4096 ;direct map 用のPD (2MiBページx512 = 1GiB)
 
 ; ─── 32-bit スタートアップ ────────────────────────────────────────
 section .text
@@ -142,6 +143,27 @@ setup_paging:
     or  eax, 0x3
     mov [PHYS(pd_high) + 0*8], eax
 
+    ; ---direct map (0xFFFF800000000000) ---
+    ; PML4[256] → pdpt_direct
+    mov eax, PHYS(pdpt_direct)
+    or  eax, 0x3
+    mov [PHYS(pml4_table) + 256*8], eax
+
+    ; PDPT[0] -> pd_direct
+    mov eax, PHYS(pd_direct)
+    or  eax, 0x3
+    mov [PHYS(pdpt_direct) + 0*8], eax
+
+    ; PD[0..511] -> 2MiB巨大ページで物理0-1GiBをdirect map
+    mov ecx, 0
+.direct_loop:
+    mov eax, ecx
+    shl eax, 21            ; index × 2MiB = 物理
+    or  eax, 0x83          ; Present + Writable + PS
+    mov [PHYS(pd_direct) + ecx*8], eax
+    inc ecx
+    cmp ecx, 512
+    jl  .direct_loop
 
     ; CR3 ← PML4
     mov eax, PHYS(pml4_table)

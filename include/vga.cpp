@@ -14,8 +14,8 @@ namespace
 // 物理アドレス0xB8000から始まる4000バイトの領域が、80x25=2000文字分のテキストバッファとして使われる．
 constexpr size_t WIDTH  = 80;
 constexpr size_t HEIGHT = 25;
-constexpr uint32_t ADDR = 0xB8000;
-
+constexpr uint64_t ADDR = 0xB8000;
+constexpr uint64_t DIRECT_MAP_BASE = 0xFFFF800000000000ULL;
 } // namespace
 
 namespace vga
@@ -55,7 +55,7 @@ uint16_t VGA::make_entry(char c, uint8_t attr)
 }
 volatile uint16_t *VGA::buffer()
 {
-    return reinterpret_cast<volatile uint16_t *>(ADDR);
+    return reinterpret_cast<volatile uint16_t *>(ADDR + DIRECT_MAP_BASE); // direct map経由でアクセスする
 }
 
 // 0x3D4はインデックスレジスタ, 0x3D5はデータレジスタ.
