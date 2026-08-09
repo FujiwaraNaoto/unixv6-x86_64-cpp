@@ -55,7 +55,10 @@ static void call_global_constructors()
         (*fn)();
 }
 
-extern "C" uint8_t kernel_end[]; // カーネルの終端アドレス (kernel.ld で定義)
+extern "C" uint8_t kernel_end[]; // カーネル終端の「仮想」アドレス (kernel.ld で定義)
+                                 // 物理が要る場所では kernel_virt_to_phys() で剥がすこと。
+                                 // (kernel.ld の kernel_phys_end は絶対シンボルなので
+                                 //  -mcmodel=small の RIP 相対参照では届かず、直接は使えない)
 
 
 // 意図的に 0 除算 (#DE) を発生させて isr_common_handler を起こす。
@@ -218,7 +221,10 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]]
         asm volatile("hlt");
     }
 
-    pmm::PhysicalMemoryManager pmm(mmap, reinterpret_cast<uint64_t>(kernel_end));
+    // PMM は物理アドレスを扱うので、高位カーネル化後は kernel_end (仮想) ではなく
+    // kernel_phys_end (物理) を渡す。仮想を渡すと「カーネル領域スキップ」判定が
+    // 常に真になり、さらに終端までのループが事実上無限ループになる。
+    pmm::PhysicalMemoryManager pmm(mmap, kernel_virt_to_phys(reinterpret_cast<uint64_t>(kernel_end)));
     vmm::VirtualMemoryManager vmm_instance = vmm::VirtualMemoryManager(&pmm);
     heap::Heap heap_instance(0x400000, 0x800000, &pmm, &vmm_instance);
 

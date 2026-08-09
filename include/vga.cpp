@@ -183,6 +183,13 @@ void VGA::printf(const char *fmt, ...)
             width = width * 10 + (*fmt - '0');
             fmt++;
         }
+        // 長さ修飾子 (l / ll / h / hh / z) は読み飛ばす。
+        // 可変長引数は既に 64bit に昇格しており print_uint も unsigned long long を
+        // 受けるので、修飾子の有無で取り出し方を変える必要はない。
+        // 読み飛ばさないと switch のどのケースにも当たらず、"llx" のような文字列が
+        // そのまま画面に出てしまう。
+        while (*fmt == 'l' || *fmt == 'h' || *fmt == 'z')
+            fmt++;
         switch (*fmt)
         {
             case 'd':
