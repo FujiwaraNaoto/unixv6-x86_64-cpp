@@ -12,9 +12,9 @@ namespace
 {
 // PC起動時にBIOSがVGAチップを80x25のテキストモードに設定する．
 // 物理アドレス0xB8000から始まる4000バイトの領域が、80x25=2000文字分のテキストバッファとして使われる．
-constexpr size_t WIDTH  = 80;
-constexpr size_t HEIGHT = 25;
-constexpr uint64_t ADDR = 0xB8000;
+constexpr size_t WIDTH             = 80;
+constexpr size_t HEIGHT            = 25;
+constexpr uint64_t ADDR            = 0xB8000;
 constexpr uint64_t DIRECT_MAP_BASE = 0xFFFF800000000000ULL;
 } // namespace
 

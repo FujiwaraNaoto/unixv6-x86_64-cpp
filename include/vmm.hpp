@@ -12,12 +12,21 @@ constexpr uint64_t DIRECT_MAP_BASE = 0xFFFF800000000000ULL;
 constexpr uint64_t KERNEL_VMA = 0xFFFFFFFF80000000ULL;
 
 // カーネルイメージ内の仮想 → 物理 (リンカが付けた高位アドレスを剥がす)
-inline uint64_t kernel_virt_to_phys(uint64_t virt) { return virt - KERNEL_VMA; }
+inline uint64_t kernel_virt_to_phys(uint64_t virt)
+{
+    return virt - KERNEL_VMA;
+}
 
 // 物理 → direct map 上の仮想アドレス
-inline uint64_t phys_to_virt(uint64_t phys) { return phys + DIRECT_MAP_BASE; }
+inline uint64_t phys_to_virt(uint64_t phys)
+{
+    return phys + DIRECT_MAP_BASE;
+}
 // direct map 上の仮想 → 物理
-inline uint64_t virt_to_phys_direct(uint64_t virt) { return virt - DIRECT_MAP_BASE; }
+inline uint64_t virt_to_phys_direct(uint64_t virt)
+{
+    return virt - DIRECT_MAP_BASE;
+}
 
 
 namespace vmm

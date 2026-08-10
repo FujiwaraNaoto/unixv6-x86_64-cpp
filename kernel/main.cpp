@@ -201,8 +201,9 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]]
                      (unsigned)(rip >> 32)); // 上位32bitを表示
 
     //見えない
-    vga::vga->set_color(Color::LightMagenta, Color::Black); vga::vga->puts("[HIGH] ");
-    vga::vga->set_color(Color::LightGrey,   Color::Black);
+    vga::vga->set_color(Color::LightMagenta, Color::Black);
+    vga::vga->puts("[HIGH] ");
+    vga::vga->set_color(Color::LightGrey, Color::Black);
     vga::vga->puts("VGA via direct map OK\n");
 
 

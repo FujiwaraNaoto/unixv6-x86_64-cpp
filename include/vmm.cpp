@@ -29,7 +29,7 @@ uint64_t entry_to_phys(uint64_t entry)
 // direct map経由: 物理アドレス + DIRECT_MAP_BASE = 仮想アドレス
 uint64_t *physical_to_virtual(uint64_t phys)
 {
-    return reinterpret_cast<uint64_t *>(phys+DIRECT_MAP_BASE);
+    return reinterpret_cast<uint64_t *>(phys + DIRECT_MAP_BASE);
 }
 
 extern "C" void load_cr3(uint64_t value);
