@@ -8,15 +8,6 @@ constexpr uint64_t PAGE_MASK = ~(PAGE_SIZE - 1);
 // direct map: 物理メモリ全体を高位にマップした領域のベース
 constexpr uint64_t DIRECT_MAP_BASE = 0xFFFF800000000000ULL;
 
-// 高位カーネルのベース (kernel.ld の KERNEL_VMA と同じ値)
-constexpr uint64_t KERNEL_VMA = 0xFFFFFFFF80000000ULL;
-
-// カーネルイメージ内の仮想 → 物理 (リンカが付けた高位アドレスを剥がす)
-inline uint64_t kernel_virt_to_phys(uint64_t virt)
-{
-    return virt - KERNEL_VMA;
-}
-
 // 物理 → direct map 上の仮想アドレス
 inline uint64_t phys_to_virt(uint64_t phys)
 {

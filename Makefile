@@ -15,11 +15,14 @@ STD_INC    = -isystem /usr/include/c++/$(GCC_VER) \
              -isystem /usr/include/$(GCC_TRIPLE) \
              -isystem /usr/include
 
+# NOTE: ubuntuのg++はデフォルトで --enable-default-pie が有効になっている．-mcmodel=kernelと競合するため、-fno-pie を明示的に指定する必要がある。
 CFLAGS   = -m64 -std=c++20 -g \
            -ffreestanding -fno-stack-protector -fno-builtin \
            -fno-exceptions -fno-rtti \
            -nostdlib -nostdinc \
            -Wall -Wextra -O2 \
+		   -mcmodel=kernel	\
+           -fno-pic -fno-pie \
            -mno-red-zone -mno-mmx -mno-sse -mno-sse2 \
            -Iinclude $(STD_INC)
 
