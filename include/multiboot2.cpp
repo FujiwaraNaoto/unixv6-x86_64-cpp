@@ -1,6 +1,4 @@
 #include "multiboot2.hpp"
-
-
 Multiboot2Tag *find_next_tag(Multiboot2Tag *current_tag)
 {
     return reinterpret_cast<Multiboot2Tag *>(reinterpret_cast<uint8_t *>(current_tag) + ((current_tag->size + 7) & ~7));
