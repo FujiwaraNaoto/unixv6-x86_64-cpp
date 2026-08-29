@@ -4,7 +4,6 @@
 #include <cstring>
 #include "io.hpp"
 #include "pci.hpp"
-#include "vmm.hpp"
 
 namespace
 {
@@ -38,6 +37,9 @@ constexpr uint16_t VIRTIO_BLK_DEVICE_ID = 0x1001;
 
 constexpr uint16_t SECTOR_SIZE = 512;
 
+// virtqueue はページ番号でデバイスに渡すため、ページ長を知っている必要がある
+constexpr size_t VIRTIO_PAGE_SIZE = 4096;
+
 // ─── DMA 対象のメモリ ────────────────────────────────────────────
 // デバイスが直接読み書きするので、実体はここ (1翻訳単位) だけに置く。
 alignas(4096) uint8_t virtqueue_memory[16384];
@@ -53,16 +55,17 @@ VirtQueueAvailable *avail = nullptr;
 VirtQueueUsed *used       = nullptr;
 bool ready                = false;
 
+// DMA バッファの物理アドレス。対象はいずれもカーネル .bss 上の固定の変数で、
+// そのマッピングはブート後変化しない (プロセス切り替えでも PML4 の上位エントリは
+// 共有される) ため、初期化時に一度だけ解決して保持すればよい。
+// これにより read/write の実行経路からアドレス変換の依存が消える。
+uint64_t request_header_phys = 0;
+uint64_t data_buffer_phys    = 0;
+uint64_t status_byte_phys    = 0;
+
 uint16_t port(uint16_t offset)
 {
     return static_cast<uint16_t>(io_base + offset);
-}
-
-// カーネルの .bss は高位仮想アドレスにあるので、デバイスへ渡す前に必ず物理へ直す。
-// (デバイスは MMU を通らないので仮想アドレスを渡すと全く別の場所を DMA する)
-uint64_t to_phys(const void *p)
-{
-    return vmm::vmm_ptr->virtual_to_physical(reinterpret_cast<uint64_t>(p));
 }
 
 } // namespace
@@ -70,9 +73,9 @@ uint64_t to_phys(const void *p)
 namespace VirtIOBlock
 {
 
-bool initialize()
+bool initialize(PhysicalAddressResolver resolve_physical)
 {
-    if (vmm::vmm_ptr == nullptr)
+    if (resolve_physical == nullptr)
         return false; // 物理アドレスが引けないので初期化できない
 
     auto found = PCI::pci_device_exists(VIRTIO_VENDOR_ID, VIRTIO_BLK_DEVICE_ID);
@@ -130,15 +133,22 @@ bool initialize()
 
     // デバイスにはページ番号を 1 個しか渡せない = キュー全体が物理連続である前提。
     // 仮想連続でも物理連続とは限らないので確認しておく。
-    uint64_t queue_phys = to_phys(virtqueue_memory);
+    uint64_t queue_phys = resolve_physical(virtqueue_memory);
     if (queue_phys == 0)
         return false;
-    for (size_t off = PAGE_SIZE; off < sizeof(virtqueue_memory); off += PAGE_SIZE)
+    for (size_t off = VIRTIO_PAGE_SIZE; off < sizeof(virtqueue_memory); off += VIRTIO_PAGE_SIZE)
     {
-        if (to_phys(virtqueue_memory + off) != queue_phys + off)
+        if (resolve_physical(virtqueue_memory + off) != queue_phys + off)
             return false;
     }
     io::out32b(port(REG_QUEUE_ADDRESS), static_cast<uint32_t>(queue_phys >> 12));
+
+    // DMA バッファの物理アドレスもここで解決しておく (以降は変換関数を使わない)
+    request_header_phys = resolve_physical(&request_header);
+    data_buffer_phys    = resolve_physical(data_buffer);
+    status_byte_phys    = resolve_physical(const_cast<const uint8_t *>(&status_byte));
+    if (request_header_phys == 0 || data_buffer_phys == 0 || status_byte_phys == 0)
+        return false;
 
     // ─── 6. DRIVER_OK (最後) ───
     io::outb(port(REG_DEVICE_STATUS), STATUS_ACKNOWLEDGE | STATUS_DRIVER | STATUS_DRIVER_OK);
@@ -158,7 +168,7 @@ static bool do_request(uint32_t type, uint64_t sector)
     status_byte             = 0xFF; // 未完了マーカー
 
     // Descriptor 0: リクエストヘッダ (デバイスが読む)
-    desc[0].addr  = to_phys(&request_header);
+    desc[0].addr  = request_header_phys;
     desc[0].len   = sizeof(VirtIOBlockRequestHeader);
     desc[0].flags = DESC_F_NEXT;
     desc[0].next  = 1;
@@ -166,13 +176,13 @@ static bool do_request(uint32_t type, uint64_t sector)
     // Descriptor 1: データバッファ
     //   read  → デバイスが書く (DESC_F_WRITE)
     //   write → デバイスが読む (フラグなし)
-    desc[1].addr  = to_phys(data_buffer);
+    desc[1].addr  = data_buffer_phys;
     desc[1].len   = SECTOR_SIZE;
     desc[1].flags = static_cast<uint16_t>(DESC_F_NEXT | (type == BLK_T_IN ? DESC_F_WRITE : 0));
     desc[1].next  = 2;
 
     // Descriptor 2: ステータス (デバイスが書く)
-    desc[2].addr  = to_phys(const_cast<uint8_t *>(&status_byte));
+    desc[2].addr  = status_byte_phys;
     desc[2].len   = 1;
     desc[2].flags = DESC_F_WRITE;
     desc[2].next  = 0;

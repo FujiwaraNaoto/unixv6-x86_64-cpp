@@ -441,7 +441,12 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]]
     process::create_process(parent_thread, "parent");
     process::yield();
 
-    if (VirtIOBlock::initialize())
+    // 仮想 → 物理の変換方法はカーネル側の関心事なので、ドライバには関数として渡す。
+    // (キャプチャなしラムダは関数ポインタへ暗黙変換される)
+    const auto resolve_physical = [](const void *p) -> uint64_t
+    { return vmm::vmm_ptr->virtual_to_physical(reinterpret_cast<uint64_t>(p)); };
+
+    if (VirtIOBlock::initialize(resolve_physical))
     {
 
         vga::vga->set_color(Color::LightGreen, Color::Black);
