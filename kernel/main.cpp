@@ -15,6 +15,7 @@
 #include "gdt.hpp"
 #include "usermode.hpp"
 #include "virtioblock.hpp"
+#include "bcache.hpp"
 
 // CRT 相当: リンカが .init_array に並べたグローバルコンストラクタを
 // 先頭から末尾まで順に呼ぶ。境界シンボルは kernel.ld で定義している。
@@ -459,15 +460,63 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]]
         vga::vga->set_color(Color::LightGreen, Color::Black);
         vga::vga->puts("[VIRTIO] VirtIO Block Device initialized successfully\n");
         vga::vga->set_color(Color::LightGrey, Color::Black);
-        static std::array<uint8_t, 512> buffer;
-        if (VirtIOBlock::read_block(0, buffer.data()))
+
+        // バッファキャッシュ層をこのドライバの上に載せる。
+        // 以降ブロックアクセスは bcache 経由で行い、上位層 (inode) からは
+        // どのドライバかを見えなくする。
+        if (bcache::initialize(bcache::BlockDevice{
+                .read_block  = &VirtIOBlock::read_block,
+                .write_block = &VirtIOBlock::write_block,
+            }))
         {
             vga::vga->set_color(Color::LightGreen, Color::Black);
-            vga::vga->puts("[VIRTIO] Read block 0 successfully\n");
+            vga::vga->puts("[BCACHE] ");
             vga::vga->set_color(Color::LightGrey, Color::Black);
-            vga::vga->puts("[VIRTIO] Block 0 data:\n");
-            vga::vga->set_color(Color::LightCyan, Color::Black);
-            hexdump(buffer.data(), buffer.size());
+            vga::vga->printf("initialized: %u buffers x %u bytes\n",
+                             static_cast<unsigned long long>(NBUF),
+                             static_cast<unsigned long long>(BLOCK_SIZE));
+
+            // 1回目: キャッシュに無いのでデバイスを叩く (miss)
+            Buffer *block0 = bcache::read(0);
+            if (block0 != nullptr)
+            {
+                vga::vga->set_color(Color::LightGreen, Color::Black);
+                vga::vga->puts("[BCACHE] ");
+                vga::vga->set_color(Color::LightGrey, Color::Black);
+                vga::vga->puts("block 0:\n");
+                vga::vga->set_color(Color::LightCyan, Color::Black);
+                hexdump(block0->data, BLOCK_SIZE);
+                vga::vga->set_color(Color::LightGrey, Color::Black);
+                bcache::release(block0);
+
+                // 2回目: 同じブロックなのでデバイスを叩かない (hit)
+                Buffer *again = bcache::read(0);
+                if (again != nullptr)
+                {
+                    bcache::release(again);
+                }
+
+                const bcache::Statistics stats = bcache::statistics();
+                vga::vga->set_color(Color::LightGreen, Color::Black);
+                vga::vga->puts("[BCACHE] ");
+                vga::vga->set_color(Color::LightGrey, Color::Black);
+                vga::vga->printf("hits=%u misses=%u evictions=%u writebacks=%u\n",
+                                 static_cast<unsigned long long>(stats.hits),
+                                 static_cast<unsigned long long>(stats.misses),
+                                 static_cast<unsigned long long>(stats.evictions),
+                                 static_cast<unsigned long long>(stats.writebacks));
+            }
+            else
+            {
+                vga::vga->set_color(Color::LightRed, Color::Black);
+                vga::vga->puts("[BCACHE] read(0) failed\n");
+                vga::vga->set_color(Color::LightGrey, Color::Black);
+            }
+        }
+        else
+        {
+            vga::vga->set_color(Color::LightRed, Color::Black);
+            vga::vga->puts("[BCACHE] initialization failed\n");
             vga::vga->set_color(Color::LightGrey, Color::Black);
         }
     }
