@@ -49,12 +49,20 @@ alignas(512) uint8_t data_buffer[SECTOR_SIZE];
 alignas(1) volatile uint8_t status_byte = 0;
 
 // ─── ドライバ内部状態 ────────────────────────────────────────────
-uint16_t io_base          = 0;
-uint16_t queue_size       = 0;
-VirtQueueDescriptor *desc = nullptr;
-VirtQueueAvailable *avail = nullptr;
-VirtQueueUsed *used       = nullptr;
-bool ready                = false;
+uint16_t io_base    = 0;
+uint16_t queue_size = 0;
+// virtqueue_memory の中を指す非所有の view (3つで1組)。
+// 実体は上の静的配列 1 個で、ここはその内部を指しているだけなので解放しない。
+// スマートポインタにしてはいけない: new で作られていないメモリを delete する
+// ことになり、しかも 1 個のバッファを 3 つが「単独所有」する形になってしまう。
+struct VirtQueueView
+{
+    VirtQueueDescriptor *desc = nullptr; // Descriptor Table
+    VirtQueueAvailable *avail = nullptr; // Available Ring (ドライバが書き、デバイスが読む)
+    VirtQueueUsed *used       = nullptr; // Used Ring (デバイスが書き、ドライバが読む)
+};
+VirtQueueView queue;
+bool ready = false;
 
 // DMA バッファの物理アドレス。対象はいずれもカーネル .bss 上の固定の変数で、
 // そのマッピングはブート後変化しない (プロセス切り替えでも PML4 の上位エントリは
@@ -126,15 +134,15 @@ bool initialize(PhysicalAddressResolver resolve_physical)
 
     // virtqueue 全体をゼロクリアする。
     // デバイスはリセット時に自分の used->idx を 0 に戻すので、こちら側の
-    // avail->idx / used->idx に前回の値が残っていると do_request() の完了待ちが
+    // queue.avail->idx / queue.used->idx に前回の値が残っていると完了待ちが
     // 永久に抜けなくなる。.bss は起動時にゼロだが initialize() の再実行に備える。
     // (request_header は do_request() で全フィールド代入するのでクリア不要)
     std::memset(virtqueue_memory, 0, sizeof(virtqueue_memory));
 
     // ポインタを組み立てる
-    desc  = reinterpret_cast<VirtQueueDescriptor *>(virtqueue_memory);
-    avail = reinterpret_cast<VirtQueueAvailable *>(virtqueue_memory + descriptor_table_size);
-    used  = reinterpret_cast<VirtQueueUsed *>(virtqueue_memory + used_ring_offset);
+    queue.desc  = reinterpret_cast<VirtQueueDescriptor *>(virtqueue_memory);
+    queue.avail = reinterpret_cast<VirtQueueAvailable *>(virtqueue_memory + descriptor_table_size);
+    queue.used  = reinterpret_cast<VirtQueueUsed *>(virtqueue_memory + used_ring_offset);
 
     // デバイスにはページ番号を 1 個しか渡せない = キュー全体が物理連続である前提。
     // 仮想連続でも物理連続とは限らないので確認しておく。
@@ -180,42 +188,42 @@ static bool do_request(uint32_t type, uint64_t sector)
     status_byte             = 0xFF; // 未完了マーカー
 
     // Descriptor 0: リクエストヘッダ (デバイスが読む)
-    desc[0].addr  = request_header_phys;
-    desc[0].len   = sizeof(VirtIOBlockRequestHeader);
-    desc[0].flags = DESC_F_NEXT;
-    desc[0].next  = 1;
+    queue.desc[0].addr  = request_header_phys;
+    queue.desc[0].len   = sizeof(VirtIOBlockRequestHeader);
+    queue.desc[0].flags = DESC_F_NEXT;
+    queue.desc[0].next  = 1;
 
     // Descriptor 1: データバッファ
     //   read  → デバイスが書く (DESC_F_WRITE)
     //   write → デバイスが読む (フラグなし)
-    desc[1].addr  = data_buffer_phys;
-    desc[1].len   = SECTOR_SIZE;
-    desc[1].flags = static_cast<uint16_t>(DESC_F_NEXT | (type == BLK_T_IN ? DESC_F_WRITE : 0));
-    desc[1].next  = 2;
+    queue.desc[1].addr  = data_buffer_phys;
+    queue.desc[1].len   = SECTOR_SIZE;
+    queue.desc[1].flags = static_cast<uint16_t>(DESC_F_NEXT | (type == BLK_T_IN ? DESC_F_WRITE : 0));
+    queue.desc[1].next  = 2;
 
     // Descriptor 2: ステータス (デバイスが書く)
-    desc[2].addr  = status_byte_phys;
-    desc[2].len   = 1;
-    desc[2].flags = DESC_F_WRITE;
-    desc[2].next  = 0;
+    queue.desc[2].addr  = status_byte_phys;
+    queue.desc[2].len   = 1;
+    queue.desc[2].flags = DESC_F_WRITE;
+    queue.desc[2].next  = 0;
 
     // Available Ring に登録
-    uint16_t last_used                   = used->idx;
-    avail->ring[avail->idx % queue_size] = 0; // チェーン先頭のDescriptor番号
-    __sync_synchronize();                     // メモリバリア
-    avail->idx++;
+    uint16_t last_used                               = queue.used->idx;
+    queue.avail->ring[queue.avail->idx % queue_size] = 0; // チェーン先頭のDescriptor番号
+    __sync_synchronize();                                 // メモリバリア
+    queue.avail->idx++;
     __sync_synchronize();
 
     // デバイスに通知
     io::out16b(port(REG_QUEUE_NOTIFY), 0);
 
     // 完了待ち (ポーリング)。
-    // used->idx は非 volatile なので、"memory" クロバーを挟まないと -O2 で
+    // queue.used->idx は非 volatile なので、"memory" クロバーを挟まないと -O2 で
     // ループ外に読み出しが巻き上げられて無限ループになる。
     while (true)
     {
         asm volatile("pause" ::: "memory");
-        if (used->idx != last_used)
+        if (queue.used->idx != last_used)
             break;
     }
     __sync_synchronize();
