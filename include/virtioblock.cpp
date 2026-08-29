@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <cstring>
+#include <optional>
 #include "io.hpp"
 #include "pci.hpp"
 
@@ -123,8 +124,12 @@ bool initialize(PhysicalAddressResolver resolve_physical)
     if (total_size > sizeof(virtqueue_memory))
         return false;
 
-    // ゼロクリア
-    memset(&request_header, 0, sizeof(request_header));
+    // virtqueue 全体をゼロクリアする。
+    // デバイスはリセット時に自分の used->idx を 0 に戻すので、こちら側の
+    // avail->idx / used->idx に前回の値が残っていると do_request() の完了待ちが
+    // 永久に抜けなくなる。.bss は起動時にゼロだが initialize() の再実行に備える。
+    // (request_header は do_request() で全フィールド代入するのでクリア不要)
+    std::memset(virtqueue_memory, 0, sizeof(virtqueue_memory));
 
     // ポインタを組み立てる
     desc  = reinterpret_cast<VirtQueueDescriptor *>(virtqueue_memory);
@@ -133,22 +138,29 @@ bool initialize(PhysicalAddressResolver resolve_physical)
 
     // デバイスにはページ番号を 1 個しか渡せない = キュー全体が物理連続である前提。
     // 仮想連続でも物理連続とは限らないので確認しておく。
-    uint64_t queue_phys = resolve_physical(virtqueue_memory);
-    if (queue_phys == 0)
+    const std::optional<uint64_t> queue_phys = resolve_physical(virtqueue_memory);
+    if (!queue_phys)
         return false;
     for (size_t off = VIRTIO_PAGE_SIZE; off < sizeof(virtqueue_memory); off += VIRTIO_PAGE_SIZE)
     {
-        if (resolve_physical(virtqueue_memory + off) != queue_phys + off)
+        const std::optional<uint64_t> page_phys = resolve_physical(virtqueue_memory + off);
+        if (!page_phys || *page_phys != *queue_phys + off)
             return false;
     }
-    io::out32b(port(REG_QUEUE_ADDRESS), static_cast<uint32_t>(queue_phys >> 12));
 
     // DMA バッファの物理アドレスもここで解決しておく (以降は変換関数を使わない)
-    request_header_phys = resolve_physical(&request_header);
-    data_buffer_phys    = resolve_physical(data_buffer);
-    status_byte_phys    = resolve_physical(const_cast<const uint8_t *>(&status_byte));
-    if (request_header_phys == 0 || data_buffer_phys == 0 || status_byte_phys == 0)
+    const std::optional<uint64_t> header_phys = resolve_physical(&request_header);
+    const std::optional<uint64_t> buffer_phys = resolve_physical(data_buffer);
+    const std::optional<uint64_t> status_phys = resolve_physical(const_cast<const uint8_t *>(&status_byte));
+    if (!header_phys || !buffer_phys || !status_phys)
         return false;
+    request_header_phys = *header_phys;
+    data_buffer_phys    = *buffer_phys;
+    status_byte_phys    = *status_phys;
+
+    // 全部解決できてからデバイスにキューの位置を教える
+    // (途中で失敗して return する経路でデバイスに中途半端な設定を残さないため)
+    io::out32b(port(REG_QUEUE_ADDRESS), static_cast<uint32_t>(*queue_phys >> 12));
 
     // ─── 6. DRIVER_OK (最後) ───
     io::outb(port(REG_DEVICE_STATUS), STATUS_ACKNOWLEDGE | STATUS_DRIVER | STATUS_DRIVER_OK);
@@ -216,13 +228,13 @@ bool read_block(uint64_t sector, uint8_t *buf)
 {
     if (!do_request(BLK_T_IN, sector))
         return false;
-    ::memcpy(buf, data_buffer, SECTOR_SIZE);
+    std::memcpy(buf, data_buffer, SECTOR_SIZE);
     return true;
 }
 
 bool write_block(uint64_t sector, const uint8_t *buf)
 {
-    ::memcpy(data_buffer, buf, SECTOR_SIZE);
+    std::memcpy(data_buffer, buf, SECTOR_SIZE);
     return do_request(BLK_T_OUT, sector);
 }
 

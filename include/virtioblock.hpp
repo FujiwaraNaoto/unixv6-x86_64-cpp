@@ -1,6 +1,7 @@
 #ifndef VIRTIOBLOCK_HPP
 #define VIRTIOBLOCK_HPP
 #include <cstdint>
+#include <optional>
 
 
 struct [[gnu::packed]] VirtQueueDescriptor
@@ -52,7 +53,8 @@ namespace VirtIOBlock
 // デバイスは MMU を通らないので DMA 先は物理アドレスで渡す必要があるが、
 // その変換方法 (ページテーブルを歩く / direct map から引く 等) はドライバの
 // 関心事ではない。実装を知らずに済むよう初期化時に呼び出し側から受け取る。
-using PhysicalAddressResolver = uint64_t (*)(const void *virtual_address);
+// 変換できない (未マップ等) 場合は nullopt を返すこと。
+using PhysicalAddressResolver = std::optional<uint64_t> (*)(const void *virtual_address);
 
 // resolve_physical は初期化中にのみ呼ばれる。DMA バッファの物理アドレスは
 // ここで解決してドライバ内に保持するので、以降の read/write では使わない。

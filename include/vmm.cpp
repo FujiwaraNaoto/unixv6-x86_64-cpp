@@ -112,27 +112,27 @@ bool VirtualMemoryManager::unmap_page(uint64_t virtual_address)
     return true;
 }
 
-uint64_t VirtualMemoryManager::virtual_to_physical(uint64_t virtual_address) const
+std::optional<uint64_t> VirtualMemoryManager::virtual_to_physical(uint64_t virtual_address) const
 {
     uint64_t *pml4 = physical_to_virtual(pml4_phys_);
     if (!(pml4[pml4_index(virtual_address)] & PageFlag::Present))
     {
-        return 0; // PML4エントリが存在しない場合は物理アドレスを返せない
+        return std::nullopt; // PML4エントリが存在しない場合は物理アドレスを返せない
     }
     uint64_t *pdpt = physical_to_virtual(entry_to_phys(pml4[pml4_index(virtual_address)]));
     if (!(pdpt[pdpt_index(virtual_address)] & PageFlag::Present))
     {
-        return 0; // PDPTエントリが存在しない場合は物理アドレスを返せない
+        return std::nullopt; // PDPTエントリが存在しない場合は物理アドレスを返せない
     }
     uint64_t *pd = physical_to_virtual(entry_to_phys(pdpt[pdpt_index(virtual_address)]));
     if (!(pd[pd_index(virtual_address)] & PageFlag::Present))
     {
-        return 0; // PDエントリが存在しない場合は物理アドレスを返せない
+        return std::nullopt; // PDエントリが存在しない場合は物理アドレスを返せない
     }
     uint64_t *pt = physical_to_virtual(entry_to_phys(pd[pd_index(virtual_address)]));
     if (!(pt[pt_index(virtual_address)] & PageFlag::Present))
     {
-        return 0; // PTエントリが存在しない場合は物理アドレスを返せない
+        return std::nullopt; // PTエントリが存在しない場合は物理アドレスを返せない
     }
     return entry_to_phys(pt[pt_index(virtual_address)]) | (virtual_address & ~PAGE_MASK);
 }
@@ -171,14 +171,14 @@ uint64_t VirtualMemoryManager::create_address_space()
     uint64_t *new_pml4 = physical_to_virtual(new_pml4_phys);
     auto *current_pml4 = physical_to_virtual(pml4_phys_);
 
-    memset(new_pml4, 0, 512 * sizeof(uint64_t)); // 新しいPML4をゼロクリア
+    std::memset(new_pml4, 0, 512 * sizeof(uint64_t)); // 新しいPML4をゼロクリア
 
 
     // カーネル空間を共有:
     // PML4[0] : カーネルコード/データ(identity mapping)を共有
     // PML4[256..511] : 上位半分(将来のカーネル空間)を共有
     new_pml4[0] = current_pml4[0]; // カーネル空間のマッピングをコピー
-    memcpy(&new_pml4[256], &current_pml4[256], 256 * sizeof(uint64_t)); // カーネル空間のマッピングをコピー
+    std::memcpy(&new_pml4[256], &current_pml4[256], 256 * sizeof(uint64_t)); // カーネル空間のマッピングをコピー
     return new_pml4_phys;
 }
 

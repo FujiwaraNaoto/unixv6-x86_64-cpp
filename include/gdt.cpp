@@ -62,7 +62,7 @@ void initialize_gdt()
     set_entry(index_of(kUserCode), 0xFA, 0x20);   // User code segment P,S,E,RW+L=1
 
 
-    memset(&tss, 0, sizeof(TaskStateSegment));
+    std::memset(&tss, 0, sizeof(TaskStateSegment));
 
     tss.rsp[0]              = 0;
     tss.io_map_base_address = sizeof(TaskStateSegment);
