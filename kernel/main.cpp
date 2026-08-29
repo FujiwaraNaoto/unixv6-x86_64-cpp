@@ -13,6 +13,7 @@
 #include "keyboard.hpp"
 #include "gdt.hpp"
 #include "usermode.hpp"
+#include "virtioblock.hpp"
 
 // CRT 相当: リンカが .init_array に並べたグローバルコンストラクタを
 // 先頭から末尾まで順に呼ぶ。境界シンボルは kernel.ld で定義している。
@@ -405,6 +406,34 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]]
 
     process::create_process(parent_thread, "parent");
     process::yield();
+
+    if(VirtIOBlock::initialize()){
+        
+        vga::vga->set_color(Color::LightGreen, Color::Black);
+        vga::vga->puts("[VIRTIO] VirtIO Block Device initialized successfully\n");
+        vga::vga->set_color(Color::LightGrey, Color::Black);
+        static std::array<uint8_t, 512> buffer;
+        if(VirtIOBlock::read_block(0, buffer.data())){
+            vga::vga->set_color(Color::LightGreen, Color::Black);
+            vga::vga->puts("[VIRTIO] Read block 0 successfully\n");
+            vga::vga->set_color(Color::LightGrey, Color::Black);
+            vga::vga->puts("[VIRTIO] Block 0 data:\n");
+            vga::vga->set_color(Color::LightCyan, Color::Black);
+            for (size_t i = 0; i < buffer.size(); ++i) {
+                vga::vga->printf("%02x ", buffer[i]);
+                if ((i + 1) % 16 == 0) {
+                    vga::vga->puts("\n");
+                }
+            }
+            vga::vga->set_color(Color::LightGrey, Color::Black);
+        }
+
+    }else{
+        vga::vga->set_color(Color::LightRed, Color::Black);
+        vga::vga->puts("[VIRTIO] VirtIO Block Device initialization failed\n");
+        vga::vga->set_color(Color::LightGrey, Color::Black);
+    }
+
 
     while (1)
     {

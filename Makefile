@@ -41,8 +41,17 @@ OBJS     = $(ASM_OBJ) $(CPP_OBJ)
 KERNEL   = $(OBJ_DIR)/kernel.elf
 ISO      = unixv6.iso
 
+
+fs.img :
+	dd if=/dev/zero of=fs.img bs=512 count=2048
+	echo "HELLO VIRTIO BLOCK DEVICE" | dd of=fs.img conv=notrunc
+
 # 共通フラグ
-QEMU_COMMON    = -cdrom $(ISO) -boot d -m 128M -no-reboot -no-shutdown  -d int,cpu_reset -D qemu.log
+QEMU_COMMON    = -cdrom $(ISO) -boot d -m 128M -no-reboot -no-shutdown  -d int,cpu_reset -D qemu.log \
+				  -drive file=fs.img,format=raw,if=none,id=disk0 \
+				  -device virtio-blk-pci,drive=disk0,disable-modern=on
+
+
 
 # VSCode 等のターミナルに直結 (シリアル = 標準入出力)。終了は Ctrl-A X
 QEMU_TERM      = $(QEMU_COMMON) -nographic
