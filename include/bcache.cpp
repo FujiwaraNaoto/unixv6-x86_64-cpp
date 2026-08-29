@@ -48,7 +48,7 @@ bool write_back(Buffer *buffer)
 // キャッシュに有ればそれを、無ければ LRU 側の未使用バッファを再利用する。
 // 戻り値は refcnt を 1 増やした状態。再利用した場合は valid=false で返るので、
 // 呼び出し側がデバイスから読み込む責任を持つ。
-Buffer *acquire(uint32_t blockno)
+Buffer *find_or_recycle(uint32_t blockno)
 {
     // 1. 既にキャッシュに載っているか (MRU 側から探す)
     for (Buffer *b = head.next; b != &head; b = b->next)
@@ -123,7 +123,7 @@ Buffer *read(uint32_t blockno)
         return nullptr;
     }
 
-    Buffer *buffer = acquire(blockno);
+    Buffer *buffer = find_or_recycle(blockno);
     if (buffer == nullptr)
     {
         return nullptr;
@@ -193,6 +193,11 @@ void release(Buffer *buffer)
     // 誰も使わなくなったので「最近使った」側へ移し、追い出されにくくする
     unlink(buffer);
     link_as_most_recent(buffer);
+}
+
+BufferRef acquire(uint32_t blockno)
+{
+    return BufferRef{read(blockno)};
 }
 
 Statistics statistics()

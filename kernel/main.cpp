@@ -477,8 +477,8 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]]
                              static_cast<unsigned long long>(BLOCK_SIZE));
 
             // 1回目: キャッシュに無いのでデバイスを叩く (miss)
-            Buffer *block0 = bcache::read(0);
-            if (block0 != nullptr)
+            // BufferRef はスコープを抜けるときに自動で release() される
+            if (bcache::BufferRef block0 = bcache::acquire(0))
             {
                 vga::vga->set_color(Color::LightGreen, Color::Black);
                 vga::vga->puts("[BCACHE] ");
@@ -487,14 +487,29 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]]
                 vga::vga->set_color(Color::LightCyan, Color::Black);
                 hexdump(block0->data, BLOCK_SIZE);
                 vga::vga->set_color(Color::LightGrey, Color::Black);
-                bcache::release(block0);
+                block0.reset(); // 明示的に手放す (以降のスコープでも自動解放される)
 
                 // 2回目: 同じブロックなのでデバイスを叩かない (hit)
-                Buffer *again = bcache::read(0);
-                if (again != nullptr)
                 {
-                    bcache::release(again);
+                    bcache::BufferRef again = bcache::acquire(0);
                 }
+
+                // RAII が効いていることの確認:
+                // release 漏れがあれば NBUF 個を超えた時点で acquire が失敗する
+                bool no_leak = true;
+                for (int i = 0; i < NBUF * 4; i++)
+                {
+                    bcache::BufferRef probe = bcache::acquire(0);
+                    if (!probe)
+                    {
+                        no_leak = false;
+                        break;
+                    }
+                }
+                vga::vga->set_color(Color::LightGreen, Color::Black);
+                vga::vga->puts("[BCACHE] ");
+                vga::vga->set_color(Color::LightGrey, Color::Black);
+                vga::vga->printf("BufferRef leak test: %s\n", no_leak ? "OK" : "LEAKED");
 
                 const bcache::Statistics stats = bcache::statistics();
                 vga::vga->set_color(Color::LightGreen, Color::Black);
@@ -509,7 +524,7 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]]
             else
             {
                 vga::vga->set_color(Color::LightRed, Color::Black);
-                vga::vga->puts("[BCACHE] read(0) failed\n");
+                vga::vga->puts("[BCACHE] acquire(0) failed\n");
                 vga::vga->set_color(Color::LightGrey, Color::Black);
             }
         }

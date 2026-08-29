@@ -60,6 +60,90 @@ bool flush();
 // 参照を手放す。refcnt が 0 になったバッファは LRU の「最近使った」側へ移る。
 void release(Buffer *buffer);
 
+// read() で取得した参照を、スコープを抜けるときに自動で release() する RAII ガード。
+// release() の呼び忘れはバッファを枯渇させる (acquire が nullptr を返すようになる)
+// ので、上位層では生の read()/release() ではなくこちらを使う。
+//
+//   if (auto block = bcache::acquire(blockno))
+//   {
+//       block->data[0] = 0xFF;
+//       block.mark_dirty();
+//   } // ここで自動的に release される
+//
+// コピーすると解放が二重になるのでコピー禁止、受け渡し用にムーブのみ許可する。
+class BufferRef final
+{
+  public:
+    BufferRef() = default;
+    explicit BufferRef(Buffer *buffer) : buffer_(buffer) { }
+    ~BufferRef()
+    {
+        reset();
+    }
+
+    BufferRef(const BufferRef &)            = delete;
+    BufferRef &operator=(const BufferRef &) = delete;
+
+    BufferRef(BufferRef &&other) noexcept : buffer_(other.buffer_)
+    {
+        other.buffer_ = nullptr;
+    }
+    BufferRef &operator=(BufferRef &&other) noexcept
+    {
+        if (this != &other)
+        {
+            reset();
+            buffer_       = other.buffer_;
+            other.buffer_ = nullptr;
+        }
+        return *this;
+    }
+
+    // 取得に成功したかどうか。if (auto b = acquire(n)) と書ける。
+    explicit operator bool() const
+    {
+        return buffer_ != nullptr;
+    }
+
+    Buffer *get() const
+    {
+        return buffer_;
+    }
+    Buffer *operator->() const
+    {
+        return buffer_;
+    }
+    Buffer &operator*() const
+    {
+        return *buffer_;
+    }
+
+    void mark_dirty()
+    {
+        bcache::mark_dirty(buffer_);
+    }
+    bool write()
+    {
+        return bcache::write(buffer_);
+    }
+
+    // スコープを抜ける前に明示的に手放したいときに使う。
+    void reset()
+    {
+        if (buffer_ != nullptr)
+        {
+            bcache::release(buffer_);
+            buffer_ = nullptr;
+        }
+    }
+
+  private:
+    Buffer *buffer_ = nullptr;
+};
+
+// read() の RAII 版。失敗時は空の BufferRef (operator bool が false) を返す。
+BufferRef acquire(uint32_t blockno);
+
 // キャッシュの効き具合を確認するための統計。
 struct Statistics
 {
