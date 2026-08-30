@@ -324,7 +324,7 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]]
     //       直接 syscall を撃つことはできない (sysret が CPL=3 を強制し、
     //       カーネルコードページに User 権限がないため #PF→#DF→トリプルフォルト
     //       になる)。実際の syscall テストは下の user_program (リング3) で行う。
-    syscall::init();
+    Syscall::init();
 
     // // カーネルから syscall 命令を直接テスト (リング0→0)
     //     const char msg[] = "Hello from syscall!\n";
