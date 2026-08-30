@@ -15,7 +15,7 @@
 #include "gdt.hpp"
 #include "usermode.hpp"
 #include "virtioblock.hpp"
-#include "bcache.hpp"
+#include "buffer_cache.hpp"
 
 // CRT 相当: リンカが .init_array に並べたグローバルコンストラクタを
 // 先頭から末尾まで順に呼ぶ。境界シンボルは kernel.ld で定義している。
@@ -463,9 +463,9 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]]
         vga::vga->set_color(Color::LightGrey, Color::Black);
 
         // バッファキャッシュ層をこのドライバの上に載せる。
-        // 以降ブロックアクセスは bcache 経由で行い、上位層 (inode) からは
+        // 以降ブロックアクセスは BufferCache 経由で行い、上位層 (inode) からは
         // どのドライバかを見えなくする。
-        if (bcache::initialize(bcache::BlockDevice{
+        if (BufferCache::initialize(BufferCache::BlockDevice{
                 .read_block  = &VirtIOBlock::read_block,
                 .write_block = &VirtIOBlock::write_block,
             }))
@@ -479,7 +479,7 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]]
 
             // 1回目: キャッシュに無いのでデバイスを叩く (miss)
             // BufferRef はスコープを抜けるときに自動で release() される
-            if (bcache::BufferRef block0 = bcache::acquire(0))
+            if (BufferCache::BufferRef block0 = BufferCache::acquire(0))
             {
                 vga::vga->set_color(Color::LightGreen, Color::Black);
                 vga::vga->puts("[BCACHE] ");
@@ -492,7 +492,7 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]]
 
                 // 2回目: 同じブロックなのでデバイスを叩かない (hit)
                 {
-                    bcache::BufferRef again = bcache::acquire(0);
+                    BufferCache::BufferRef again = BufferCache::acquire(0);
                 }
 
                 // RAII が効いていることの確認:
@@ -500,7 +500,7 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]]
                 bool no_leak = true;
                 for (int i = 0; i < NBUF * 4; i++)
                 {
-                    bcache::BufferRef probe = bcache::acquire(0);
+                    BufferCache::BufferRef probe = BufferCache::acquire(0);
                     if (!probe)
                     {
                         no_leak = false;
@@ -512,7 +512,7 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]]
                 vga::vga->set_color(Color::LightGrey, Color::Black);
                 vga::vga->printf("BufferRef leak test: %s\n", no_leak ? "OK" : "LEAKED");
 
-                const bcache::Statistics stats = bcache::statistics();
+                const BufferCache::Statistics stats = BufferCache::statistics();
                 vga::vga->set_color(Color::LightGreen, Color::Black);
                 vga::vga->puts("[BCACHE] ");
                 vga::vga->set_color(Color::LightGrey, Color::Black);

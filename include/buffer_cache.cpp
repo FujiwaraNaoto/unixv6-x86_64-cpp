@@ -1,4 +1,4 @@
-#include "bcache.hpp"
+#include "buffer_cache.hpp"
 
 namespace
 {
@@ -11,10 +11,10 @@ Buffer buffers[NBUF];
 // 再利用はこの LRU 側から探す。
 Buffer head;
 
-bcache::BlockDevice device{}; // 未初期化状態では両方 nullptr
+BufferCache::BlockDevice device{}; // 未初期化状態では両方 nullptr
 bool initialized = false;
 
-bcache::Statistics stats{0, 0, 0, 0};
+BufferCache::Statistics stats{0, 0, 0, 0};
 
 // buffer をリストから外す
 void unlink(Buffer *buffer)
@@ -89,7 +89,7 @@ Buffer *find_or_recycle(uint32_t blockno)
 
 } // namespace
 
-namespace bcache
+namespace BufferCache
 {
 
 bool initialize(const BlockDevice &block_device)
@@ -205,4 +205,4 @@ Statistics statistics()
     return stats;
 }
 
-} // namespace bcache
+} // namespace BufferCache
