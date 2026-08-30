@@ -14,7 +14,7 @@ Buffer head;
 BufferCache::BlockDevice device{}; // 未初期化状態では両方 nullptr
 bool initialized = false;
 
-BufferCache::Statistics stats{0, 0, 0, 0};
+BufferCache::Statistics stats{.hits = 0, .misses = 0, .writebacks = 0, .evictions = 0};
 
 // buffer をリストから外す
 void unlink(Buffer *buffer)
@@ -111,7 +111,7 @@ bool initialize(const BlockDevice &block_device)
         link_as_most_recent(&buffer);
     }
 
-    stats       = Statistics{0, 0, 0, 0};
+    stats       = Statistics{.hits = 0, .misses = 0, .writebacks = 0, .evictions = 0};
     initialized = true;
     return true;
 }
