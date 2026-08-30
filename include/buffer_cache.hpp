@@ -1,5 +1,5 @@
-#ifndef BCACHE_HPP
-#define BCACHE_HPP
+#ifndef BUFFER_CACHE_HPP
+#define BUFFER_CACHE_HPP
 
 #include <cstdint>
 #include <cstddef>
@@ -10,7 +10,7 @@
 //   2. 上位層 (inode 層) に対して統一されたブロックアクセス API を提供する
 //
 // 位置づけ:
-//   inode 層  ←→  bcache (ここ)  ←→  ブロックデバイス (virtio-blk 等)
+//   inode 層  ←→  BufferCache (ここ)  ←→  ブロックデバイス (virtio-blk 等)
 //
 // 前提: このカーネルのスケジューラは協調型 (タイマ割り込みからは yield しない)
 //       なので、ロックを持たない。プリエンプティブにする際は xv6 同様に
@@ -29,7 +29,7 @@ struct Buffer
     uint8_t data[BLOCK_SIZE]; // ブロックの中身
 };
 
-namespace bcache
+namespace BufferCache
 {
 
 // 下位のブロックデバイス。特定のドライバに依存しないよう関数で受け取る。
@@ -64,7 +64,7 @@ void release(Buffer *buffer);
 // release() の呼び忘れはバッファを枯渇させる (acquire が nullptr を返すようになる)
 // ので、上位層では生の read()/release() ではなくこちらを使う。
 //
-//   if (auto block = bcache::acquire(blockno))
+//   if (auto block = BufferCache::acquire(blockno))
 //   {
 //       block->data[0] = 0xFF;
 //       block.mark_dirty();
@@ -120,11 +120,11 @@ class BufferRef final
 
     void mark_dirty()
     {
-        bcache::mark_dirty(buffer_);
+        BufferCache::mark_dirty(buffer_);
     }
     bool write()
     {
-        return bcache::write(buffer_);
+        return BufferCache::write(buffer_);
     }
 
     // スコープを抜ける前に明示的に手放したいときに使う。
@@ -132,7 +132,7 @@ class BufferRef final
     {
         if (buffer_ != nullptr)
         {
-            bcache::release(buffer_);
+            BufferCache::release(buffer_);
             buffer_ = nullptr;
         }
     }
@@ -154,6 +154,6 @@ struct Statistics
 };
 Statistics statistics();
 
-} // namespace bcache
+} // namespace BufferCache
 
-#endif // BCACHE_HPP
+#endif // BUFFER_CACHE_HPP
