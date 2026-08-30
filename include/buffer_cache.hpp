@@ -40,8 +40,33 @@ struct BlockDevice
     bool (*write_block)(uint64_t blockno, const uint8_t *buffer);
 };
 
-// キャッシュを初期化する。device の関数ポインタが両方揃っていなければ false。
-bool initialize(const BlockDevice &device);
+// バッファキャッシュの初期化を担うクラス。
+// コンストラクタが従来の initialize() 相当 (LRU リストの構築とデバイスの登録) を
+// 行う。状態自体は buffer_cache.cpp のモジュール内 static が持ち、acquire() /
+// release() などはフリー関数としてそれを操作する
+// (process::ProcessManager と同じ形)。
+//
+// 実体は 1 バイトの空クラスで、15.9KiB のバッファ配列は .bss に置いたままなので
+// スタックに置いて構わない。インスタンスは以降の全アクセスより長生きさせること。
+class Manager final
+{
+  public:
+    explicit Manager(const BlockDevice &device);
+
+    // 初期化に成功したか。device の関数ポインタが揃っていなければ false。
+    // (コンストラクタは値を返せず、-fno-exceptions なので送出もできないため
+    //  この形で結果を受け取る)
+    //
+    // このフラグを見るのはここだけ。acquire()/write()/flush() は未初期化でも
+    // 安全に空振りするので、呼び出しごとの初期化済み判定は持たない。
+    bool valid() const
+    {
+        return valid_;
+    }
+
+  private:
+    bool valid_ = false;
+};
 
 // ブロックを取得する。キャッシュに無ければデバイスから読み込む。
 // 戻り値は参照カウントを 1 増やした状態のバッファ。失敗時は nullptr。

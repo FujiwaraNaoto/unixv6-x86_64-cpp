@@ -9,12 +9,23 @@ Buffer buffers[NBUF];
 //   head.next … 最近使ったバッファ (MRU)
 //   head.prev … 最も長く使っていないバッファ (LRU)
 // 再利用はこの LRU 側から探す。
-Buffer head;
+//
+// 静的初期化の時点で自分自身を指す = 「空のリスト」にしておく。こうすると
+// Manager を作る前に acquire() が呼ばれても、リスト走査が空振りして nullptr が
+// 返るだけで済む。各関数で初期化済みフラグを見る必要が無くなる。
+// (自身のアドレスは定数式なので .init_array ではなく .data に畳まれる)
+Buffer head = {
+    .blockno = 0,
+    .valid   = false,
+    .dirty   = false,
+    .refcnt  = 0,
+    .prev    = &head,
+    .next    = &head,
+    .data    = {},
+};
 
 BufferCache::BlockDevice device{}; // 未初期化状態では両方 nullptr
-bool initialized = false;
-
-BufferCache::Statistics stats{.hits = 0, .misses = 0, .writebacks = 0, .evictions = 0};
+BufferCache::Statistics stats{.hits = 0, .misses = 0, .evictions = 0, .writebacks = 0};
 
 // buffer をリストから外す
 void unlink(Buffer *buffer)
@@ -92,11 +103,11 @@ Buffer *find_or_recycle(uint32_t blockno)
 namespace BufferCache
 {
 
-bool initialize(const BlockDevice &block_device)
+Manager::Manager(const BlockDevice &block_device)
 {
     if (block_device.read_block == nullptr || block_device.write_block == nullptr)
     {
-        return false;
+        return; // valid_ は false のまま
     }
     device = block_device;
 
@@ -111,18 +122,12 @@ bool initialize(const BlockDevice &block_device)
         link_as_most_recent(&buffer);
     }
 
-    stats       = Statistics{.hits = 0, .misses = 0, .writebacks = 0, .evictions = 0};
-    initialized = true;
-    return true;
+    stats  = Statistics{.hits = 0, .misses = 0, .evictions = 0, .writebacks = 0};
+    valid_ = true;
 }
 
 Buffer *read(uint32_t blockno)
 {
-    if (!initialized)
-    {
-        return nullptr;
-    }
-
     Buffer *buffer = find_or_recycle(blockno);
     if (buffer == nullptr)
     {
@@ -156,7 +161,8 @@ void mark_dirty(Buffer *buffer)
 
 bool write(Buffer *buffer)
 {
-    if (!initialized || buffer == nullptr || !buffer->valid)
+    // 未初期化なら有効なバッファは1つも存在しないので、この判定だけで足りる
+    if (buffer == nullptr || !buffer->valid)
     {
         return false;
     }
@@ -165,10 +171,7 @@ bool write(Buffer *buffer)
 
 bool flush()
 {
-    if (!initialized)
-    {
-        return false;
-    }
+    // 未初期化なら valid なバッファが無いので、そのまま空振りして true が返る
     bool all_succeeded = true;
     for (Buffer &buffer : buffers)
     {

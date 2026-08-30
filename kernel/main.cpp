@@ -464,10 +464,13 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]]
         // バッファキャッシュ層をこのドライバの上に載せる。
         // 以降ブロックアクセスは BufferCache 経由で行い、上位層 (inode) からは
         // どのドライバかを見えなくする。
-        if (BufferCache::initialize(BufferCache::BlockDevice{
-                .read_block  = &VirtIOBlock::read_block,
-                .write_block = &VirtIOBlock::write_block,
-            }))
+        // コンストラクタが初期化を行う。kernel_main は返らないので、この
+        // インスタンスは以降の全アクセスより長生きする。
+        BufferCache::Manager buffer_cache(BufferCache::BlockDevice{
+            .read_block  = &VirtIOBlock::read_block,
+            .write_block = &VirtIOBlock::write_block,
+        });
+        if (buffer_cache.valid())
         {
             vga::vga->set_color(Color::LightGreen, Color::Black);
             vga::vga->puts("[BCACHE] ");
