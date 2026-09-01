@@ -74,9 +74,19 @@ void VGA::scroll()
     row_ = HEIGHT - 1;
 }
 
-void VGA::putchar(char c)
+// バイト列をまとめて出力する。シリアルへのミラーは 1 回で済ませ、
+// 画面側は 1 文字ずつ put() に流す。
+void VGA::write(const char *s, size_t n)
 {
-    serial::serial.putchar(c); // 端末確認用にシリアルへもミラー出力
+    serial::serial.write(s, n); // 端末確認用にシリアルへもミラー出力
+    for (size_t i = 0; i < n; i++)
+    {
+        put(s[i]);
+    }
+}
+
+void VGA::put(char c)
+{
     auto b = buffer();
     if (c == '\n')
     {
@@ -122,12 +132,6 @@ void VGA::putchar(char c)
         }
     }
     move_cursor();
-}
-
-void VGA::puts(const char *s)
-{
-    while (*s)
-        putchar(*s++);
 }
 
 } // namespace vga

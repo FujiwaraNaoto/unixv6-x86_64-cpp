@@ -31,12 +31,11 @@ class VGA : public IConsole
 
   public:
     VGA();
-    void putchar(char c) override;
-    void puts(const char *s) override;
-    // printf / print_uint は IConsole が putchar()/puts() を使って実装している
+    void write(const char *s, size_t n) override;
     void set_color(Color fg, Color bg);
 
   private:
+    void put(char c); // 1文字を画面に反映する (カーソル移動・スクロール込み)
     static uint8_t make_attr(Color fg, Color bg);
     static uint16_t make_entry(char c, uint8_t attr);
 
