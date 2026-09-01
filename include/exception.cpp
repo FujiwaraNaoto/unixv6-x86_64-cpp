@@ -48,7 +48,8 @@ void isr_common_handler(register_state_t *regs)
     }
 
     vga::vga->printf("RIP: 0x%016lx, CS=0x%016lx, RFLAGS=0x%016lx\n", regs->rip, regs->cs, regs->rflags);
-    vga::vga->printf("RSP: 0x%016lx, SS=0x%016lx, ERR=0x%lx, INT=%lu\n", regs->rsp, regs->ss, regs->err_code, regs->int_no);
+    vga::vga->printf(
+        "RSP: 0x%016lx, SS=0x%016lx, ERR=0x%lx, INT=%lu\n", regs->rsp, regs->ss, regs->err_code, regs->int_no);
     while (1)
     {
         asm volatile("hlt");
