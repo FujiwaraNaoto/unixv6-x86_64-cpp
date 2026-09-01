@@ -56,6 +56,17 @@ extern "C"
         return dest;
     }
 
+    // IConsole::puts() の __builtin_strlen が -fno-builtin 下で呼び出しを生成する。
+    std::size_t strlen(const char *s)
+    {
+        const char *p = s;
+        while (*p != '\0')
+        {
+            p++;
+        }
+        return static_cast<std::size_t>(p - s);
+    }
+
     // 領域が重なる場合も正しく動くコピー。
     // dest が src より後ろにあるときだけ後方から写す。
     void *memmove(void *dest, const void *src, std::size_t count)
