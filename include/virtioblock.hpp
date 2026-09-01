@@ -59,6 +59,9 @@ using PhysicalAddressResolver = std::optional<uint64_t> (*)(const void *virtual_
 // resolve_physical は初期化中にのみ呼ばれる。DMA バッファの物理アドレスは
 // ここで解決してドライバ内に保持するので、以降の read/write では使わない。
 bool initialize(PhysicalAddressResolver resolve_physical);
+// デバイスの容量 (512バイトセクタ数)。初期化前は 0。
+uint64_t capacity();
+
 bool read_block(uint64_t sector, uint8_t *buffer);
 bool write_block(uint64_t sector, const uint8_t *buffer);
 } // namespace VirtIOBlock

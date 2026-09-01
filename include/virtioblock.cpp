@@ -17,6 +17,9 @@ constexpr uint16_t REG_QUEUE_SIZE      = 0x0C;
 constexpr uint16_t REG_QUEUE_SELECT    = 0x0E;
 constexpr uint16_t REG_QUEUE_NOTIFY    = 0x10;
 constexpr uint16_t REG_DEVICE_STATUS   = 0x12;
+// legacy virtio ではデバイス固有 config がヘッダ (20バイト) の直後から始まる。
+// virtio-blk の先頭フィールドは capacity (512バイトセクタ数, u64)。
+constexpr uint16_t REG_CONFIG_CAPACITY = 0x14;
 
 // ─── ステータスビット ────────────────────────────────────────────
 // NOTE: FEATURES_OK (0x08) は virtio 1.0 以降のみ。legacy では使わない。
@@ -231,6 +234,18 @@ static bool do_request(uint32_t type, uint64_t sector)
     return status_byte == 0;
 }
 
+
+uint64_t capacity()
+{
+    if (!ready)
+    {
+        return 0;
+    }
+    // 32bit ずつ 2 回に分けて読む (I/O 空間は最大 32bit 幅)
+    const uint64_t low  = io::in32b(port(REG_CONFIG_CAPACITY));
+    const uint64_t high = io::in32b(port(REG_CONFIG_CAPACITY + 4));
+    return (high << 32) | low;
+}
 
 bool read_block(uint64_t sector, uint8_t *buf)
 {
