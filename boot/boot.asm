@@ -229,6 +229,33 @@ higher_half_entry:
     ; スタックを高位アドレスに切り替え
     mov rsp, stack_top            ; 高位アドレス (リンカ値そのまま)
 
+    ; ─── GDTR を高位アドレス版へ張り替える ───
+    ; ブート時は lgdt [gdt64_ptr_phys] で「物理(低位)アドレス」を GDTR に
+    ; 入れてある。GDTR に入るのは linear address なので、低位マップを外すと
+    ; CPU が GDT を読めなくなる (割り込みの CS ロードで #PF → #DF → トリプル
+    ; フォルト)。gdt64_ptr の base はリンカが高位アドレスを埋めているので、
+    ; identity map を消す前にこちらへ差し替えておく。
+    ; セグメントの中身は同じなので、CS/SS の再ロードは不要。
+    mov rax, gdt64_ptr
+    lgdt [rax]
+
+    ; ─── 低位 identity map (PML4[0]) の撤去 ───
+    ; RIP もスタックも高位に移った時点で、低位マップを使う物はもう無い。
+    ;   - カーネルのコード/データ/スタック : 高位マップ (PML4[511])
+    ;   - 物理メモリ (ページテーブル, VGA, multiboot情報) : direct map (PML4[256])
+    ; 残したままだと、低位VA はユーザ空間として使う領域なのに
+    ; カーネルの物理 0-2MiB が User=0 で見えてしまい、
+    ; プロセスごとの PML4[0] 分離も NULL 参照の検出もできない。
+    ;
+    ; pml4_table は .bss (物理 0-2MiB 内) にあるので高位マップ経由で書ける。
+    ; mov r64, imm64 でリンカが埋めた高位アドレスを使う。
+    mov rax, pml4_table
+    mov qword [rax], 0
+
+    ; CR3 を再ロードして、低位マップの TLB エントリを捨てる
+    mov rax, cr3
+    mov cr3, rax
+
     ; Multiboot情報のポインタは物理 (低位) なので、
     ; そのまま kernel_main に渡す (kernel_main側でdirect map経由で読む)
     ; edi/esi は _start で保存済み
