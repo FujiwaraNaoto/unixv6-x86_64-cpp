@@ -181,7 +181,7 @@ bool format(uint32_t total_blocks, IConsole *console)
 
     // ④ ルートディレクトリ (inum = ROOTINO) を作る
     DiskInode root{};
-    root.type  = T_DIR;
+    root.type  = InodeType::kDirectory;
     root.nlink = 1;
     root.size  = 0;
 

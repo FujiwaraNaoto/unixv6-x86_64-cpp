@@ -11,10 +11,17 @@ constexpr int MAXFILE           = NDIRECT + NINDIRECT;             // 140ブロ�
 constexpr int DIRSIZ            = 14;                              // ファイル名長 (V6と同じ)
 constexpr uint32_t ROOTINO      = 1;                               // ルートの inode 番号
 
-// inode の種類
-constexpr uint16_t T_UNUSED = 0;
-constexpr uint16_t T_DIR    = 1;
-constexpr uint16_t T_FILE   = 2;
+// inode の種類。
+// ディスク上の DiskInode::type にそのまま格納されるので、基底型を uint16_t に
+// 固定してレイアウトを保つ。固定基底型の enum は基底型の範囲すべてが有効な値
+// なので、壊れたディスクから読んだ未知の値を保持しても未定義動作にはならない
+// (その代わり switch には default が要る)。
+enum class InodeType : uint16_t
+{
+    kUnused    = 0,
+    kDirectory = 1,
+    kFile      = 2,
+};
 // ─── スーパーブロック (ブロック1) ────────────────────────────────
 struct SuperBlock
 {
@@ -28,7 +35,7 @@ struct SuperBlock
 // ─── ディスク上の inode (64バイト) ───────────────────────────────
 struct DiskInode
 {
-    uint16_t type;
+    InodeType type;
     uint16_t major;
     uint16_t minor;
     uint16_t nlink;
