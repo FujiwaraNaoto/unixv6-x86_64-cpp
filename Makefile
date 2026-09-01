@@ -39,7 +39,7 @@ KERNEL   = $(OBJ_DIR)/kernel.elf
 ISO      = unixv6.iso
 
 # 共通フラグ
-QEMU_COMMON    = -cdrom $(ISO) -boot d -m 128M -no-reboot -no-shutdown
+QEMU_COMMON    = -cdrom $(ISO) -boot d -m 128M -no-reboot -no-shutdown  -d int,cpu_reset -D qemu.log
 
 # VSCode 等のターミナルに直結 (シリアル = 標準入出力)。終了は Ctrl-A X
 QEMU_TERM      = $(QEMU_COMMON) -nographic
@@ -101,7 +101,7 @@ $(ISO): $(KERNEL)
 	@echo ">>> ISO ready: $@"
 
 clean:
-	rm -rf $(OBJ_DIR) iso $(ISO)
+	rm -rf $(OBJ_DIR) iso $(ISO) qemu.log serial.log
 
 format:
 	@echo "[format] Running clang-format..."

@@ -1,24 +1,28 @@
 /* kernel.ld - x86-64 カーネル リンカスクリプト
  *
  * GRUB は 1MiB 以降の物理アドレスにカーネルをロードする。
- * ここでは 1MiB (0x100000) を基点にリンクする。
  */
 
 OUTPUT_FORMAT(elf64-x86-64)
 OUTPUT_ARCH(i386:x86-64)
 ENTRY(_start)
 
-SECTIONS {
-    /* load address: 1 MiB */
-    . = 0x100000;
+/* 高位仮想アドレスのベース (物理 + このオフセット = 仮想) */
+KERNEL_VMA = 0xFFFFFFFF80000000;
+KERNEL_LMA = 0x100000;              /* 物理ロードアドレス (1MiB) */
 
-    /* Multiboot2 ヘッダは先頭に必ず置く (8KiB 以内) */
-    .multiboot2 : {
+
+SECTIONS {
+    /* 仮想アドレスは高位、物理ロードは低位 (AT で指定) */
+    . = KERNEL_VMA + KERNEL_LMA;
+
+    /* Multiboot2ヘッダは物理低位に置く必要がある (GRUBが探すため) */
+    .multiboot2 : AT(KERNEL_LMA) {
         *(.multiboot2)
     }
 
     /* コードセクション */
-    .text ALIGN(4096) : {
+    .text ALIGN(4096) : AT(ADDR(.text) - KERNEL_VMA) {
         *(.text)
         *(.text.*)
     }
@@ -28,13 +32,13 @@ SECTIONS {
     }
 
     /* 読み取り専用データ (GDT など) */
-    .rodata ALIGN(4096) : {
+    .rodata ALIGN(4096) : AT(ADDR(.rodata) - KERNEL_VMA) {
         *(.rodata)
         *(.rodata.*)
     }
 
     /* 初期化済みデータ */
-    .data ALIGN(4096) : {
+    .data ALIGN(4096) : AT(ADDR(.data) - KERNEL_VMA) {
         *(.data)
         *(.data.*)
     }
@@ -48,7 +52,7 @@ SECTIONS {
     }
 
     /* 未初期化データ (ページテーブル, スタックなど) */
-    .bss ALIGN(4096) : {
+    .bss ALIGN(4096) : AT(ADDR(.bss) - KERNEL_VMA) {
         *(COMMON)
         *(.bss)
         *(.bss.*)
@@ -56,4 +60,7 @@ SECTIONS {
 
     /* カーネル終端シンボル */
     kernel_end = .;
+
+    /* 物理アドレスでのカーネル終端 (pmm用) */
+    kernel_phys_end = kernel_end - KERNEL_VMA;
 }
