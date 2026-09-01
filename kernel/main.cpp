@@ -16,6 +16,7 @@
 #include "usermode.hpp"
 #include "virtioblock.hpp"
 #include "buffer_cache.hpp"
+#include "file_system.hpp"
 
 // CRT 相当: リンカが .init_array に並べたグローバルコンストラクタを
 // 先頭から末尾まで順に呼ぶ。境界シンボルは kernel.ld で定義している。
@@ -195,14 +196,12 @@ static void hexdump(const uint8_t *data, size_t size)
     {
         const size_t line_length = (size - offset < COLUMNS) ? (size - offset) : COLUMNS;
 
-        // 自前 printf の可変長引数は unsigned long long として取り出されるので、
-        // 呼び出し側で 64bit に揃えておく。
-        vga::vga->printf("%04x: ", static_cast<unsigned long long>(offset));
+        vga::vga->printf("%04zx: ", offset);
 
         for (size_t i = 0; i < COLUMNS; i++)
         {
             if (i < line_length)
-                vga::vga->printf("%02x ", static_cast<unsigned long long>(data[offset + i]));
+                vga::vga->printf("%02x ", static_cast<unsigned>(data[offset + i]));
             else
                 vga::vga->puts("   ");
         }
@@ -298,7 +297,7 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]]
         vga::vga->set_color(Color::LightGreen, Color::Black);
         vga::vga->puts("[SBRK] ");
         vga::vga->set_color(Color::LightGrey, Color::Black);
-        vga::vga->printf("brk before=0x%016x  returned=0x%016x  now=0x%016x\n",
+        vga::vga->printf("brk before=0x%016lx  returned=0x%016lx  now=0x%016lx\n",
                          reinterpret_cast<uintptr_t>(brk0),
                          reinterpret_cast<uintptr_t>(brk1),
                          reinterpret_cast<uintptr_t>(heap::heap_ptr->sbrk(0)));
@@ -312,7 +311,7 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]]
         vga::vga->set_color(Color::LightGreen, Color::Black);
         vga::vga->puts("[HEAP] ");
         vga::vga->set_color(Color::LightGrey, Color::Black);
-        vga::vga->printf("p1=0x%016x p2=0x%016x p3=0x%016x p4=0x%016x reuse=%s\n",
+        vga::vga->printf("p1=0x%016lx p2=0x%016lx p3=0x%016lx p4=0x%016lx reuse=%s\n",
                          reinterpret_cast<uintptr_t>(p1),
                          reinterpret_cast<uintptr_t>(p2),
                          reinterpret_cast<uintptr_t>(p3),
@@ -476,7 +475,7 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]]
             vga::vga->set_color(Color::LightGreen, Color::Black);
             vga::vga->puts("[BCACHE] ");
             vga::vga->set_color(Color::LightGrey, Color::Black);
-            vga::vga->printf("initialized: %u buffers x %u bytes\n",
+            vga::vga->printf("initialized: %llu buffers x %llu bytes\n",
                              static_cast<unsigned long long>(NBUF),
                              static_cast<unsigned long long>(BLOCK_SIZE));
 
@@ -519,11 +518,43 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]]
                 vga::vga->set_color(Color::LightGreen, Color::Black);
                 vga::vga->puts("[BCACHE] ");
                 vga::vga->set_color(Color::LightGrey, Color::Black);
-                vga::vga->printf("hits=%u misses=%u evictions=%u writebacks=%u\n",
+                vga::vga->printf("hits=%llu misses=%llu evictions=%llu writebacks=%llu\n",
                                  static_cast<unsigned long long>(stats.hits),
                                  static_cast<unsigned long long>(stats.misses),
                                  static_cast<unsigned long long>(stats.evictions),
                                  static_cast<unsigned long long>(stats.writebacks));
+
+                // ─── ファイルシステム層 ───
+                // 全ブロック数はデバイスの容量から取る (fs.img のサイズに追従する)。
+                // 出力先は注入で渡す。ここを &serial::serial にすれば画面に出さずに
+                // シリアルだけに出せる。
+                const uint64_t total_blocks = VirtIOBlock::capacity();
+                vga::vga->set_color(Color::LightGreen, Color::Black);
+                vga::vga->puts("[FS]   ");
+                vga::vga->set_color(Color::LightGrey, Color::Black);
+                vga::vga->printf("device capacity: %llu blocks (%llu bytes)\n",
+                                 static_cast<unsigned long long>(total_blocks),
+                                 static_cast<unsigned long long>(total_blocks * BLOCK_SIZE));
+
+                FileSystem::Manager file_system(static_cast<uint32_t>(total_blocks), vga::vga);
+                if (file_system.valid())
+                {
+                    const SuperBlock &sb = FileSystem::superblock();
+                    vga::vga->set_color(Color::LightGreen, Color::Black);
+                    vga::vga->puts("[FS]   ");
+                    vga::vga->set_color(Color::LightGrey, Color::Black);
+                    vga::vga->printf("ready: ninodes=%llu nblocks=%llu inodestart=%llu bmapstart=%llu\n",
+                                     static_cast<unsigned long long>(sb.ninodes),
+                                     static_cast<unsigned long long>(sb.nblocks),
+                                     static_cast<unsigned long long>(sb.inodestart),
+                                     static_cast<unsigned long long>(sb.bmapstart));
+                }
+                else
+                {
+                    vga::vga->set_color(Color::LightRed, Color::Black);
+                    vga::vga->puts("[FS]   filesystem initialization failed\n");
+                    vga::vga->set_color(Color::LightGrey, Color::Black);
+                }
             }
             else
             {
