@@ -1,11 +1,19 @@
 #include "file_system.hpp"
 #include "buffer_cache.hpp"
-#include "vga.hpp"
+#include "console.hpp"
 
 namespace
 {
 
 SuperBlock superblock_state{};
+
+// console が渡されなかったときの出力先 (何もしない)
+NullConsole null_console;
+
+IConsole *console_or_null_object(IConsole *console)
+{
+    return console != nullptr ? console : &null_console;
+}
 
 // ブロックをゼロで埋めて即座に書き戻す
 bool zero_block(uint32_t blockno)
@@ -43,7 +51,7 @@ bool write_inode(uint32_t inum, const DiskInode &inode)
     {
         return false;
     }
-    auto *entries = reinterpret_cast<DiskInode *>(block->data);
+    auto *entries       = reinterpret_cast<DiskInode *>(block->data);
     entries[inum % IPB] = inode;
     return block.write();
 }
@@ -68,7 +76,7 @@ bool add_root_entry(DiskInode &root, uint32_t inum, const char *name)
     }
 
     auto *entries = reinterpret_cast<DirEntry *>(block->data);
-    int   capacity = BLOCK_SIZE / sizeof(DirEntry);
+    int capacity  = BLOCK_SIZE / sizeof(DirEntry);
 
     for (int i = 0; i < capacity; i++)
     {
@@ -78,7 +86,7 @@ bool add_root_entry(DiskInode &root, uint32_t inum, const char *name)
         }
 
         entries[i].inum = static_cast<uint16_t>(inum);
-        int j = 0;
+        int j           = 0;
         for (; j < DIRSIZ && name[j] != '\0'; j++)
         {
             entries[i].name[j] = name[j];
@@ -112,7 +120,7 @@ bool load_superblock()
 }
 
 // ディスクをフォーマットする
-bool format(uint32_t total_blocks)
+bool format(uint32_t total_blocks, IConsole *console)
 {
     constexpr uint32_t NINODES = 200;
 
@@ -125,15 +133,15 @@ bool format(uint32_t total_blocks)
     superblock_state.inodestart = 2; // 0=boot, 1=super
     superblock_state.bmapstart  = superblock_state.inodestart + inode_blocks;
 
-    uint32_t data_start = superblock_state.bmapstart + bitmap_blocks;
-    superblock_state.nblocks    = total_blocks - data_start;
+    uint32_t data_start      = superblock_state.bmapstart + bitmap_blocks;
+    superblock_state.nblocks = total_blocks - data_start;
 
-    vga::vga->set_color(Color::Yellow, Color::Black);
-    vga::vga->puts("[FS]   ");
-    vga::vga->set_color(Color::LightGrey, Color::Black);
-    vga::vga->printf("formatting: size=%u inodestart=%u bmapstart=%u datastart=%u\n",
-                     superblock_state.size, superblock_state.inodestart,
-                     superblock_state.bmapstart, data_start);
+    console->puts("[FS]   ");
+    console->printf("formatting: size=%u inodestart=%u bmapstart=%u datastart=%u\n",
+                    superblock_state.size,
+                    superblock_state.inodestart,
+                    superblock_state.bmapstart,
+                    data_start);
 
     // ① inode 領域とビットマップをゼロクリア
     for (uint32_t b = superblock_state.inodestart; b < data_start; b++)
@@ -189,10 +197,8 @@ bool format(uint32_t total_blocks)
     {
         return false;
     }
-    vga::vga->set_color(Color::LightGreen, Color::Black);
-    vga::vga->puts("[FS]   ");
-    vga::vga->set_color(Color::LightGrey, Color::Black);
-    vga::vga->printf("format done, root inode created (size=%u)\n", root.size);
+    console->puts("[FS]   ");
+    console->printf("format done, root inode created (size=%u)\n", root.size);
     return true;
 }
 
@@ -201,27 +207,25 @@ bool format(uint32_t total_blocks)
 namespace FileSystem
 {
 
-Manager::Manager(uint32_t total_blocks)
+Manager::Manager(uint32_t total_blocks, IConsole *console)
 {
+    IConsole *out = console_or_null_object(console);
+
     if (load_superblock())
     {
-        vga::vga->set_color(Color::LightGreen, Color::Black);
-        vga::vga->puts("[FS]   ");
-        vga::vga->set_color(Color::LightGrey, Color::Black);
-        vga::vga->printf("already formatted: size=%u ninodes=%u nblocks=%u\n",
-                         superblock_state.size, superblock_state.ninodes,
-                         superblock_state.nblocks);
+        out->puts("[FS]   ");
+        out->printf("already formatted: size=%u ninodes=%u nblocks=%u\n",
+                    superblock_state.size,
+                    superblock_state.ninodes,
+                    superblock_state.nblocks);
         valid_ = true;
         return;
     }
 
     // magic が一致しない → 初回起動とみなしてフォーマット
-    vga::vga->set_color(Color::Yellow, Color::Black);
-    vga::vga->puts("[FS]   ");
-    vga::vga->set_color(Color::LightGrey, Color::Black);
-    vga::vga->puts("not formatted, creating filesystem...\n");
+    out->puts("[FS]   not formatted, creating filesystem...\n");
 
-    if (!format(total_blocks))
+    if (!format(total_blocks, out))
     {
         return; // valid_ は false のまま
     }
@@ -254,9 +258,7 @@ uint32_t allocate_block()
             return 0;
         }
 
-        for (uint32_t offset = 0;
-             offset < BPB && base + offset < superblock_state.size;
-        offset++)
+        for (uint32_t offset = 0; offset < BPB && base + offset < superblock_state.size; offset++)
         {
             uint8_t mask = static_cast<uint8_t>(1u << (offset % 8));
             if (block->data[offset / 8] & mask)
