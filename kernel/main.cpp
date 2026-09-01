@@ -226,7 +226,9 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]]
     // 常に真になり、さらに終端までのループが事実上無限ループになる。
     pmm::PhysicalMemoryManager pmm(mmap, reinterpret_cast<uint64_t>(kernel_phys_end));
     vmm::VirtualMemoryManager vmm_instance = vmm::VirtualMemoryManager(&pmm);
-    heap::Heap heap_instance(0x400000, 0x800000, &pmm, &vmm_instance);
+    // カーネルヒープは高位 (0xFFFFFFFF90000000〜) に置く。
+    // 低位の identity map (PML4[0]) には依存しない。
+    heap::Heap heap_instance(heap::KERNEL_HEAP_BASE, heap::KERNEL_HEAP_END, &pmm, &vmm_instance);
 
     vmm::vmm_ptr   = &vmm_instance;  // グローバルにアクセスできるようにする
     pmm::pmm_ptr   = &pmm;           // グローバルにアクセスできるようにする
@@ -259,10 +261,10 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]]
         vga::vga->set_color(Color::LightGreen, Color::Black);
         vga::vga->puts("[SBRK] ");
         vga::vga->set_color(Color::LightGrey, Color::Black);
-        vga::vga->printf("brk before=0x%x  returned=0x%x  now=0x%x\n",
-                         static_cast<unsigned>(reinterpret_cast<uintptr_t>(brk0)),
-                         static_cast<unsigned>(reinterpret_cast<uintptr_t>(brk1)),
-                         static_cast<unsigned>(reinterpret_cast<uintptr_t>(heap::heap_ptr->sbrk(0))));
+        vga::vga->printf("brk before=0x%016x  returned=0x%016x  now=0x%016x\n",
+                         reinterpret_cast<uintptr_t>(brk0),
+                         reinterpret_cast<uintptr_t>(brk1),
+                         reinterpret_cast<uintptr_t>(heap::heap_ptr->sbrk(0)));
 
         // alloc/free テスト (morecore が自動で呼ばれる)
         void *p1 = heap::heap_ptr->alloc(64);
@@ -273,11 +275,11 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]]
         vga::vga->set_color(Color::LightGreen, Color::Black);
         vga::vga->puts("[HEAP] ");
         vga::vga->set_color(Color::LightGrey, Color::Black);
-        vga::vga->printf("p1=0x%x p2=0x%x p3=0x%x p4=0x%x reuse=%s\n",
-                         static_cast<unsigned>(reinterpret_cast<uintptr_t>(p1)),
-                         static_cast<unsigned>(reinterpret_cast<uintptr_t>(p2)),
-                         static_cast<unsigned>(reinterpret_cast<uintptr_t>(p3)),
-                         static_cast<unsigned>(reinterpret_cast<uintptr_t>(p4)),
+        vga::vga->printf("p1=0x%016x p2=0x%016x p3=0x%016x p4=0x%016x reuse=%s\n",
+                         reinterpret_cast<uintptr_t>(p1),
+                         reinterpret_cast<uintptr_t>(p2),
+                         reinterpret_cast<uintptr_t>(p3),
+                         reinterpret_cast<uintptr_t>(p4),
                          p4 == p2 ? "OK" : "MISMATCH");
     }
 

@@ -71,8 +71,9 @@ Heap::Heap(uint64_t virt_start,
     vmm_ptr_    = vmm_ptr;
 
     void *p = morecore(1); // 最初のページを確保
-    if (p == (void *)-1)
+    if (!p)                // morecore は失敗時に nullptr を返す
     {
+        head_ = nullptr;
         return;
     }
 
@@ -85,7 +86,7 @@ Heap::Heap(uint64_t virt_start,
 
 void *Heap::alloc(size_t size)
 {
-    if (size == 0)
+    if (size == 0 || head_ == nullptr)
         return nullptr;
 
 
@@ -121,7 +122,7 @@ void *Heap::alloc(size_t size)
 
     size_t pages_needed = (total_size + BLOCK_HEADER + pmm::PAGE_SIZE - 1) / pmm::PAGE_SIZE; // 必要なページ数を計算
     void *new_mem       = morecore(pages_needed);
-    if (new_mem == (void *)-1)
+    if (!new_mem)
     {
         return nullptr; // メモリの確保に失敗
     }
