@@ -58,7 +58,7 @@ bool write_inode(uint32_t inum, const DiskInode &inode)
 
 // ルートディレクトリにエントリを追加する。
 // フォーマット直後専用の簡易版で、ディレクトリが1ブロックに収まることを前提とする。
-bool add_root_entry(DiskInode &root, uint32_t inum, const char *name)
+bool add_root_entry(DiskInode &root, uint32_t inum, const FileName &name)
 {
     if (root.addrs[0] == 0)
     {
@@ -75,8 +75,8 @@ bool add_root_entry(DiskInode &root, uint32_t inum, const char *name)
         return false;
     }
 
-    auto *entries = reinterpret_cast<DirEntry *>(block->data);
-    int capacity  = BLOCK_SIZE / sizeof(DirEntry);
+    auto *entries = reinterpret_cast<DiskDirEntry *>(block->data);
+    int capacity  = BLOCK_SIZE / sizeof(DiskDirEntry);
 
     for (int i = 0; i < capacity; i++)
     {
@@ -85,22 +85,13 @@ bool add_root_entry(DiskInode &root, uint32_t inum, const char *name)
             continue; // 使用中
         }
 
-        entries[i].inum = static_cast<uint16_t>(inum);
-        int j           = 0;
-        for (; j < DIRSIZ && name[j] != '\0'; j++)
-        {
-            entries[i].name[j] = name[j];
-        }
-        for (; j < DIRSIZ; j++)
-        {
-            entries[i].name[j] = '\0';
-        }
+        entries[i] = FileSystem::to_disk(DirEntry{static_cast<uint16_t>(inum), name});
 
         if (!block.write())
         {
             return false;
         }
-        root.size += sizeof(DirEntry);
+        root.size += sizeof(DiskDirEntry);
         return true;
     }
     return false; // 空きエントリなし
@@ -231,6 +222,24 @@ Manager::Manager(uint32_t total_blocks, IConsole *console)
     }
     // 書いた内容を読み返して検証する
     valid_ = load_superblock();
+}
+
+
+DirEntry to_memory(const DiskDirEntry &entry)
+{
+    // name は DIRECTORY_NAME_SIZE 文字ちょうどのとき NUL 終端されないので、
+    // 長さ上限を渡して読む。これにより壊れたイメージを読んでも
+    // FileName の長さが容量を超えることはない。
+    return DirEntry{entry.inum, FileName{entry.name, DIRECTORY_NAME_SIZE}};
+}
+
+DiskDirEntry to_disk(const DirEntry &entry)
+{
+    DiskDirEntry disk{};
+    disk.inum = entry.inum;
+    // 余った領域はゼロ埋めされる (未初期化のバイトをディスクに書かない)
+    entry.name.copy_to(disk.name, DIRECTORY_NAME_SIZE);
+    return disk;
 }
 
 const SuperBlock &superblock()
