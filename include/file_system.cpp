@@ -37,7 +37,7 @@ bool mark_block_used(uint32_t blockno)
     {
         return false;
     }
-    uint32_t bit_index = blockno % BPB;
+    uint32_t bit_index = blockno % BLOCKS_PER_BITMAP_BLOCK;
     block->data[bit_index / 8] |= static_cast<uint8_t>(1u << (bit_index % 8));
     return block.write();
 }
@@ -50,8 +50,8 @@ bool write_inode(uint32_t inum, const DiskInode &inode)
     {
         return false;
     }
-    auto *entries       = reinterpret_cast<DiskInode *>(block->data);
-    entries[inum % IPB] = inode;
+    auto *entries                    = reinterpret_cast<DiskInode *>(block->data);
+    entries[inum % INODES_PER_BLOCK] = inode;
     return block.write();
 }
 
@@ -114,8 +114,8 @@ bool format(uint32_t total_blocks, IConsole *console)
 {
     constexpr uint32_t NINODES = 200;
 
-    uint32_t inode_blocks  = (NINODES + IPB - 1) / IPB;
-    uint32_t bitmap_blocks = (total_blocks + BPB - 1) / BPB;
+    uint32_t inode_blocks  = (NINODES + INODES_PER_BLOCK - 1) / INODES_PER_BLOCK;
+    uint32_t bitmap_blocks = (total_blocks + BLOCKS_PER_BITMAP_BLOCK - 1) / BLOCKS_PER_BITMAP_BLOCK;
 
     superblock_state.magic      = FS_MAGIC;
     superblock_state.size       = total_blocks;
@@ -247,17 +247,17 @@ const SuperBlock &superblock()
 
 uint32_t inode_block(uint32_t inum)
 {
-    return inum / IPB + superblock_state.inodestart;
+    return inum / INODES_PER_BLOCK + superblock_state.inodestart;
 }
 
 uint32_t bitmap_block(uint32_t b)
 {
-    return b / BPB + superblock_state.bmapstart;
+    return b / BLOCKS_PER_BITMAP_BLOCK + superblock_state.bmapstart;
 }
 
 uint32_t allocate_block()
 {
-    for (uint32_t base = 0; base < superblock_state.size; base += BPB)
+    for (uint32_t base = 0; base < superblock_state.size; base += BLOCKS_PER_BITMAP_BLOCK)
     {
         auto block = BufferCache::acquire(bitmap_block(base));
         if (!block)
@@ -265,7 +265,7 @@ uint32_t allocate_block()
             return 0;
         }
 
-        for (uint32_t offset = 0; offset < BPB && base + offset < superblock_state.size; offset++)
+        for (uint32_t offset = 0; offset < BLOCKS_PER_BITMAP_BLOCK && base + offset < superblock_state.size; offset++)
         {
             uint8_t mask = static_cast<uint8_t>(1u << (offset % 8));
             if (block->data[offset / 8] & mask)
@@ -298,7 +298,7 @@ void free_block(uint32_t blockno)
     {
         return;
     }
-    uint32_t bit_index = blockno % BPB;
+    uint32_t bit_index = blockno % BLOCKS_PER_BITMAP_BLOCK;
     block->data[bit_index / 8] &= static_cast<uint8_t>(~(1u << (bit_index % 8)));
     block.write();
 }

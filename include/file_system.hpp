@@ -45,8 +45,15 @@ struct DiskInode
 };
 static_assert(sizeof(DiskInode) == 64, "DiskInode must be 64 bytes");
 
-constexpr int IPB = FSBLOCK_SIZE / sizeof(DiskInode); // 8個/ブロック
-constexpr int BPB = FSBLOCK_SIZE * 8;                 // 4096ブロック/ビットマップ
+// 1 ブロックに収まる inode の数。inode 番号 ↔ ブロック番号の換算に使う。
+//   inum / INODES_PER_BLOCK … 何番目のブロックか
+//   inum % INODES_PER_BLOCK … そのブロック内の何番目か
+constexpr int INODES_PER_BLOCK = FSBLOCK_SIZE / sizeof(DiskInode); // 512 / 64 = 8
+
+// ビットマップ 1 ブロックが管理できるブロック数 (1 ブロック = 1 ビット)。
+//   blockno / BLOCKS_PER_BITMAP_BLOCK … 何番目のビットマップブロックか
+//   blockno % BLOCKS_PER_BITMAP_BLOCK … その中の何ビット目か
+constexpr int BLOCKS_PER_BITMAP_BLOCK = FSBLOCK_SIZE * 8; // 512 * 8 = 4096
 // ディレクトリエントリの名前を扱う値型。
 // 容量は DIRECTORY_NAME_SIZE 文字 + NUL 終端の 1 バイト。
 using FileName = kstring<DIRECTORY_NAME_SIZE + 1>;
