@@ -2,6 +2,8 @@
 #include "buffer_cache.hpp"
 #include "console.hpp"
 
+#include <cstring>
+
 namespace
 {
 
@@ -23,10 +25,7 @@ bool zero_block(uint32_t blockno)
     {
         return false;
     }
-    for (uint32_t i = 0; i < BLOCK_SIZE; i++)
-    {
-        block->data[i] = 0;
-    }
+    std::memset(block->data, 0, BLOCK_SIZE);
     return block.write();
 }
 
@@ -159,10 +158,9 @@ bool format(uint32_t total_blocks, IConsole *console)
         {
             return false;
         }
-        for (uint32_t i = 0; i < BLOCK_SIZE; i++)
-        {
-            block->data[i] = 0;
-        }
+        // スーパーブロックは構造体より小さいので、残りにゴミが残らないよう
+        // ブロック全体を消してから書く。
+        std::memset(block->data, 0, BLOCK_SIZE);
         *reinterpret_cast<SuperBlock *>(block->data) = superblock_state;
         if (!block.write())
         {
