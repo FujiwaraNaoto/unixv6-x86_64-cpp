@@ -2,14 +2,15 @@
 #define FILE_SYSTEM_HPP
 #include <cstdint>
 #include "console.hpp"
+#include "kstring.hpp"
 
-constexpr uint32_t FS_MAGIC     = 0x10203040;
-constexpr uint32_t FSBLOCK_SIZE = 512;
-constexpr int NDIRECT           = 12;                              // 直接ブロック数
-constexpr int NINDIRECT         = FSBLOCK_SIZE / sizeof(uint32_t); // 128
-constexpr int MAXFILE           = NDIRECT + NINDIRECT;             // 140ブロック
-constexpr int DIRSIZ            = 14;                              // ファイル名長 (V6と同じ)
-constexpr uint32_t ROOTINO      = 1;                               // ルートの inode 番号
+constexpr uint32_t FS_MAGIC       = 0x10203040;
+constexpr uint32_t FSBLOCK_SIZE   = 512;
+constexpr int NDIRECT             = 12;                              // 直接ブロック数
+constexpr int NINDIRECT           = FSBLOCK_SIZE / sizeof(uint32_t); // 128
+constexpr int MAXFILE             = NDIRECT + NINDIRECT;             // 140ブロック
+constexpr int DIRECTORY_NAME_SIZE = 14;                              // ファイル名長 (V6と同じ)
+constexpr uint32_t ROOTINO        = 1;                               // ルートの inode 番号
 
 // inode の種類。
 // ディスク上の DiskInode::type にそのまま格納されるので、基底型を uint16_t に
@@ -46,13 +47,35 @@ static_assert(sizeof(DiskInode) == 64, "DiskInode must be 64 bytes");
 
 constexpr int IPB = FSBLOCK_SIZE / sizeof(DiskInode); // 8個/ブロック
 constexpr int BPB = FSBLOCK_SIZE * 8;                 // 4096ブロック/ビットマップ
-// ─── ディレクトリエントリ (16バイト) ─────────────────────────────
+// ディレクトリエントリの名前を扱う値型。
+// 容量は DIRECTORY_NAME_SIZE 文字 + NUL 終端の 1 バイト。
+using FileName = kstring<DIRECTORY_NAME_SIZE + 1>;
+
+// ─── ディレクトリエントリ ────────────────────────────────────────
+// ディスク上の形とメモリ上で扱う形を分ける。
+//
+// ディスク側 (DiskDirEntry) は「バイト列の仕様」として固定する。長さフィールドを
+// 持たせないので、ホストの size_t のサイズやエンディアンに左右されず、V6 と同じ
+// 16 バイトのままになる。ディスクから読んだ値を長さとして信用する経路も生まれない。
+//
+// メモリ側 (DirEntry) は kstring を使い、比較や代入を素直に書けるようにする。
+// 相互変換は to_memory() / to_disk() に閉じ込める。
+
+// ディスク上の並び (16バイト、V6 互換)。
+// name は DIRECTORY_NAME_SIZE 文字ちょうどのとき NUL 終端されない。
+struct [[gnu::packed]] DiskDirEntry
+{
+    uint16_t inum;
+    char name[DIRECTORY_NAME_SIZE];
+};
+static_assert(sizeof(DiskDirEntry) == 16, "DiskDirEntry must be 16 bytes");
+
+// メモリ上で扱うときの型
 struct DirEntry
 {
     uint16_t inum;
-    char name[DIRSIZ];
+    FileName name;
 };
-static_assert(sizeof(DirEntry) == 16, "DirEntry must be 16 bytes");
 
 namespace FileSystem
 {
@@ -79,6 +102,12 @@ class Manager final
   private:
     bool valid_ = false;
 };
+
+// ディスク上の並び ←→ メモリ上の型。
+// to_memory() は長さ上限付きで読むので、ディスクの内容が壊れていても
+// name が DIRECTORY_NAME_SIZE 文字を超えることはない。
+DirEntry to_memory(const DiskDirEntry &entry);
+DiskDirEntry to_disk(const DirEntry &entry);
 
 const SuperBlock &superblock();
 // inode番号 inum が入っているブロック番号
