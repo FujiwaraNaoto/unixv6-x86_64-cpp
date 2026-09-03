@@ -61,11 +61,12 @@ bool add_root_entry(DiskInode &root, uint32_t inum, const FileName &name)
 {
     if (root.addrs[0] == 0)
     {
-        root.addrs[0] = FileSystem::allocate_block();
-        if (root.addrs[0] == 0)
+        auto blockno = FileSystem::allocate_block();
+        if (!blockno.has_value())
         {
             return false;
         }
+        root.addrs[0] = *blockno;
     }
 
     auto block = BufferCache::acquire(root.addrs[0]);
@@ -254,14 +255,14 @@ uint32_t bitmap_block(uint32_t b)
     return b / BLOCKS_PER_BITMAP_BLOCK + superblock_state.bmapstart;
 }
 
-uint32_t allocate_block()
+std::optional<uint32_t> allocate_block()
 {
     for (uint32_t base = 0; base < superblock_state.size; base += BLOCKS_PER_BITMAP_BLOCK)
     {
         auto block = BufferCache::acquire(bitmap_block(base));
         if (!block)
         {
-            return 0;
+            return std::nullopt;
         }
 
         for (uint32_t offset = 0; offset < BLOCKS_PER_BITMAP_BLOCK && base + offset < superblock_state.size; offset++)
@@ -275,19 +276,19 @@ uint32_t allocate_block()
             block->data[offset / 8] |= mask;
             if (!block.write())
             {
-                return 0;
+                return std::nullopt;
             }
             block.reset(); // zero_block が同じバッファを取れるよう先に手放す
 
             uint32_t blockno = base + offset;
             if (!zero_block(blockno))
             {
-                return 0;
+                return std::nullopt;
             }
             return blockno;
         }
     }
-    return 0; // 空きなし
+    return std::nullopt; // 空きなし
 }
 
 void free_block(uint32_t blockno)
