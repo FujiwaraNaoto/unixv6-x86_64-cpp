@@ -167,7 +167,7 @@ bool format(uint32_t total_blocks, IConsole *console)
         }
     }
 
-    // ④ ルートディレクトリ (inum = ROOTINO) を作る
+    // make root inode (inum=1) and add "." and ".." entries.
     DiskInode root{};
     root.type  = InodeType::kDirectory;
     root.nlink = 1;
@@ -210,14 +210,14 @@ Manager::Manager(uint32_t total_blocks, IConsole *console)
         return;
     }
 
-    // magic が一致しない → 初回起動とみなしてフォーマット
+    // if the magic number is not matched, the disk is not formatted yet. format it.
     out->puts("[FS]   not formatted, creating filesystem...\n");
 
     if (!format(total_blocks, out))
     {
         return; // valid_ は false のまま
     }
-    // 書いた内容を読み返して検証する
+    // verify the superblock after formatting
     valid_ = load_superblock();
 }
 
