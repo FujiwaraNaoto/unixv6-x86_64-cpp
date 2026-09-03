@@ -1,6 +1,7 @@
 #ifndef FILE_SYSTEM_HPP
 #define FILE_SYSTEM_HPP
 #include <cstdint>
+#include <optional>
 #include "console.hpp"
 #include "kstring.hpp"
 
@@ -122,8 +123,8 @@ uint32_t inode_block(uint32_t inum);
 // ブロック b のビットが入っているビットマップブロック番号
 uint32_t bitmap_block(uint32_t b);
 
-// 空きブロックを1つ確保してゼロクリアする (0なら失敗)
-uint32_t allocate_block();
+// 空きブロックを1つ確保してゼロクリアする (失敗時は std::nullopt)
+std::optional<uint32_t> allocate_block();
 // ブロックを解放する
 void free_block(uint32_t blockno);
 } // namespace FileSystem
