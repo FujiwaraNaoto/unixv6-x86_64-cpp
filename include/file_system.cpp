@@ -97,7 +97,6 @@ bool add_root_entry(DiskInode &root, uint32_t inum, const FileName &name)
 }
 
 
-// スーパーブロックを読み込む。magic が一致しなければ false。
 bool load_superblock()
 {
     auto block = BufferCache::acquire(1);
@@ -133,7 +132,7 @@ bool format(uint32_t total_blocks, IConsole *console)
                     superblock_state.bmapstart,
                     data_start);
 
-    // ① inode 領域とビットマップをゼロクリア
+    // zero clear inode and bitmap blocks.
     for (uint32_t b = superblock_state.inodestart; b < data_start; b++)
     {
         if (!zero_block(b))
@@ -142,7 +141,7 @@ bool format(uint32_t total_blocks, IConsole *console)
         }
     }
 
-    // ② メタデータ領域 (0 〜 data_start-1) を使用済みにする
+    // make meta blocks used (0〜data_start-1)
     for (uint32_t b = 0; b < data_start; b++)
     {
         if (!mark_block_used(b))
@@ -151,7 +150,7 @@ bool format(uint32_t total_blocks, IConsole *console)
         }
     }
 
-    // ③ スーパーブロックを書く
+    // write superblock to block 1. 0 is boot block, so skip it.
     {
         auto block = BufferCache::acquire(1);
         if (!block)
