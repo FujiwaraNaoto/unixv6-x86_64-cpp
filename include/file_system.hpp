@@ -27,11 +27,11 @@ enum class InodeType : uint16_t
 struct SuperBlock
 {
     uint32_t magic;
-    uint32_t size;       // 全ブロック数
-    uint32_t nblocks;    // データブロック数
-    uint32_t ninodes;    // inode 数
-    uint32_t inodestart; // inode 領域の開始ブロック
-    uint32_t bmapstart;  // ビットマップの開始ブロック
+    uint32_t size;       // the number of blocks in the file system
+    uint32_t nblocks;    // the number of data blocks
+    uint32_t ninodes;    // the number of inodes
+    uint32_t inodestart; // inode start block
+    uint32_t bmapstart;  // bitmap start block
 };
 // ─── ディスク上の inode (64バイト) ───────────────────────────────
 struct DiskInode
@@ -39,9 +39,9 @@ struct DiskInode
     InodeType type;
     uint16_t major;
     uint16_t minor;
-    uint16_t nlink;
-    uint32_t size;
-    uint32_t addrs[NDIRECT + 1]; // 直接12 + 間接1
+    uint16_t nlink; // the number of hardlinks
+    uint32_t size; // bytes
+    uint32_t addrs[NDIRECT + 1]; // direct blocks + 1 indirect block
 };
 static_assert(sizeof(DiskInode) == 64, "DiskInode must be 64 bytes");
 
