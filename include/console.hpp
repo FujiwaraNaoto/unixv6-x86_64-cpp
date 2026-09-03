@@ -1,4 +1,5 @@
-#pragma once
+#ifndef CONSOLE_HPP
+#define CONSOLE_HPP
 #include <cstddef>
 #include <cstdarg>
 
@@ -40,3 +41,5 @@ class NullConsole final : public IConsole
   public:
     void write(const char *, size_t) override { }
 };
+
+#endif // CONSOLE_HPP

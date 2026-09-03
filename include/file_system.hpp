@@ -39,8 +39,8 @@ struct DiskInode
     InodeType type;
     uint16_t major;
     uint16_t minor;
-    uint16_t nlink; // the number of hardlinks
-    uint32_t size; // bytes
+    uint16_t nlink;              // the number of hardlinks
+    uint32_t size;               // bytes
     uint32_t addrs[NDIRECT + 1]; // direct blocks + 1 indirect block
 };
 static_assert(sizeof(DiskInode) == 64, "DiskInode must be 64 bytes");
