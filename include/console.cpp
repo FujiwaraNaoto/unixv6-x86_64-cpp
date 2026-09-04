@@ -14,12 +14,38 @@ enum class Length
     Size,     // z
 };
 
+// 幅指定を適用して文字列を出力する。
+// left が真なら右側を空白で埋め、偽なら左側を pad で埋める。
+void write_padded(IConsole &out, const char *text, int length, int width, bool left, char pad)
+{
+    char padding[64];
+    int fill = width - length;
+    if (fill > static_cast<int>(sizeof(padding)))
+    {
+        fill = sizeof(padding);
+    }
+    for (int i = 0; i < fill; i++)
+    {
+        padding[i] = left ? ' ' : pad; // 左詰めの余白は常に空白 ("%-08d" のゼロ埋めは無効)
+    }
+
+    if (!left && fill > 0)
+    {
+        out.write(padding, static_cast<size_t>(fill));
+    }
+    out.write(text, static_cast<size_t>(length));
+    if (left && fill > 0)
+    {
+        out.write(padding, static_cast<size_t>(fill));
+    }
+}
+
 // 数字を逆順に組み立ててから write() で一括出力する。
 // 1文字ずつ write() を呼ぶより転送回数が減る。
-void print_number(IConsole &out, unsigned long long value, unsigned base, int width, char pad)
+void print_number(IConsole &out, unsigned long long value, unsigned base, int width, bool left, char pad)
 {
     static const char digits[] = "0123456789abcdef";
-    char reversed[64];
+    char reversed[32];
     int count = 0;
 
     if (value == 0)
@@ -34,10 +60,6 @@ void print_number(IConsole &out, unsigned long long value, unsigned base, int wi
             value /= base;
         }
     }
-    while (count < width && count < static_cast<int>(sizeof(reversed)))
-    {
-        reversed[count++] = pad;
-    }
 
     char buffer[sizeof(reversed)];
     int length = 0;
@@ -45,7 +67,7 @@ void print_number(IConsole &out, unsigned long long value, unsigned base, int wi
     {
         buffer[length++] = reversed[count];
     }
-    out.write(buffer, static_cast<size_t>(length));
+    write_padded(out, buffer, length, width, left, pad);
 }
 
 } // namespace
@@ -73,12 +95,32 @@ void IConsole::vprintf(const char *fmt, va_list ap)
             break; // 末尾の '%' は捨てる
         }
 
-        // ─── ゼロ埋めフラグと幅 ───
-        char pad = ' ';
-        if (*fmt == '0')
+        // ─── フラグ ───
+        // 対応するのは '-' (左詰め) と '0' (ゼロ埋め)。
+        // '+' / ' ' / '#' は解釈しないが、読み飛ばして出力に漏らさない。
+        bool left = false;
+        char pad  = ' ';
+        for (bool parsing = true; parsing;)
         {
-            pad = '0';
-            fmt++;
+            switch (*fmt)
+            {
+                case '-':
+                    left = true;
+                    fmt++;
+                    break;
+                case '0':
+                    pad = '0';
+                    fmt++;
+                    break;
+                case '+':
+                case ' ':
+                case '#':
+                    fmt++;
+                    break;
+                default:
+                    parsing = false;
+                    break;
+            }
         }
         int width = 0;
         while (*fmt >= '0' && *fmt <= '9')
@@ -142,7 +184,7 @@ void IConsole::vprintf(const char *fmt, va_list ap)
                     putchar('-');
                     value = -value;
                 }
-                print_number(*this, static_cast<unsigned long long>(value), 10, width, pad);
+                print_number(*this, static_cast<unsigned long long>(value), 10, width, left, pad);
                 break;
             }
             case 'u':
@@ -164,16 +206,23 @@ void IConsole::vprintf(const char *fmt, va_list ap)
                         value = va_arg(ap, unsigned int);
                         break;
                 }
-                print_number(*this, value, (*fmt == 'x') ? 16 : 10, width, pad);
+                print_number(*this, value, (*fmt == 'x') ? 16 : 10, width, left, pad);
                 break;
             }
             case 'p':
                 write("0x", 2);
-                print_number(*this, reinterpret_cast<unsigned long long>(va_arg(ap, void *)), 16, 16, '0');
+                print_number(*this, reinterpret_cast<unsigned long long>(va_arg(ap, void *)), 16, 16, false, '0');
                 break;
             case 's':
-                puts(va_arg(ap, const char *));
+            {
+                const char *text = va_arg(ap, const char *);
+                if (text == nullptr)
+                {
+                    text = "(null)";
+                }
+                write_padded(*this, text, static_cast<int>(__builtin_strlen(text)), width, left, ' ');
                 break;
+            }
             case 'c':
                 putchar(static_cast<char>(va_arg(ap, int)));
                 break;

@@ -3,6 +3,7 @@
 
 #include <cstdint>
 #include <cstddef>
+#include "block_store.hpp"
 
 // ─── バッファキャッシュ層 ────────────────────────────────────────
 // 目的:
@@ -168,6 +169,17 @@ class BufferRef final
 
 // read() の RAII 版。失敗時は空の BufferRef (operator bool が false) を返す。
 BufferRef acquire(uint32_t blockno);
+
+// IBlockStore の実装。ファイルシステムなどの上位層は BufferCache という名前を
+// 知らずに済み、IBlockStore* としてだけこれを受け取る。
+// 状態はモジュール内 static が持つので、このクラス自体は空 (1 バイト)。
+class BlockStore final : public IBlockStore
+{
+  public:
+    BlockRef acquire(uint32_t blockno) override;
+    bool write_back(uint32_t blockno) override;
+    void release(uint32_t blockno) override;
+};
 
 // キャッシュの効き具合を確認するための統計。
 struct Statistics

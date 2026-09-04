@@ -59,16 +59,26 @@ bool write_back(Buffer *buffer)
 // キャッシュに有ればそれを、無ければ LRU 側の未使用バッファを再利用する。
 // 戻り値は refcnt を 1 増やした状態。再利用した場合は valid=false で返るので、
 // 呼び出し側がデバイスから読み込む責任を持つ。
-Buffer *find_or_recycle(uint32_t blockno)
+// blockno のバッファを探す。見つからなければ nullptr。refcnt は変えない。
+Buffer *find_cached(uint32_t blockno)
 {
-    // 1. 既にキャッシュに載っているか (MRU 側から探す)
     for (Buffer *b = head.next; b != &head; b = b->next)
     {
         if (b->valid && b->blockno == blockno)
         {
-            b->refcnt++;
             return b;
         }
+    }
+    return nullptr;
+}
+
+Buffer *find_or_recycle(uint32_t blockno)
+{
+    // 1. 既にキャッシュに載っているか
+    if (Buffer *cached = find_cached(blockno))
+    {
+        cached->refcnt++;
+        return cached;
     }
 
     // 2. 無ければ LRU 側から未使用 (refcnt == 0) のものを再利用する
@@ -201,6 +211,35 @@ void release(Buffer *buffer)
 BufferRef acquire(uint32_t blockno)
 {
     return BufferRef{read(blockno)};
+}
+
+// ─── IBlockStore の実装 ──────────────────────────────────────────
+// BlockRef は Buffer* ではなくブロック番号を持つので、write_back / release は
+// キャッシュ内を引き直す。acquire 済み = refcnt > 0 なので追い出されておらず、
+// 必ず同じバッファが見つかる。
+
+BlockRef BlockStore::acquire(uint32_t blockno)
+{
+    Buffer *buffer = BufferCache::read(blockno); // refcnt を 1 増やして返る
+    if (buffer == nullptr)
+    {
+        return BlockRef{};
+    }
+    return BlockRef{this, blockno, buffer->data};
+}
+
+bool BlockStore::write_back(uint32_t blockno)
+{
+    Buffer *buffer = find_cached(blockno);
+    return buffer != nullptr && BufferCache::write(buffer);
+}
+
+void BlockStore::release(uint32_t blockno)
+{
+    if (Buffer *buffer = find_cached(blockno))
+    {
+        BufferCache::release(buffer);
+    }
 }
 
 Statistics statistics()

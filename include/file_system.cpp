@@ -1,5 +1,5 @@
 #include "file_system.hpp"
-#include "buffer_cache.hpp"
+#include "block_store.hpp"
 #include "console.hpp"
 
 #include <cstring>
@@ -17,40 +17,61 @@ IConsole *console_or_null_object(IConsole *console)
     return console != nullptr ? console : &null_console;
 }
 
+// store が渡されていないときのフォールバック。常に失敗するので、
+// 各関数が「毎回 nullptr かどうか」を判定しなくて済む。
+class NullBlockStore final : public IBlockStore
+{
+  public:
+    BlockRef acquire(uint32_t) override
+    {
+        return BlockRef{};
+    }
+    bool write_back(uint32_t) override
+    {
+        return false;
+    }
+    void release(uint32_t) override { }
+};
+
+NullBlockStore null_block_store;
+
+// Manager のコンストラクタで差し替わる。それまでは何もしない実装を指す。
+IBlockStore *block_store = &null_block_store;
+
 // ブロックをゼロで埋めて即座に書き戻す
 bool zero_block(uint32_t blockno)
 {
-    auto block = BufferCache::acquire(blockno);
+    auto block = block_store->acquire(blockno);
     if (!block)
     {
         return false;
     }
-    std::memset(block->data, 0, BLOCK_SIZE);
+    std::memset(block.data(), 0, FSBLOCK_SIZE);
     return block.write();
 }
 
 // ビットマップ上で blockno を使用中にする
 bool mark_block_used(uint32_t blockno)
 {
-    auto block = BufferCache::acquire(FileSystem::bitmap_block(blockno));
+    auto block = block_store->acquire(FileSystem::bitmap_block(blockno));
     if (!block)
     {
         return false;
     }
     uint32_t bit_index = blockno % BLOCKS_PER_BITMAP_BLOCK;
-    block->data[bit_index / 8] |= static_cast<uint8_t>(1u << (bit_index % 8));
+    block.data()[bit_index / 8] |= static_cast<uint8_t>(1u << (bit_index % 8));
     return block.write();
 }
 
 // inode を書き込む
 bool write_inode(uint32_t inum, const DiskInode &inode)
 {
-    auto block = BufferCache::acquire(FileSystem::inode_block(inum));
+    auto block = block_store->acquire(FileSystem::inode_block(inum));
     if (!block)
     {
         return false;
     }
-    auto *entries                    = reinterpret_cast<DiskInode *>(block->data);
+    auto *entries                    = reinterpret_cast<DiskInode *>(block.data());
     entries[inum % INODES_PER_BLOCK] = inode;
     return block.write();
 }
@@ -69,14 +90,14 @@ bool add_root_entry(DiskInode &root, uint32_t inum, const FileName &name)
         root.addrs[0] = *blockno;
     }
 
-    auto block = BufferCache::acquire(root.addrs[0]);
+    auto block = block_store->acquire(root.addrs[0]);
     if (!block)
     {
         return false;
     }
 
-    auto *entries = reinterpret_cast<DiskDirEntry *>(block->data);
-    int capacity  = BLOCK_SIZE / sizeof(DiskDirEntry);
+    auto *entries = reinterpret_cast<DiskDirEntry *>(block.data());
+    int capacity  = FSBLOCK_SIZE / sizeof(DiskDirEntry);
 
     for (int i = 0; i < capacity; i++)
     {
@@ -100,12 +121,12 @@ bool add_root_entry(DiskInode &root, uint32_t inum, const FileName &name)
 
 bool load_superblock()
 {
-    auto block = BufferCache::acquire(1);
+    auto block = block_store->acquire(1);
     if (!block)
     {
         return false;
     }
-    superblock_state = *reinterpret_cast<const SuperBlock *>(block->data);
+    superblock_state = *reinterpret_cast<const SuperBlock *>(block.data());
     return superblock_state.magic == FS_MAGIC;
 }
 
@@ -153,15 +174,15 @@ bool format(uint32_t total_blocks, IConsole *console)
 
     // write superblock to block 1. 0 is boot block, so skip it.
     {
-        auto block = BufferCache::acquire(1);
+        auto block = block_store->acquire(1);
         if (!block)
         {
             return false;
         }
         // スーパーブロックは構造体より小さいので、残りにゴミが残らないよう
         // ブロック全体を消してから書く。
-        std::memset(block->data, 0, BLOCK_SIZE);
-        *reinterpret_cast<SuperBlock *>(block->data) = superblock_state;
+        std::memset(block.data(), 0, FSBLOCK_SIZE);
+        *reinterpret_cast<SuperBlock *>(block.data()) = superblock_state;
         if (!block.write())
         {
             return false;
@@ -196,8 +217,9 @@ bool format(uint32_t total_blocks, IConsole *console)
 namespace FileSystem
 {
 
-Manager::Manager(uint32_t total_blocks, IConsole *console)
+Manager::Manager(uint32_t total_blocks, IBlockStore *store, IConsole *console)
 {
+    block_store   = (store != nullptr) ? store : &null_block_store;
     IConsole *out = console_or_null_object(console);
 
     if (load_superblock())
@@ -259,7 +281,7 @@ std::optional<uint32_t> allocate_block()
 {
     for (uint32_t base = 0; base < superblock_state.size; base += BLOCKS_PER_BITMAP_BLOCK)
     {
-        auto block = BufferCache::acquire(bitmap_block(base));
+        auto block = block_store->acquire(bitmap_block(base));
         if (!block)
         {
             return std::nullopt;
@@ -268,12 +290,12 @@ std::optional<uint32_t> allocate_block()
         for (uint32_t offset = 0; offset < BLOCKS_PER_BITMAP_BLOCK && base + offset < superblock_state.size; offset++)
         {
             uint8_t mask = static_cast<uint8_t>(1u << (offset % 8));
-            if (block->data[offset / 8] & mask)
+            if (block.data()[offset / 8] & mask)
             {
                 continue; // 使用中
             }
 
-            block->data[offset / 8] |= mask;
+            block.data()[offset / 8] |= mask;
             if (!block.write())
             {
                 return std::nullopt;
@@ -293,13 +315,13 @@ std::optional<uint32_t> allocate_block()
 
 void free_block(uint32_t blockno)
 {
-    auto block = BufferCache::acquire(bitmap_block(blockno));
+    auto block = block_store->acquire(bitmap_block(blockno));
     if (!block)
     {
         return;
     }
     uint32_t bit_index = blockno % BLOCKS_PER_BITMAP_BLOCK;
-    block->data[bit_index / 8] &= static_cast<uint8_t>(~(1u << (bit_index % 8)));
+    block.data()[bit_index / 8] &= static_cast<uint8_t>(~(1u << (bit_index % 8)));
     block.write();
 }
 

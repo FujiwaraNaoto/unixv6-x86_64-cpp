@@ -2,6 +2,7 @@
 #define FILE_SYSTEM_HPP
 #include <cstdint>
 #include <optional>
+#include "block_store.hpp"
 #include "console.hpp"
 #include "kstring.hpp"
 #include <array>
@@ -41,8 +42,8 @@ struct DiskInode
     InodeType type;
     uint16_t major;
     uint16_t minor;
-    uint16_t nlink;              // the number of hardlinks
-    uint32_t size;               // bytes
+    uint16_t nlink;                          // the number of hardlinks
+    uint32_t size;                           // bytes
     std::array<uint32_t, NDIRECT + 1> addrs; // direct blocks + 1 indirect block
 };
 static_assert(sizeof(DiskInode) == 64, "DiskInode must be 64 bytes");
@@ -97,10 +98,12 @@ namespace FileSystem
 class Manager final
 {
   public:
+    // store はブロックの読み書き先。どのキャッシュ実装を使うかを
+    // ファイルシステム側が知らずに済むよう注入で受け取る。
     // console は進行状況の出力先。出力先を差し替えられるよう注入で受け取る
     // (このクラスは VGA / シリアルのどちらに出るかを知らない)。
-    // nullptr を渡した場合はログを捨てる。
-    Manager(uint32_t total_blocks, IConsole *console);
+    // どちらも nullptr を渡してよい (store は常に失敗し、console はログを捨てる)。
+    Manager(uint32_t total_blocks, IBlockStore *store, IConsole *console);
     // 初期化に成功したか。
     // フォーマット済みだった場合も、新規にフォーマットした場合も true。
     bool valid() const
