@@ -4,6 +4,7 @@
 #include <optional>
 #include "console.hpp"
 #include "kstring.hpp"
+#include <array>
 
 constexpr uint32_t FS_MAGIC       = 0x10203040;
 constexpr uint32_t FSBLOCK_SIZE   = 512;
@@ -42,7 +43,7 @@ struct DiskInode
     uint16_t minor;
     uint16_t nlink;              // the number of hardlinks
     uint32_t size;               // bytes
-    uint32_t addrs[NDIRECT + 1]; // direct blocks + 1 indirect block
+    std::array<uint32_t, NDIRECT + 1> addrs; // direct blocks + 1 indirect block
 };
 static_assert(sizeof(DiskInode) == 64, "DiskInode must be 64 bytes");
 
