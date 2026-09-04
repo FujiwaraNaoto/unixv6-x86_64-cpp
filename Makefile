@@ -24,6 +24,7 @@ CFLAGS   = -m64 -std=c++20 -g \
 		   -mcmodel=kernel	\
            -fno-pic -fno-pie \
            -mno-red-zone -mno-mmx -mno-sse -mno-sse2 \
+           -MMD -MP \
            -Iinclude $(STD_INC)
 
 LDFLAGS  = -T kernel.ld -nostdlib -z max-page-size=0x1000
@@ -37,6 +38,10 @@ OBJ_DIR  = build
 ASM_OBJ  = $(ASM_SRC:%.asm=$(OBJ_DIR)/%.o)
 CPP_OBJ  = $(CPP_SRC:%.cpp=$(OBJ_DIR)/%.o)
 OBJS     = $(ASM_OBJ) $(CPP_OBJ)
+# -MMD が .o と一緒に吐く依存ファイル。ヘッダを書き換えたときに
+# それを include している .cpp が再コンパイルされるようにする。
+# (これが無いと古い .o が残り、リンク時に undefined reference になる)
+DEPS     = $(CPP_OBJ:.o=.d)
 
 KERNEL   = $(OBJ_DIR)/kernel.elf
 ISO      = unixv6.iso
@@ -114,6 +119,9 @@ $(ISO): $(KERNEL)
 
 clean:
 	rm -rf $(OBJ_DIR) iso $(ISO) qemu.log serial.log
+
+# 依存ファイルの取り込み。初回ビルドでは存在しないので - を付けて無視させる。
+-include $(DEPS)
 
 format:
 	@echo "[format] Running clang-format..."

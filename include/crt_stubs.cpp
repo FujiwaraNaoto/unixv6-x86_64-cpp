@@ -56,6 +56,32 @@ extern "C"
         return dest;
     }
 
+    // 前から順に比較し、最初に違うバイトの差を返す。
+    int memcmp(const void *lhs, const void *rhs, std::size_t count)
+    {
+        const auto *a = static_cast<const uint8_t *>(lhs);
+        const auto *b = static_cast<const uint8_t *>(rhs);
+        for (std::size_t i = 0; i < count; i++)
+        {
+            if (a[i] != b[i])
+            {
+                return static_cast<int>(a[i]) - static_cast<int>(b[i]);
+            }
+        }
+        return 0;
+    }
+
+    // IConsole::puts() の __builtin_strlen が -fno-builtin 下で呼び出しを生成する。
+    std::size_t strlen(const char *s)
+    {
+        const char *p = s;
+        while (*p != '\0')
+        {
+            p++;
+        }
+        return static_cast<std::size_t>(p - s);
+    }
+
     // 領域が重なる場合も正しく動くコピー。
     // dest が src より後ろにあるときだけ後方から写す。
     void *memmove(void *dest, const void *src, std::size_t count)
