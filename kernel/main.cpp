@@ -1,4 +1,5 @@
 #include <cstdint>
+#include <cstring>
 #include <optional>
 #include "vga.hpp"
 #include "serial.hpp"
@@ -213,6 +214,170 @@ static void hexdump(const uint8_t *data, size_t size)
             vga::vga->putchar((c >= 0x20 && c < 0x7F) ? c : '.');
         }
         vga::vga->puts("|\n");
+    }
+}
+
+// ファイルシステム層を通した読み書きのテスト。
+// 使うのは IBlockStore と FileSystem の公開 API だけで、
+// BufferCache や VirtIOBlock には直接触れない。
+static void filesystem_read_write_test(IBlockStore &store, IConsole *console)
+{
+    auto label = [console](const char *result, const char *what)
+    { console->printf("[FSTEST] %-6s %s\n", result, what); };
+
+    // ── ① ルート inode を読む ──
+    {
+        auto block = store.acquire(FileSystem::inode_block(ROOTINO));
+        if (!block)
+        {
+            label("FAIL", "read root inode: acquire failed");
+            return;
+        }
+        const auto *inodes    = reinterpret_cast<const DiskInode *>(block.data());
+        const DiskInode &root = inodes[ROOTINO % INODES_PER_BLOCK];
+        const bool ok         = (root.type == InodeType::kDirectory) && (root.nlink == 1) && (root.addrs[0] != 0);
+        label(ok ? "OK" : "FAIL", "read root inode");
+        console->printf("         type=%u nlink=%u size=%u addrs[0]=%u\n",
+                        static_cast<unsigned>(root.type),
+                        static_cast<unsigned>(root.nlink),
+                        static_cast<unsigned>(root.size),
+                        static_cast<unsigned>(root.addrs[0]));
+    }
+
+    // ── ② ルートディレクトリを読んで "." と ".." を確認する ──
+    {
+        uint32_t dir_block = 0;
+        {
+            auto block = store.acquire(FileSystem::inode_block(ROOTINO));
+            if (!block)
+            {
+                label("FAIL", "read root dir: acquire inode failed");
+                return;
+            }
+            const auto *inodes = reinterpret_cast<const DiskInode *>(block.data());
+            dir_block          = inodes[ROOTINO % INODES_PER_BLOCK].addrs[0];
+        }
+
+        auto block = store.acquire(dir_block);
+        if (!block)
+        {
+            label("FAIL", "read root dir: acquire data failed");
+            return;
+        }
+        const auto *entries = reinterpret_cast<const DiskDirEntry *>(block.data());
+        const int capacity  = FSBLOCK_SIZE / sizeof(DiskDirEntry);
+
+        bool found_dot    = false;
+        bool found_dotdot = false;
+        int used          = 0;
+        for (int i = 0; i < capacity; i++)
+        {
+            if (entries[i].inum == 0)
+            {
+                continue;
+            }
+            used++;
+            const DirEntry entry = FileSystem::to_memory(entries[i]);
+            if (entry.name == ".")
+            {
+                found_dot = entry.inum == ROOTINO;
+            }
+            else if (entry.name == "..")
+            {
+                found_dotdot = entry.inum == ROOTINO;
+            }
+        }
+        label(found_dot && found_dotdot ? "OK" : "FAIL", "read root dir entries");
+        console->printf("         entries=%d  \".\"=%s  \"..\"=%s\n",
+                        used,
+                        found_dot ? "yes" : "no",
+                        found_dotdot ? "yes" : "no");
+    }
+
+    // ── ③ ブロックを確保して書き、読み戻して検証し、解放する ──
+    {
+        auto allocated = FileSystem::allocate_block();
+        if (!allocated.has_value())
+        {
+            label("FAIL", "allocate_block");
+            return;
+        }
+        const uint32_t blockno = *allocated;
+
+        // 書き込む: 先頭にマーカー、残りは位置に応じた値
+        {
+            auto block = store.acquire(blockno);
+            if (!block)
+            {
+                label("FAIL", "write: acquire failed");
+                return;
+            }
+            uint8_t *data       = block.data();
+            const char marker[] = "UNIXV6-FS-RW-TEST";
+            std::memcpy(data, marker, sizeof(marker));
+            for (uint32_t i = sizeof(marker); i < FSBLOCK_SIZE; i++)
+            {
+                data[i] = static_cast<uint8_t>(i & 0xFF);
+            }
+            if (!block.write())
+            {
+                label("FAIL", "write: write back failed");
+                return;
+            }
+        }
+
+        // 書いたブロックをキャッシュから追い出してから読み直す。
+        // これをしないとキャッシュ上の同じバッファを見るだけになり、
+        // ディスクまで届いたことの確認にならない。
+        // 追い出しには blockno 以外のブロックを NBUF 個以上触る必要がある
+        // (blockno 自身を触ると MRU 側に移動して逆に残ってしまう)。
+        uint32_t touched = 0;
+        for (uint32_t b = 1; touched < NBUF + 1; b++)
+        {
+            if (b == blockno)
+            {
+                continue;
+            }
+            auto evict = store.acquire(b);
+            if (!evict)
+            {
+                break;
+            }
+            touched++;
+        }
+
+        // 読み戻して検証する
+        {
+            auto block = store.acquire(blockno);
+            if (!block)
+            {
+                label("FAIL", "read back: acquire failed");
+                return;
+            }
+            const uint8_t *data = block.data();
+            const char marker[] = "UNIXV6-FS-RW-TEST";
+            bool ok             = std::memcmp(data, marker, sizeof(marker)) == 0;
+            for (uint32_t i = sizeof(marker); ok && i < FSBLOCK_SIZE; i++)
+            {
+                ok = data[i] == static_cast<uint8_t>(i & 0xFF);
+            }
+            label(ok ? "OK" : "FAIL", "write -> read back 512 bytes");
+            console->printf("         block=%u first16: ", static_cast<unsigned>(blockno));
+            for (int i = 0; i < 16; i++)
+            {
+                console->printf("%02x ", static_cast<unsigned>(data[i]));
+            }
+            console->puts("\n");
+        }
+
+        // 解放して、同じブロックが再び確保できることを確認する
+        FileSystem::free_block(blockno);
+        auto again = FileSystem::allocate_block();
+        label(again.has_value() && *again == blockno ? "OK" : "FAIL", "free_block -> reallocate");
+        if (again.has_value())
+        {
+            FileSystem::free_block(*again);
+        }
     }
 }
 
@@ -536,7 +701,12 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]]
                                  static_cast<unsigned long long>(total_blocks),
                                  static_cast<unsigned long long>(total_blocks * BLOCK_SIZE));
 
-                FileSystem::Manager file_system(static_cast<uint32_t>(total_blocks), vga::vga);
+                // ファイルシステムには BufferCache そのものではなく、
+                // IBlockStore の実装として渡す (FileSystem は BufferCache を知らない)。
+                static_assert(FSBLOCK_SIZE == BLOCK_SIZE, "block size mismatch between FS and cache");
+                BufferCache::BlockStore block_store;
+
+                FileSystem::Manager file_system(static_cast<uint32_t>(total_blocks), &block_store, vga::vga);
                 if (file_system.valid())
                 {
                     const SuperBlock &sb = FileSystem::superblock();
@@ -548,6 +718,10 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]]
                                      static_cast<unsigned long long>(sb.nblocks),
                                      static_cast<unsigned long long>(sb.inodestart),
                                      static_cast<unsigned long long>(sb.bmapstart));
+
+                    vga::vga->set_color(Color::LightCyan, Color::Black);
+                    filesystem_read_write_test(block_store, vga::vga);
+                    vga::vga->set_color(Color::LightGrey, Color::Black);
                 }
                 else
                 {
