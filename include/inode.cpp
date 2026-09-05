@@ -3,6 +3,7 @@
 #include "buffer_cache.hpp"
 
 #include <cstring>
+#include <optional>
 
 namespace
 {
@@ -11,21 +12,64 @@ constexpr int NINODE = 50; // メモリ上に同時に保持する inode 数
 
 FileSystem::Inode inode_table[NINODE];
 
-// ─── bmap ───────────────────────────────────────────────────────
-// 論理ブロック番号 n (ファイルの先頭から数えたブロック) を
-// 物理ブロック番号に変換する。alloc が true なら未割り当てのときに確保する。
-// 0 を返したら失敗、または alloc=false で未割り当て。
+// ─── 論理ブロック → 物理ブロック ───────────────────────────────
+// ファイルの先頭から n 番目のブロックが、ディスク上のどのブロックかを返す。
 //
-// この関数を公開しないのは、上位層に「論理ブロック番号」という概念を
+// 読み出し用と書き込み用で関数を分けてあるのは、nullopt の意味を一意に
+// するため。1つの関数に alloc フラグを持たせると、同じ戻り値が
+// 「まだ割り当てられていない (穴)」と「解決に失敗した」の両方を指し、
+// 呼び出し側が区別できなくなる。
+//
+// これらを公開しないのは、上位層に「論理ブロック番号」という概念を
 // 漏らさないため。あとで二重間接ブロックを足しても影響がここに閉じる。
-uint32_t bmap(FileSystem::Inode &node, uint32_t n, bool alloc)
+
+// 読み出し用。割り当て済みならブロック番号、未割り当てなら nullopt (= 穴)。
+// 新しくブロックを確保することはない。
+std::optional<uint32_t> block_for_read(const FileSystem::Inode &node, uint32_t n)
 {
     if (n < static_cast<uint32_t>(NDIRECT))
     {
-        if (node.disk.addrs[n] == 0 && alloc)
+        const uint32_t blockno = node.disk.addrs[n];
+        return blockno != 0 ? std::optional<uint32_t>{blockno} : std::nullopt;
+    }
+
+    n -= static_cast<uint32_t>(NDIRECT);
+    if (n >= static_cast<uint32_t>(NINDIRECT))
+    {
+        return std::nullopt; // MAXFILE 超過
+    }
+
+    const uint32_t indirect = node.disk.addrs[NDIRECT];
+    if (indirect == 0)
+    {
+        return std::nullopt; // 間接ブロックがまだ無い = この範囲は全部穴
+    }
+
+    auto block = BufferCache::acquire(indirect);
+    if (!block)
+    {
+        // NOTE: 間接ブロックが読めなかった場合もここに来るため、呼び出し側からは
+        //       穴と区別できずゼロとして読まれる。I/O エラーを伝えるには
+        //       戻り値をもう一段分ける必要がある (現状は既存の挙動を踏襲)。
+        return std::nullopt;
+    }
+    const uint32_t blockno = reinterpret_cast<const uint32_t *>(block->data)[n];
+    return blockno != 0 ? std::optional<uint32_t>{blockno} : std::nullopt;
+}
+
+// 書き込み用。未割り当てなら確保して返す。確保できなければ nullopt (= 失敗)。
+std::optional<uint32_t> block_for_write(FileSystem::Inode &node, uint32_t n)
+{
+    if (n < static_cast<uint32_t>(NDIRECT))
+    {
+        if (node.disk.addrs[n] == 0)
         {
-            // allocate_block() は失敗時 nullopt。この関数は 0 を失敗として扱う。
-            node.disk.addrs[n] = FileSystem::allocate_block().value_or(0);
+            auto fresh = FileSystem::allocate_block();
+            if (!fresh)
+            {
+                return std::nullopt;
+            }
+            node.disk.addrs[n] = *fresh;
         }
         return node.disk.addrs[n];
     }
@@ -33,22 +77,18 @@ uint32_t bmap(FileSystem::Inode &node, uint32_t n, bool alloc)
     n -= static_cast<uint32_t>(NDIRECT);
     if (n >= static_cast<uint32_t>(NINDIRECT))
     {
-        return 0; // MAXFILE 超過
+        return std::nullopt; // MAXFILE 超過
     }
 
     // 間接ブロック本体がまだ無ければ確保する
     if (node.disk.addrs[NDIRECT] == 0)
     {
-        if (!alloc)
+        auto indirect = FileSystem::allocate_block();
+        if (!indirect)
         {
-            return 0;
+            return std::nullopt;
         }
-        uint32_t indirect = FileSystem::allocate_block().value_or(0);
-        if (indirect == 0)
-        {
-            return 0;
-        }
-        node.disk.addrs[NDIRECT] = indirect;
+        node.disk.addrs[NDIRECT] = *indirect;
     }
 
     // 一度目の read: 既に割り当て済みならそのまま返す
@@ -56,10 +96,10 @@ uint32_t bmap(FileSystem::Inode &node, uint32_t n, bool alloc)
         auto block = BufferCache::acquire(node.disk.addrs[NDIRECT]);
         if (!block)
         {
-            return 0;
+            return std::nullopt;
         }
-        uint32_t existing = reinterpret_cast<const uint32_t *>(block->data)[n];
-        if (existing != 0 || !alloc)
+        const uint32_t existing = reinterpret_cast<const uint32_t *>(block->data)[n];
+        if (existing != 0)
         {
             return existing;
         }
@@ -68,24 +108,25 @@ uint32_t bmap(FileSystem::Inode &node, uint32_t n, bool alloc)
     // allocate_block() は内部で zero_block() → acquire() を呼ぶので、
     // 間接ブロックを握ったまま呼ぶとバッファを同時に2枚押さえることになる。
 
-    uint32_t newblock = FileSystem::allocate_block().value_or(0);
-    if (newblock == 0)
+    auto fresh = FileSystem::allocate_block();
+    if (!fresh)
     {
-        return 0;
+        return std::nullopt;
     }
 
     auto block = BufferCache::acquire(node.disk.addrs[NDIRECT]);
     if (!block)
     {
-        FileSystem::free_block(newblock);
-        return 0;
+        FileSystem::free_block(*fresh);
+        return std::nullopt;
     }
-    reinterpret_cast<uint32_t *>(block->data)[n] = newblock;
+    reinterpret_cast<uint32_t *>(block->data)[n] = *fresh;
     if (!block.write())
     {
-        return 0;
+        FileSystem::free_block(*fresh); // 間接ブロックに載せられなかったので手放す
+        return std::nullopt;
     }
-    return newblock;
+    return *fresh;
 }
 
 // 中身をすべて解放する。
@@ -254,16 +295,16 @@ uint32_t readi(const InodeRef &node, uint8_t *dst, uint32_t off, uint32_t n)
     uint32_t done = 0;
     while (done < n)
     {
-        uint32_t position = off + done;
-        uint32_t blockno  = bmap(*self, position / BLOCK_SIZE, false);
-        uint32_t inner    = position % BLOCK_SIZE;
-        uint32_t chunk    = BLOCK_SIZE - inner;
+        uint32_t position  = off + done;
+        const auto blockno = block_for_read(*self, position / BLOCK_SIZE);
+        uint32_t inner     = position % BLOCK_SIZE;
+        uint32_t chunk     = BLOCK_SIZE - inner;
         if (chunk > n - done)
         {
             chunk = n - done;
         }
 
-        if (blockno == 0)
+        if (!blockno)
         {
             // 穴あきファイル。未割り当ての領域はゼロとして読ませる。
             std::memset(dst + done, 0, chunk);
@@ -271,7 +312,7 @@ uint32_t readi(const InodeRef &node, uint8_t *dst, uint32_t off, uint32_t n)
             continue;
         }
 
-        auto block = BufferCache::acquire(blockno);
+        auto block = BufferCache::acquire(*blockno);
         if (!block)
         {
             break;
@@ -301,14 +342,14 @@ uint32_t writei(const InodeRef &node, const uint8_t *src, uint32_t off, uint32_t
     uint32_t done = 0;
     while (done < n)
     {
-        uint32_t position = off + done;
-        uint32_t blockno  = bmap(*self, position / BLOCK_SIZE, true);
-        if (blockno == 0)
+        uint32_t position  = off + done;
+        const auto blockno = block_for_write(*self, position / BLOCK_SIZE);
+        if (!blockno)
         {
-            break; // 空きブロックなし
+            break; // 確保できなかった (空き無し / 上限超過 / I/O エラー)
         }
 
-        auto block = BufferCache::acquire(blockno);
+        auto block = BufferCache::acquire(*blockno);
         if (!block)
         {
             break;
@@ -327,7 +368,7 @@ uint32_t writei(const InodeRef &node, const uint8_t *src, uint32_t off, uint32_t
         done += chunk;
     }
 
-    // bmap が addrs を書き換えている可能性があるので、
+    // block_for_write() が addrs を書き換えている可能性があるので、
     // size が伸びなかった場合でも inode は書き戻す。
     if (done > 0)
     {
