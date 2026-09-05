@@ -98,9 +98,8 @@ static void thread_B()
 
 // PML4分離テスト用スレッド
 // 同じ仮想アドレスに別の値を書いて確認する。
-// アドレスは PML4 スロット1 (512GiB〜) に置く。スロット0は
-// create_address_space() がカーネル空間 (identity map) として全プロセスで
-// 共有するため、スロット0内のアドレスではプロセスごとに分離できない。
+// 低位 identity map 撤去後は PML4[0] もプロセスごとに独立しているが、
+// このテストは従来どおり PML4 スロット1 (512GiB〜) を使う。
 static constexpr uint64_t kAddrTestVirt = 0x8000000000; // PML4 index 1
 static volatile uint64_t test_result_a  = 0;
 static volatile uint64_t test_result_b  = 0;

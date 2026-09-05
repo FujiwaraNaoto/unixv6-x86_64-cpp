@@ -24,8 +24,9 @@ namespace vga
 
 VGA::VGA()
 {
-    attr_   = make_attr(Color::LightGreen, Color::Black);
-    buffer_ = reinterpret_cast<uint16_t *>(ADDR);
+    attr_ = make_attr(Color::LightGreen, Color::Black);
+    // 低位 identity map は撤去済みなので、物理 0xB8000 には direct map 経由で触る
+    buffer_ = reinterpret_cast<uint16_t *>(ADDR + DIRECT_MAP_BASE);
     width_  = WIDTH;
     height_ = HEIGHT;
     row_    = 0;

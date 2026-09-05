@@ -175,10 +175,14 @@ uint64_t VirtualMemoryManager::create_address_space()
 
 
     // カーネル空間を共有:
-    // PML4[0] : カーネルコード/データ(identity mapping)を共有
-    // PML4[256..511] : 上位半分(将来のカーネル空間)を共有
-    new_pml4[0] = current_pml4[0]; // カーネル空間のマッピングをコピー
-    std::memcpy(&new_pml4[256], &current_pml4[256], 256 * sizeof(uint64_t)); // カーネル空間のマッピングをコピー
+    // PML4[256..511] : 上位半分 (direct map + 高位カーネル) を共有
+    //
+    // PML4[0] はコピーしない。低位 identity map はブート直後に撤去済みで、
+    // このスロットはプロセスごとのユーザ空間専用になっている。
+    // (コピーすると fork のように「親を current にしたまま呼ぶ」場合に
+    //  親のユーザ用 PDPT を子が共有してしまい、以降の map_page_in が
+    //  親のテーブルを書き換えることになる)
+    memcpy(&new_pml4[256], &current_pml4[256], 256 * sizeof(uint64_t)); // カーネル空間のマッピングをコピー
     return new_pml4_phys;
 }
 
