@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <optional>
 #include "pmm.hpp"
 
 constexpr uint64_t PAGE_SIZE = 4096;
@@ -43,7 +44,9 @@ class VirtualMemoryManager final
     bool map_page(uint64_t virtual_address, uint64_t physical_address, uint64_t flags);
     // map解除とTLBフラッシュ
     bool unmap_page(uint64_t virtual_address);
-    uint64_t virtual_to_physical(uint64_t virtual_address) const;
+    // マップされていなければ nullopt を返す。
+    // (物理 0 は「未マップ」ではなく実在するページなので、番兵値には使えない)
+    std::optional<uint64_t> virtual_to_physical(uint64_t virtual_address) const;
 
     void flush_tlb();
 
