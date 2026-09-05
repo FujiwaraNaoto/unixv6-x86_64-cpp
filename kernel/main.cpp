@@ -18,6 +18,7 @@
 #include "virtioblock.hpp"
 #include "buffer_cache.hpp"
 #include "file_system.hpp"
+#include "path.hpp"
 
 // CRT 相当: リンカが .init_array に並べたグローバルコンストラクタを
 // 先頭から末尾まで順に呼ぶ。境界シンボルは kernel.ld で定義している。
@@ -748,6 +749,36 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]]
         vga::vga->set_color(Color::LightRed, Color::Black);
         vga::vga->puts("[VIRTIO] VirtIO Block Device initialization failed\n");
         vga::vga->set_color(Color::LightGrey, Color::Black);
+    }
+
+
+    BufferCache::BlockStore block_store;
+
+
+    FileSystem::Manager fs(2048,&block_store, vga::vga);   // fs.img は bs=512 count=2048
+    if (fs.valid())
+    {
+        auto root = FileSystem::namei("/");
+        if (root)
+        {
+            vga::vga->printf("[FS]   root inum=%u size=%u nlink=%u\n",
+                            root.inum(), root->size, root->nlink);
+        }
+
+        // 書いて読み返す往復テスト
+        auto file = FileSystem::ialloc(InodeType::kFile);
+        if (file && FileSystem::dirlink(root, "hello", file.inum()))
+        {
+            file->nlink = 1;
+            file.update();
+            const char *text = "hello unix v6\n";
+            FileSystem::writei(file, reinterpret_cast<const uint8_t *>(text), 0, 14);
+
+            char buf[32] = {};
+            auto found = FileSystem::namei("/hello");
+            FileSystem::readi(found, reinterpret_cast<uint8_t *>(buf), 0, 14);
+            vga::vga->printf("[FS]   /hello = %s", buf);
+        }
     }
 
 
