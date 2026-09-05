@@ -24,7 +24,8 @@ uint32_t bmap(FileSystem::Inode &node, uint32_t n, bool alloc)
     {
         if (node.disk.addrs[n] == 0 && alloc)
         {
-            node.disk.addrs[n] = FileSystem::allocate_block();
+            // allocate_block() は失敗時 nullopt。この関数は 0 を失敗として扱う。
+            node.disk.addrs[n] = FileSystem::allocate_block().value_or(0);
         }
         return node.disk.addrs[n];
     }
@@ -42,7 +43,7 @@ uint32_t bmap(FileSystem::Inode &node, uint32_t n, bool alloc)
         {
             return 0;
         }
-        uint32_t indirect = FileSystem::allocate_block();
+        uint32_t indirect = FileSystem::allocate_block().value_or(0);
         if (indirect == 0)
         {
             return 0;
@@ -67,7 +68,7 @@ uint32_t bmap(FileSystem::Inode &node, uint32_t n, bool alloc)
     // allocate_block() は内部で zero_block() → acquire() を呼ぶので、
     // 間接ブロックを握ったまま呼ぶとバッファを同時に2枚押さえることになる。
 
-    uint32_t newblock = FileSystem::allocate_block();
+    uint32_t newblock = FileSystem::allocate_block().value_or(0);
     if (newblock == 0)
     {
         return 0;
