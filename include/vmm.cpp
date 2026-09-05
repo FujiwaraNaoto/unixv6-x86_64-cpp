@@ -26,10 +26,10 @@ uint64_t entry_to_phys(uint64_t entry)
 {
     return entry & 0x000FFFFFFFFFF000ULL;
 }
-
+// direct map経由: 物理アドレス + DIRECT_MAP_BASE = 仮想アドレス
 uint64_t *physical_to_virtual(uint64_t phys)
 {
-    return reinterpret_cast<uint64_t *>(phys);
+    return reinterpret_cast<uint64_t *>(phys + DIRECT_MAP_BASE);
 }
 
 extern "C" void load_cr3(uint64_t value);
@@ -45,6 +45,7 @@ VirtualMemoryManager::VirtualMemoryManager(pmm::PhysicalMemoryManager *pmm_ptr)
 {
     this->pmm_ptr_ = pmm_ptr;
     pml4_phys_     = read_cr3(); // CR3の値を読み込む
+    vga::vga->printf("PML4 physical address: 0x%016x, direct map at 0x%016x\n", pml4_phys_, DIRECT_MAP_BASE);
 }
 
 bool VirtualMemoryManager::map_page(uint64_t virtual_address, uint64_t physical_address, uint64_t flags)
@@ -174,9 +175,13 @@ uint64_t VirtualMemoryManager::create_address_space()
 
 
     // カーネル空間を共有:
-    // PML4[0] : カーネルコード/データ(identity mapping)を共有
-    // PML4[256..511] : 上位半分(将来のカーネル空間)を共有
-    new_pml4[0] = current_pml4[0]; // カーネル空間のマッピングをコピー
+    // PML4[256..511] : 上位半分 (direct map + 高位カーネル) を共有
+    //
+    // PML4[0] はコピーしない。低位 identity map はブート直後に撤去済みで、
+    // このスロットはプロセスごとのユーザ空間専用になっている。
+    // (コピーすると fork のように「親を current にしたまま呼ぶ」場合に
+    //  親のユーザ用 PDPT を子が共有してしまい、以降の map_page_in が
+    //  親のテーブルを書き換えることになる)
     memcpy(&new_pml4[256], &current_pml4[256], 256 * sizeof(uint64_t)); // カーネル空間のマッピングをコピー
     return new_pml4_phys;
 }

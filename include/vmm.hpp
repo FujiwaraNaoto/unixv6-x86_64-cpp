@@ -5,6 +5,20 @@
 constexpr uint64_t PAGE_SIZE = 4096;
 constexpr uint64_t PAGE_MASK = ~(PAGE_SIZE - 1);
 
+// direct map: 物理メモリ全体を高位にマップした領域のベース
+constexpr uint64_t DIRECT_MAP_BASE = 0xFFFF800000000000ULL;
+
+// 物理 → direct map 上の仮想アドレス
+inline uint64_t phys_to_virt(uint64_t phys)
+{
+    return phys + DIRECT_MAP_BASE;
+}
+// direct map 上の仮想 → 物理
+inline uint64_t virt_to_phys_direct(uint64_t virt)
+{
+    return virt - DIRECT_MAP_BASE;
+}
+
 
 namespace vmm
 {

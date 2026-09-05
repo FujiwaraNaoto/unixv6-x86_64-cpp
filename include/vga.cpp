@@ -12,10 +12,10 @@ namespace
 {
 // PC起動時にBIOSがVGAチップを80x25のテキストモードに設定する．
 // 物理アドレス0xB8000から始まる4000バイトの領域が、80x25=2000文字分のテキストバッファとして使われる．
-constexpr size_t WIDTH  = 80;
-constexpr size_t HEIGHT = 25;
-constexpr uint32_t ADDR = 0xB8000;
-
+constexpr size_t WIDTH             = 80;
+constexpr size_t HEIGHT            = 25;
+constexpr uint64_t ADDR            = 0xB8000;
+constexpr uint64_t DIRECT_MAP_BASE = 0xFFFF800000000000ULL;
 } // namespace
 
 namespace vga
@@ -24,8 +24,9 @@ namespace vga
 
 VGA::VGA()
 {
-    attr_   = make_attr(Color::LightGreen, Color::Black);
-    buffer_ = reinterpret_cast<uint16_t *>(ADDR);
+    attr_ = make_attr(Color::LightGreen, Color::Black);
+    // 低位 identity map は撤去済みなので、物理 0xB8000 には direct map 経由で触る
+    buffer_ = reinterpret_cast<uint16_t *>(ADDR + DIRECT_MAP_BASE);
     width_  = WIDTH;
     height_ = HEIGHT;
     row_    = 0;
@@ -55,7 +56,7 @@ uint16_t VGA::make_entry(char c, uint8_t attr)
 }
 volatile uint16_t *VGA::buffer()
 {
-    return reinterpret_cast<volatile uint16_t *>(ADDR);
+    return reinterpret_cast<volatile uint16_t *>(ADDR + DIRECT_MAP_BASE); // direct map経由でアクセスする
 }
 
 // 0x3D4はインデックスレジスタ, 0x3D5はデータレジスタ.
@@ -183,6 +184,13 @@ void VGA::printf(const char *fmt, ...)
             width = width * 10 + (*fmt - '0');
             fmt++;
         }
+        // 長さ修飾子 (l / ll / h / hh / z) は読み飛ばす。
+        // 可変長引数は既に 64bit に昇格しており print_uint も unsigned long long を
+        // 受けるので、修飾子の有無で取り出し方を変える必要はない。
+        // 読み飛ばさないと switch のどのケースにも当たらず、"llx" のような文字列が
+        // そのまま画面に出てしまう。
+        while (*fmt == 'l' || *fmt == 'h' || *fmt == 'z')
+            fmt++;
         switch (*fmt)
         {
             case 'd':
