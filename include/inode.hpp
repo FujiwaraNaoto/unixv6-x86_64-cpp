@@ -71,6 +71,7 @@ class InodeRef final
         }
         return *this;
     }
+    InodeRef duplicate() const;
 
     explicit operator bool() const
     {

@@ -36,6 +36,10 @@ ProcessManager::ProcessManager(heap::Heap *heap_ptr)
     heap_ptr_     = heap_ptr;
 }
 
+Process *current_process()
+{
+    return current_proc_;
+}
 
 // A function called when a new process is executed for the first time
 // ProcessContext の rip に設定される
@@ -127,6 +131,17 @@ Process *create_process(EntryPoint entry, const char *name)
     proc->state = ProcessState::Embryo;
     proc->entry = entry;
     proc->name  = name; // kstring が容量超過分を切り捨てて null 終端する
+    // 親は「作った側」。kernel_main から作れば nullptr になる。
+    // exit() が p->parent を読むので、スロットの前の中身が残らないよう必ず入れる。
+    proc->parent = current_proc_;
+
+    for(auto &f: proc->ofile)
+    {
+        f = nullptr;
+    }
+    proc->ofile[0] = FileSystem::file_open_console(true, false);  // 標準入力
+    proc->ofile[1] = FileSystem::file_open_console(false, true);  // 標準出力
+    proc->ofile[2] = FileSystem::file_open_console(false, true);  // 標準エラー
 
     uint8_t *stack = static_cast<uint8_t *>(heap_ptr_->alloc(KERNEL_STACK_SIZE));
     if (stack == nullptr)
@@ -252,6 +267,16 @@ static void schedule_from_zombie(ProcessContext **discard_context)
     p->exit_status = status;
     p->state       = ProcessState::Zombie;
 
+    for(auto &f: p->ofile)
+    {
+        if(f != nullptr)
+        {
+            FileSystem::file_close(f);
+            f = nullptr;
+        }
+    }
+    p->cwd.reset();
+
     if (p->parent)
     {
         // 親プロセスが wait() している場合に備えて wakeup する。
@@ -367,6 +392,15 @@ int fork()
     child->entry         = parent->entry;
     child->name          = parent->name;
     child->sleep_channel = nullptr;
+
+    for(auto &f: child->ofile)
+    {
+        if(f != nullptr)
+        {
+            f = FileSystem::file_duplicate(f);
+        }
+    }
+    child->cwd = parent->cwd.duplicate(); // カレントディレクトリの inode への参照をコピー
 
     // allocate a new page table for the child process
     uint8_t *child_stack = static_cast<uint8_t *>(heap_ptr_->alloc(KERNEL_STACK_SIZE));

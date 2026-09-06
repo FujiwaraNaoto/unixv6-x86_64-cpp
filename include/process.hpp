@@ -1,9 +1,10 @@
 #pragma once
 #include <cstdint>
 #include <cstddef>
+#include <array>
 #include "heap.hpp"
 #include "kstring.hpp"
-
+#include "file.hpp"
 struct [[gnu::packed]] ProcessContext
 {
     uint64_t r15;
@@ -31,7 +32,7 @@ constexpr size_t KERNEL_STACK_SIZE = 0x4000; // 16KB
 // プロセスのエントリポイント (引数なし・戻り値なしの関数)。
 // NOTE: std::function などの C++ 標準ライブラリは使えないので、関数ポインタで表現する
 using EntryPoint = void (*)();
-
+constexpr int NUM_FILE_DESCRIPTORS = 16; // プロセスが同時に開けるファイルの最大数
 struct Process
 {
     uint64_t pid;
@@ -45,6 +46,8 @@ struct Process
     void *sleep_channel; // プロセスが sleep している場合のチャネル (待機理由) 0=起きている
     Process *parent;     // 親プロセスへのポインタ (fork などで使う)
     int exit_status;     // プロセスの終了ステータス (exit() で設定される)
+    std::array<FileSystem::File *, NUM_FILE_DESCRIPTORS> ofile; // プロセスが開いているファイルの配列
+    FileSystem::InodeRef cwd; // カレントディレクトリの inode への参照 (fork でコピーされる)
 };
 
 namespace process

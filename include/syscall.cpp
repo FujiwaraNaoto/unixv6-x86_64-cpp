@@ -2,49 +2,61 @@
 #include "vga.hpp"
 #include "keyboard.hpp"
 #include "gdt.hpp"
+#include "process.hpp"
+#include "file.hpp"
+#include "path.hpp"
 
 extern "C" void syscall_entry();
 extern "C" uint64_t rdmsr(uint32_t msr);
 extern "C" void wrmsr(uint32_t msr, uint64_t value);
 
-static long sys_read(uint64_t fd, uint64_t buf, uint64_t len)
+
+// ─── fd → File* の解決 ──────────────────────────────────────────
+// fd はプロセスごとの表 (Process::ofile) に対する添字なので、プロセス文脈が
+// 無ければどの syscall も成立しない。fd 0/1/2 は create_process() が
+// コンソールに繋いである。
+namespace
 {
-    if (fd != 0)
-        return static_cast<long>(-1); // stdin のみ
-    char *p    = reinterpret_cast<char *>(buf);
-    size_t idx = 0;
-    while (idx < len)
+
+// fd に対応する表のスロットを返す。範囲外やプロセス文脈が無い場合は nullptr。
+// (中身が nullptr = その fd は未使用、とはっきり区別する)
+FileSystem::File **fd_slot(int fd)
+{
+    Process *process = process::current_process();
+    if (process == nullptr || fd < 0 || fd >= static_cast<int>(process->ofile.size()))
     {
-        while (!keyboard::has_input())
-        {
-            // syscall は FMASK で IF=0 (割り込み禁止) で入るため、ここで sti して
-            // キーボード割り込みを受けられるようにする。sti の直後に hlt を置くと
-            // sti から1命令ぶん割り込みが遅延する x86 の仕様により、check と hlt の
-            // 間に来た入力も取りこぼさずに wake できる (lost-wakeup 回避)。
-            asm volatile("sti; hlt");
-        }
-        char c = keyboard::getchar();
-        if (c == 0)
-            break; // no more input
-        p[idx] = c;
-        idx++;
-        if (c == '\n')
-            break; // stop reading after newline
+        return nullptr;
     }
-    return static_cast<long>(idx);
+    return &process->ofile[fd];
 }
 
-static long sys_write(uint64_t fd, uint64_t buf, uint64_t len)
+FileSystem::File *fd_to_file(int fd)
 {
-    if (fd != 1 && fd != 2)
-        return static_cast<long>(-1); // stdout/stderr のみ
-    const char *p = reinterpret_cast<const char *>(buf);
-    for (uint64_t i = 0; i < len; i++)
-        vga::vga->putchar(p[i]);
-    return static_cast<long>(len);
+    FileSystem::File **slot = fd_slot(fd);
+    return slot != nullptr ? *slot : nullptr;
 }
 
-static long sys_exit(uint64_t code)
+// 空いている fd を探して file を割り当てる。失敗時は -1。
+int fd_allocate(FileSystem::File *file)
+{
+    Process *process = process::current_process();
+    if (process == nullptr)
+    {
+        return -1;
+    }
+
+    for (int fd = 0; fd < static_cast<int>(process->ofile.size()); fd++)
+    {
+        if (process->ofile[fd] == nullptr)
+        {
+            process->ofile[fd] = file;
+            return fd;
+        }
+    }
+    return -1;
+}
+
+[[noreturn]] void sys_exit(uint64_t code)
 {
     vga::vga->set_color(Color::Yellow, Color::Black);
     vga::vga->printf("\n[SYS]  exit(%u) called\n", (unsigned)code);
@@ -52,27 +64,121 @@ static long sys_exit(uint64_t code)
     // フェーズ6ではプロセス連携をせず、ここで停止
     while (1)
         asm volatile("hlt");
-    return 0;
 }
+
+} // namespace
 
 namespace Syscall
 {
 
-extern "C" long syscall_dispatch(uint64_t num, uint64_t a1, uint64_t a2, uint64_t a3, uint64_t /*a4*/, uint64_t /*a5*/)
+int sys_open(const char *path, int flags)
+{
+    if (path == nullptr)
+    {
+        return -1;
+    }
+
+    FileSystem::InodeRef inode = FileSystem::namei(path);
+    if (!inode)
+    {
+        if (!(flags & O_CREATE))
+        {
+            return -1; // 存在せず、作成も指定されていない
+        }
+        inode = FileSystem::create_file(path, InodeType::kFile);
+        if (!inode)
+        {
+            return -1;
+        }
+    }
+
+    const bool writable = (flags & (O_WRONLY | O_RDWR)) != 0;
+
+    // ディレクトリの中身は dirlink() 経由でしか触らせない (書き込みでは開けない)
+    if (inode->type == InodeType::kDirectory && writable)
+    {
+        return -1;
+    }
+
+    if ((flags & O_TRUNC) && inode->type == InodeType::kFile)
+    {
+        FileSystem::itrunc(inode);
+    }
+
+    FileSystem::File *file = FileSystem::file_allocate();
+    if (file == nullptr)
+    {
+        return -1; // ファイルテーブル枯渇
+    }
+
+    const int fd = fd_allocate(file);
+    if (fd < 0)
+    {
+        FileSystem::file_close(file);
+        return -1; // fd 表が埋まっている
+    }
+
+    file->type     = FileSystem::FileType::kInode;
+    file->inode    = static_cast<FileSystem::InodeRef &&>(inode);
+    file->offset   = 0;
+    file->readable = !(flags & O_WRONLY);
+    file->writable = writable;
+
+    return fd;
+}
+
+int sys_close(int fd)
+{
+    FileSystem::File **slot = fd_slot(fd);
+    if (slot == nullptr || *slot == nullptr)
+    {
+        return -1;
+    }
+    FileSystem::file_close(*slot);
+    *slot = nullptr;
+    return 0;
+}
+
+int sys_read(int fd, void *buffer, uint32_t n)
+{
+    FileSystem::File *file = fd_to_file(fd);
+    if (file == nullptr || buffer == nullptr)
+    {
+        return -1;
+    }
+    // readable の判定は file_read() が持つ (コンソールでも同じ規則で弾く)
+    return FileSystem::file_read(file, static_cast<uint8_t *>(buffer), n);
+}
+
+int sys_write(int fd, const void *buffer, uint32_t n)
+{
+    FileSystem::File *file = fd_to_file(fd);
+    if (file == nullptr || buffer == nullptr)
+    {
+        return -1;
+    }
+    return FileSystem::file_write(file, static_cast<const uint8_t *>(buffer), n);
+}
+
+extern "C" int64_t syscall_dispatch(uint64_t num, uint64_t a1, uint64_t a2, uint64_t a3, uint64_t /*a4*/, uint64_t /*a5*/)
 {
     switch (num)
     {
         case SyscallNo::kRead:
-            return sys_read(a1, a2, a3);
+            return sys_read(static_cast<int>(a1), reinterpret_cast<void *>(a2), static_cast<uint32_t>(a3));
         case SyscallNo::kWrite:
-            return sys_write(a1, a2, a3);
+            return sys_write(static_cast<int>(a1), reinterpret_cast<const void *>(a2), static_cast<uint32_t>(a3));
         case SyscallNo::kExit:
-            return sys_exit(a1);
+            sys_exit(a1); // 戻らない
+        case SyscallNo::kOpen:
+            return sys_open(reinterpret_cast<const char *>(a1), static_cast<int>(a2));
+        case SyscallNo::kClose:
+            return sys_close(static_cast<int>(a1));
         default:
             vga::vga->set_color(Color::LightRed, Color::Black);
             vga::vga->printf("[SYS]  unknown syscall %u\n", (unsigned)num);
             vga::vga->set_color(Color::LightGrey, Color::Black);
-            return static_cast<long>(-1);
+            return static_cast<int64_t>(-1);
     }
 }
 
@@ -116,7 +222,7 @@ void init()
     vga::vga->set_color(Color::LightGreen, Color::Black);
     vga::vga->puts("[SYS]  ");
     vga::vga->set_color(Color::LightGrey, Color::Black);
-    vga::vga->printf("syscall enabled  LSTAR=0x%x\n", static_cast<unsigned>(reinterpret_cast<uint64_t>(syscall_entry)));
+    vga::vga->printf("syscall enabled  LSTAR=0x%lx\n", static_cast<unsigned long>(reinterpret_cast<uint64_t>(syscall_entry)));
 }
 
 } // namespace Syscall

@@ -18,6 +18,12 @@ InodeRef namei(const char *path);
 //   "/a/b/c" → 親 = "/a/b" の inode, name_out = "c"
 InodeRef nameiparent(const char *path, FileName &name_out);
 
+// path に type の inode を作り、親ディレクトリにリンクする (open(O_CREATE) 用)。
+// 既に同じ名前があり、それが要求と同じ通常ファイルなら、作らずにそれを返す
+// (open(O_CREATE) は既存ファイルに対しては単なる open として振る舞う)。
+// 失敗時は空の InodeRef。途中で失敗した場合、確保した inode は解放される。
+InodeRef create_file(const char *path, InodeType type);
+
 } // namespace FileSystem
 
 #endif // PATH_HPP

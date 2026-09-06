@@ -18,6 +18,7 @@
 #include "virtioblock.hpp"
 #include "buffer_cache.hpp"
 #include "file_system.hpp"
+#include "file.hpp"
 // inode / ディレクトリ層は path.hpp 経由でも一部入るが、main.cpp から
 // 直接使っているので明示的に include する (依存を芋づるに任せない)。
 #include "inode.hpp"
@@ -219,6 +220,137 @@ static void hexdump(const uint8_t *data, size_t size)
         }
         vga::vga->puts("|\n");
     }
+}
+
+// 1文字の大小を入れ替える。ASCII 以外はそのまま返す。
+static char flip_case(char c)
+{
+    if (c >= 'a' && c <= 'z')
+    {
+        return static_cast<char>(c - 'a' + 'A');
+    }
+    if (c >= 'A' && c <= 'Z')
+    {
+        return static_cast<char>(c - 'A' + 'a');
+    }
+    return c;
+}
+
+// キーボードから1行読み、大文字と小文字を入れ替えて表示し続ける。
+// 入出力はどちらも fd 経由 (sys_read(0) / sys_write(1)) なので、
+// コンソールもファイルと同じインターフェースで扱えることの確認になる。
+// fd 0/1 は create_process() が張ったコンソールなので、ここでは開き直さない。
+// "q" だけの行で抜ける。
+static void console_case_flip_demo(IConsole *console)
+{
+    console->puts("[ECHO] type a line (upper <-> lower). \"q\" to quit.\n");
+
+    char line[128];
+    while (true)
+    {
+        console->puts("> ");
+
+        // 末尾に改行を書き戻す余地を 1 バイト残す
+        const int n = Syscall::sys_read(0, line, sizeof(line) - 1);
+        if (n <= 0)
+        {
+            console->puts("[ECHO] read failed\n");
+            return;
+        }
+
+        // 末尾の改行は数に入れない (表示のときにこちらで足す)
+        auto length = static_cast<uint32_t>(n);
+        if (line[length - 1] == '\n')
+        {
+            length--;
+        }
+
+        if (length == 1 && line[0] == 'q')
+        {
+            console->puts("[ECHO] bye\n");
+            return;
+        }
+
+        for (uint32_t i = 0; i < length; i++)
+        {
+            line[i] = flip_case(line[i]);
+        }
+        line[length] = '\n'; // 読んだ改行を書き戻す (無改行で終わった行にも付く)
+
+        Syscall::sys_write(1, line, length + 1);
+    }
+}
+
+// syscall 層 (open/write/read/close) の往復テスト。
+// FileSystem::writei / readi を直接叩く filesystem_read_write_test と違い、
+// fd を経由するので File テーブルと fd 表まで含めて確認できる。
+// fd を使う以上プロセス文脈が要るので、init プロセスの中から呼ぶこと。
+static void syscall_file_test(IConsole *console)
+{
+    auto label = [console](const char *result, const char *what) { console->printf("[SYSFS] %-6s %s\n", result, what); };
+
+    static constexpr char kText[] = "Hello, filesystem!\n";
+    static constexpr uint32_t kLength = sizeof(kText) - 1; // NUL を除いた長さ
+
+    // ── ① 作って書く ──
+    const int write_fd = Syscall::sys_open("/test.txt", O_CREATE | O_WRONLY | O_TRUNC);
+    if (write_fd < 0)
+    {
+        label("FAIL", "open(/test.txt, O_CREATE|O_WRONLY)");
+        return;
+    }
+
+    const int written = Syscall::sys_write(write_fd, kText, kLength);
+    Syscall::sys_close(write_fd);
+    if (written != static_cast<int>(kLength))
+    {
+        console->printf("[SYSFS] FAIL   write: %d of %u bytes\n", written, static_cast<unsigned>(kLength));
+        return;
+    }
+    label("OK", "open + write + close");
+
+    // ── ② 読み返す ──
+    const int read_fd = Syscall::sys_open("/test.txt", O_RDONLY);
+    if (read_fd < 0)
+    {
+        label("FAIL", "open(/test.txt, O_RDONLY)");
+        return;
+    }
+
+    char buffer[64] = {};
+    const int read_bytes = Syscall::sys_read(read_fd, buffer, sizeof(buffer) - 1);
+    Syscall::sys_close(read_fd);
+    if (read_bytes != static_cast<int>(kLength))
+    {
+        console->printf("[SYSFS] FAIL   read: %d of %u bytes\n", read_bytes, static_cast<unsigned>(kLength));
+        return;
+    }
+
+    // ── ③ 書いた内容と一致するか ──
+    bool same = true;
+    for (uint32_t i = 0; i < kLength; i++)
+    {
+        if (buffer[i] != kText[i])
+        {
+            same = false;
+            break;
+        }
+    }
+    label(same ? "OK" : "FAIL", "read back matches");
+    console->printf("[SYSFS]        /test.txt = %s", buffer);
+}
+
+// 最初のプロセス (xv6 の userinit が立てる init に相当)。
+//
+// fd を使う処理はすべてここに置く。プロセスなので Process::ofile を持ち、
+// fd 0/1/2 は create_process() がコンソールに繋いでくれている。
+// kernel_main はファイルシステムを初期化してこのプロセスを起こすだけで、
+// 自分では fd を触らない。
+static void init_process()
+{
+    syscall_file_test(vga::vga);
+    console_case_flip_demo(vga::vga);
+    process::exit(0);
 }
 
 // ファイルシステム層を通した読み書きのテスト。
@@ -559,6 +691,10 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]]
     // }
 
 
+    // ファイルテーブル → プロセス表の順で初期化する。
+    // create_process() が fd 0/1/2 にコンソールを割り当てるので、
+    // その時点でファイルテーブルが空でなければならない。
+    FileSystem::FileTableManager file_table_manager;
     process::ProcessManager process_manager(heap::heap_ptr);
     // Process *procA = process::create_process(thread_A, "Thread A");
     // Process *procB = process::create_process(thread_B, "Thread B");
@@ -784,6 +920,28 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]]
         }
     }
 
+
+    // ここまででファイルシステムは使える状態になっている。
+    // fd を使うテストはプロセス文脈が要るので、init プロセスを立ててその中で回す。
+    if (process::create_process(init_process, "init") != nullptr)
+    {
+        process::yield(); // init が exit するまで戻ってこない
+
+        // NOTE: init を wait() で回収していないので Zombie のまま残り、
+        //       カーネルスタックも解放されない。kernel_main はこの後
+        //       停止するだけなので実害は無いが、init を常駐させるなら
+        //       ここで回収する必要がある。
+        vga::vga->set_color(Color::LightGreen, Color::Black);
+        vga::vga->puts("[INIT] ");
+        vga::vga->set_color(Color::LightGrey, Color::Black);
+        vga::vga->puts("init exited; kernel idle\n");
+    }
+    else
+    {
+        vga::vga->set_color(Color::LightRed, Color::Black);
+        vga::vga->puts("[INIT] failed to create init process\n");
+        vga::vga->set_color(Color::LightGrey, Color::Black);
+    }
 
     while (1)
     {
