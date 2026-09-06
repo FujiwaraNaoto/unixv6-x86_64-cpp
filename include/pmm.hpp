@@ -40,6 +40,14 @@ class PhysicalMemoryManager
     PhysicalMemoryManager(Multiboot2MemoryMapTag *memory_map, uint64_t kernel_end);
     uint64_t allocate();
     void free(uint64_t page_address);
+
+    // [start, end) を「使用中」にして allocate() の対象から外す。
+    // ページ境界に丸めて (start は切り下げ / end は切り上げ) 予約するので、
+    // 範囲にかかるページは必ず保護される。
+    // カーネル本体以外でブートローダが置いた領域 (multiboot2 情報構造体など) を
+    // 踏み潰さないために使う。
+    void reserve_region(uint64_t start, uint64_t end);
+
     PhysicalMemoryManagerState get_state() const;
 
 

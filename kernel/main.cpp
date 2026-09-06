@@ -43,7 +43,7 @@ extern "C" uint8_t kernel_phys_end[];
 // ここではハードウェアとカーネルサブシステムの初期化だけを行い、
 // 各機能の動作確認は tests/ 以下の tests::run_all() に任せる
 // (make tests でビルドしたときのみ呼ばれる)。
-extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]] uint32_t mb_addr)
+extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, uint32_t mb_addr)
 {
     // 他のどのグローバル変数を使う前に、コンストラクタを実行する。
     // これで serial / vga はグローバル宣言だけで初期化される。
@@ -71,6 +71,12 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]]
     // kernel_phys_end (物理) を渡す。仮想を渡すと「カーネル領域スキップ」判定が
     // 常に真になり、さらに終端までのループが事実上無限ループになる。
     pmm::PhysicalMemoryManager pmm(mmap, reinterpret_cast<uint64_t>(kernel_phys_end));
+
+    // GRUB が置いた multiboot2 情報構造体はカーネル終端より後ろにあるので、
+    // 何もしないと PMM が普通の空きページとして配ってしまう。
+    // (今は解析済みなので実害は出ないが、後からブート情報を参照すると壊れる)
+    pmm.reserve_region(mb_addr, mb_addr + multiboot_info_size(mb_addr));
+
     vmm::VirtualMemoryManager vmm_instance = vmm::VirtualMemoryManager(&pmm);
     // カーネルヒープは高位 (0xFFFFFFFF90000000〜) に置く。
     // 低位の identity map (PML4[0]) には依存しない。

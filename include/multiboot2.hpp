@@ -34,6 +34,18 @@ struct [[gnu::packed]] Multiboot2MemoryMapTag
     Multiboot2MemoryMapEntry entries[];
 };
 
+// chapter3.1 Boot information format
+// 情報構造体の先頭 8 バイト。この total_size にタグ全体のバイト数が入っている。
+struct [[gnu::packed]] Multiboot2InfoHeader
+{
+    uint32_t total_size;
+    uint32_t reserved;
+};
+
 Multiboot2Tag *find_next_tag(Multiboot2Tag *current_tag);
 
 Multiboot2MemoryMapTag *find_mmap(uint32_t multiboot_address);
+
+// GRUB が置いた情報構造体全体のバイト数を返す。
+// PMM に予約させて、後から物理ページとして配られるのを防ぐために使う。
+uint32_t multiboot_info_size(uint32_t multiboot_address);
