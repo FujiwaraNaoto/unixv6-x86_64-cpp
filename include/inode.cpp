@@ -276,6 +276,17 @@ InodeRef ialloc(InodeType type)
     return {}; // 空き inode なし
 }
 
+InodeRef InodeRef::duplicate() const
+{
+    if (node_ == nullptr)
+    {
+        return InodeRef{};
+    }
+    node_->ref++;          // 参照カウントを増やす
+    return InodeRef{node_};
+}
+
+
 uint32_t readi(const InodeRef &node, uint8_t *dst, uint32_t off, uint32_t n)
 {
     Inode *self = node.get();

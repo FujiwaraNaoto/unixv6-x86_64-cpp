@@ -26,5 +26,5 @@ namespace Syscall
 // MSR を設定して syscall/sysret を有効化
 void init();
 
-extern "C" long syscall_dispatch(uint64_t num, uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4, uint64_t a5);
+extern "C" int64_t syscall_dispatch(uint64_t num, uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4, uint64_t a5);
 } // namespace Syscall

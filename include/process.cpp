@@ -128,6 +128,14 @@ Process *create_process(EntryPoint entry, const char *name)
     proc->entry = entry;
     proc->name  = name; // kstring が容量超過分を切り捨てて null 終端する
 
+    for (size_t i = 0; i < proc->ofile.size(); ++i)
+    {
+        proc->ofile[i] = nullptr; // プロセスのファイルディスクリプタを初期化
+    }
+    proc->ofile[0] = FileSystem::file_open_console(true, false);  // 標準入力
+    proc->ofile[1] = FileSystem::file_open_console(false, true);  // 標準出力
+    proc->ofile[2] = FileSystem::file_open_console(false, true);  // 標準エラー
+
     uint8_t *stack = static_cast<uint8_t *>(heap_ptr_->alloc(KERNEL_STACK_SIZE));
     if (stack == nullptr)
     {
@@ -252,6 +260,16 @@ static void schedule_from_zombie(ProcessContext **discard_context)
     p->exit_status = status;
     p->state       = ProcessState::Zombie;
 
+    for(auto &f: p->ofile)
+    {
+        if(f != nullptr)
+        {
+            FileSystem::file_close(f);
+            f = nullptr;
+        }
+    }
+    p->cwd.reset();
+
     if (p->parent)
     {
         // 親プロセスが wait() している場合に備えて wakeup する。
@@ -367,6 +385,12 @@ int fork()
     child->entry         = parent->entry;
     child->name          = parent->name;
     child->sleep_channel = nullptr;
+
+    for (size_t i = 0; i < child->ofile.size(); ++i)
+    {
+        child->ofile[i] = parent->ofile[i]!=nullptr? FileSystem::file_duplicate(parent->ofile[i]) : nullptr; // 親のファイルディスクリプタを複製
+    }
+    child->cwd = parent->cwd.duplicate(); // カレントディレクトリの inode への参照をコピー
 
     // allocate a new page table for the child process
     uint8_t *child_stack = static_cast<uint8_t *>(heap_ptr_->alloc(KERNEL_STACK_SIZE));
