@@ -12,41 +12,44 @@ extern "C" void wrmsr(uint32_t msr, uint64_t value);
 
 
 // ─── fd → File* の解決 ──────────────────────────────────────────
+// fd はプロセスごとの表 (Process::ofile) に対する添字なので、プロセス文脈が
+// 無ければどの syscall も成立しない。fd 0/1/2 は create_process() が
+// コンソールに繋いである。
 namespace
 {
 
-using FileTable = std::array<FileSystem::File *, NUM_FILE_DESCRIPTORS>;
-
-// プロセス文脈が無いときに使う fd 表。
-// kernel_main から sys_open() などを直接呼べるようにするためのもので、
-// プロセスが走っている間 (current_process() != nullptr) は使われない。
-FileTable kernel_file_table{};
-
-FileTable &current_file_table()
+// fd に対応する表のスロットを返す。範囲外やプロセス文脈が無い場合は nullptr。
+// (中身が nullptr = その fd は未使用、とはっきり区別する)
+FileSystem::File **fd_slot(int fd)
 {
     Process *process = process::current_process();
-    return process != nullptr ? process->ofile : kernel_file_table;
+    if (process == nullptr || fd < 0 || fd >= static_cast<int>(process->ofile.size()))
+    {
+        return nullptr;
+    }
+    return &process->ofile[fd];
 }
 
 FileSystem::File *fd_to_file(int fd)
 {
-    FileTable &table = current_file_table();
-    if (fd < 0 || fd >= static_cast<int>(table.size()))
-    {
-        return nullptr;
-    }
-    return table[fd];
+    FileSystem::File **slot = fd_slot(fd);
+    return slot != nullptr ? *slot : nullptr;
 }
 
 // 空いている fd を探して file を割り当てる。失敗時は -1。
 int fd_allocate(FileSystem::File *file)
 {
-    FileTable &table = current_file_table();
-    for (int fd = 0; fd < static_cast<int>(table.size()); fd++)
+    Process *process = process::current_process();
+    if (process == nullptr)
     {
-        if (table[fd] == nullptr)
+        return -1;
+    }
+
+    for (int fd = 0; fd < static_cast<int>(process->ofile.size()); fd++)
+    {
+        if (process->ofile[fd] == nullptr)
         {
-            table[fd] = file;
+            process->ofile[fd] = file;
             return fd;
         }
     }
@@ -67,26 +70,6 @@ int fd_allocate(FileSystem::File *file)
 
 namespace Syscall
 {
-
-bool init_kernel_console_fds()
-{
-    if (process::current_process() != nullptr)
-    {
-        return false; // プロセス文脈では proc->ofile が既に張られている
-    }
-
-    if (kernel_file_table[0] != nullptr)
-    {
-        return true; // 割り当て済み
-    }
-
-    // 0=標準入力, 1=標準出力, 2=標準エラー。create_process() と同じ並び。
-    kernel_file_table[0] = FileSystem::file_open_console(true, false);
-    kernel_file_table[1] = FileSystem::file_open_console(false, true);
-    kernel_file_table[2] = FileSystem::file_open_console(false, true);
-
-    return kernel_file_table[0] != nullptr && kernel_file_table[1] != nullptr && kernel_file_table[2] != nullptr;
-}
 
 int sys_open(const char *path, int flags)
 {
@@ -146,13 +129,13 @@ int sys_open(const char *path, int flags)
 
 int sys_close(int fd)
 {
-    FileTable &table = current_file_table();
-    if (fd < 0 || fd >= static_cast<int>(table.size()) || table[fd] == nullptr)
+    FileSystem::File **slot = fd_slot(fd);
+    if (slot == nullptr || *slot == nullptr)
     {
         return -1;
     }
-    FileSystem::file_close(table[fd]);
-    table[fd] = nullptr;
+    FileSystem::file_close(*slot);
+    *slot = nullptr;
     return 0;
 }
 

@@ -43,16 +43,9 @@ extern "C" int64_t syscall_dispatch(uint64_t num, uint64_t a1, uint64_t a2, uint
 // syscall 命令を経由せずカーネル内から直接呼べるように、型付きで公開する。
 // (kernel_main からのテストや、将来カーネル側でファイルを開く処理で使う)
 //
-// fd はプロセスごとの表に対する添字。プロセス文脈が無い場合 (kernel_main から
-// 直接呼んだ場合) は、カーネル用の表が代わりに使われる。
+// fd はプロセスごとの表 (Process::ofile) に対する添字なので、どれもプロセス
+// 文脈から呼ぶこと。fd 0/1/2 は create_process() がコンソールに繋いである。
 //
-// カーネル用 fd 表の 0/1/2 にコンソールを割り当てる。
-// create_process() がプロセスごとにやっていることを、プロセス文脈が無いときに
-// 使われるカーネル用の表に対して行う。これを呼んで初めて kernel_main から
-// sys_read(0, ...) / sys_write(1, ...) が使えるようになる。
-// 既に割り当て済みなら何もしない。失敗時は false。
-bool init_kernel_console_fds();
-
 // path を開く。O_CREATE 付きなら存在しないときに作る。失敗時は -1。
 int sys_open(const char *path, int flags);
 // fd を閉じる。成功で 0、失敗で -1。

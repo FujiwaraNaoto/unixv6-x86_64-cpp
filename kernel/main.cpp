@@ -239,15 +239,10 @@ static char flip_case(char c)
 // キーボードから1行読み、大文字と小文字を入れ替えて表示し続ける。
 // 入出力はどちらも fd 経由 (sys_read(0) / sys_write(1)) なので、
 // コンソールもファイルと同じインターフェースで扱えることの確認になる。
+// fd 0/1 は create_process() が張ったコンソールなので、ここでは開き直さない。
 // "q" だけの行で抜ける。
 static void console_case_flip_demo(IConsole *console)
 {
-    if (!Syscall::init_kernel_console_fds())
-    {
-        console->puts("[ECHO] failed to open console fds\n");
-        return;
-    }
-
     console->puts("[ECHO] type a line (upper <-> lower). \"q\" to quit.\n");
 
     char line[128];
@@ -289,9 +284,7 @@ static void console_case_flip_demo(IConsole *console)
 // syscall 層 (open/write/read/close) の往復テスト。
 // FileSystem::writei / readi を直接叩く filesystem_read_write_test と違い、
 // fd を経由するので File テーブルと fd 表まで含めて確認できる。
-//
-// kernel_main にはまだ「現在のプロセス」が無いが、syscall 層はプロセス文脈が
-// 無いときカーネル用の fd 表へフォールバックするので、そのまま呼べる。
+// fd を使う以上プロセス文脈が要るので、init プロセスの中から呼ぶこと。
 static void syscall_file_test(IConsole *console)
 {
     auto label = [console](const char *result, const char *what) { console->printf("[SYSFS] %-6s %s\n", result, what); };
@@ -345,6 +338,19 @@ static void syscall_file_test(IConsole *console)
     }
     label(same ? "OK" : "FAIL", "read back matches");
     console->printf("[SYSFS]        /test.txt = %s", buffer);
+}
+
+// 最初のプロセス (xv6 の userinit が立てる init に相当)。
+//
+// fd を使う処理はすべてここに置く。プロセスなので Process::ofile を持ち、
+// fd 0/1/2 は create_process() がコンソールに繋いでくれている。
+// kernel_main はファイルシステムを初期化してこのプロセスを起こすだけで、
+// 自分では fd を触らない。
+static void init_process()
+{
+    syscall_file_test(vga::vga);
+    console_case_flip_demo(vga::vga);
+    process::exit(0);
 }
 
 // ファイルシステム層を通した読み書きのテスト。
@@ -915,9 +921,27 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]]
     }
 
 
-    syscall_file_test(vga::vga);
+    // ここまででファイルシステムは使える状態になっている。
+    // fd を使うテストはプロセス文脈が要るので、init プロセスを立ててその中で回す。
+    if (process::create_process(init_process, "init") != nullptr)
+    {
+        process::yield(); // init が exit するまで戻ってこない
 
-    console_case_flip_demo(vga::vga);
+        // NOTE: init を wait() で回収していないので Zombie のまま残り、
+        //       カーネルスタックも解放されない。kernel_main はこの後
+        //       停止するだけなので実害は無いが、init を常駐させるなら
+        //       ここで回収する必要がある。
+        vga::vga->set_color(Color::LightGreen, Color::Black);
+        vga::vga->puts("[INIT] ");
+        vga::vga->set_color(Color::LightGrey, Color::Black);
+        vga::vga->puts("init exited; kernel idle\n");
+    }
+    else
+    {
+        vga::vga->set_color(Color::LightRed, Color::Black);
+        vga::vga->puts("[INIT] failed to create init process\n");
+        vga::vga->set_color(Color::LightGrey, Color::Black);
+    }
 
     while (1)
     {

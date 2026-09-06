@@ -131,6 +131,9 @@ Process *create_process(EntryPoint entry, const char *name)
     proc->state = ProcessState::Embryo;
     proc->entry = entry;
     proc->name  = name; // kstring が容量超過分を切り捨てて null 終端する
+    // 親は「作った側」。kernel_main から作れば nullptr になる。
+    // exit() が p->parent を読むので、スロットの前の中身が残らないよう必ず入れる。
+    proc->parent = current_proc_;
 
     for(auto &f: proc->ofile)
     {
