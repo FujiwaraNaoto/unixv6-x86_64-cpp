@@ -36,6 +36,10 @@ ProcessManager::ProcessManager(heap::Heap *heap_ptr)
     heap_ptr_     = heap_ptr;
 }
 
+Process *current_process()
+{
+    return current_proc_;
+}
 
 // A function called when a new process is executed for the first time
 // ProcessContext の rip に設定される

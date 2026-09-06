@@ -16,7 +16,7 @@ namespace
 
 FileSystem::File *fd_to_file(int fd)
 {
-    Process *process = process::current();
+    Process *process = process::current_process();
     if (process == nullptr || fd < 0 || fd >= static_cast<int>(process->ofile.size()))
     {
         return nullptr;
@@ -27,13 +27,13 @@ FileSystem::File *fd_to_file(int fd)
 // 空いている fd を探して file を割り当てる。失敗時は -1。
 int fd_allocate(FileSystem::File *file)
 {
-    Process *process = process::current();
+    Process *process = process::current_process();
     if (process == nullptr)
     {
         return -1;
     }
 
-    for (int fd = 0; fd < process->ofile.size(); fd++)
+    for (int fd = 0; fd < static_cast<int>(process->ofile.size()); fd++)
     {
         if (process->ofile[fd] == nullptr)
         {
