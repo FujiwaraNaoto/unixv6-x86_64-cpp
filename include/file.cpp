@@ -81,16 +81,42 @@ int file_read(File *file, uint8_t *buffer, uint32_t n)
     {
         case FileType::kConsole:
         {
-            // キーボードから1行読む (改行まで、または n バイト)
+            // キーボードから1行読む (改行まで、または n バイト)。
+            //
+            // keyboard::getchar() は非ブロッキングで、入力が無ければ 0 を返す。
+            // read(2) の意味に合わせるにはここで待つ必要があるので、バッファが
+            // 空の間は hlt して IRQ1 (キーボード) が来るまで CPU を止める。
+            // syscall 経由で来た場合 FMASK が IF を落としているため、hlt の前に
+            // sti で割り込みを開け直す (でないと二度と起きられない)。
+            //
+            // NOTE: 本来はプロセスを sleep させて他のプロセスに CPU を渡すべき。
+            //       キーボード側に wakeup を仕込むまでは、この待ち方で代用する。
             uint32_t i = 0;
             while (i < n)
             {
-                char c = keyboard::getchar(); // 入力があるまで待つ
-                buffer[i++] = static_cast<uint8_t>(c);
-                if (c == '\n' || c == 0)
+                const char c = keyboard::getchar();
+                if (c == 0)
                 {
-                    // stop reading after newline or no more input
-                    break;
+                    asm volatile("sti; hlt");
+                    continue; // まだ入力が無い
+                }
+
+                if (c == '\b')
+                {
+                    // 行編集はここで完結させ、消した文字は呼び出し側に渡さない
+                    if (i > 0)
+                    {
+                        i--;
+                        vga::vga->putchar('\b'); // VGA 側が消去まで面倒を見る
+                    }
+                    continue;
+                }
+
+                vga::vga->putchar(c); // 打った文字をその場で見せる (エコー)
+                buffer[i++] = static_cast<uint8_t>(c);
+                if (c == '\n')
+                {
+                    break; // 行が完成した
                 }
             }
             return static_cast<int>(i);

@@ -68,6 +68,26 @@ int fd_allocate(FileSystem::File *file)
 namespace Syscall
 {
 
+bool init_kernel_console_fds()
+{
+    if (process::current_process() != nullptr)
+    {
+        return false; // プロセス文脈では proc->ofile が既に張られている
+    }
+
+    if (kernel_file_table[0] != nullptr)
+    {
+        return true; // 割り当て済み
+    }
+
+    // 0=標準入力, 1=標準出力, 2=標準エラー。create_process() と同じ並び。
+    kernel_file_table[0] = FileSystem::file_open_console(true, false);
+    kernel_file_table[1] = FileSystem::file_open_console(false, true);
+    kernel_file_table[2] = FileSystem::file_open_console(false, true);
+
+    return kernel_file_table[0] != nullptr && kernel_file_table[1] != nullptr && kernel_file_table[2] != nullptr;
+}
+
 int sys_open(const char *path, int flags)
 {
     if (path == nullptr)

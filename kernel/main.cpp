@@ -222,6 +222,70 @@ static void hexdump(const uint8_t *data, size_t size)
     }
 }
 
+// 1文字の大小を入れ替える。ASCII 以外はそのまま返す。
+static char flip_case(char c)
+{
+    if (c >= 'a' && c <= 'z')
+    {
+        return static_cast<char>(c - 'a' + 'A');
+    }
+    if (c >= 'A' && c <= 'Z')
+    {
+        return static_cast<char>(c - 'A' + 'a');
+    }
+    return c;
+}
+
+// キーボードから1行読み、大文字と小文字を入れ替えて表示し続ける。
+// 入出力はどちらも fd 経由 (sys_read(0) / sys_write(1)) なので、
+// コンソールもファイルと同じインターフェースで扱えることの確認になる。
+// "q" だけの行で抜ける。
+static void console_case_flip_demo(IConsole *console)
+{
+    if (!Syscall::init_kernel_console_fds())
+    {
+        console->puts("[ECHO] failed to open console fds\n");
+        return;
+    }
+
+    console->puts("[ECHO] type a line (upper <-> lower). \"q\" to quit.\n");
+
+    char line[128];
+    while (true)
+    {
+        console->puts("> ");
+
+        // 末尾に改行を書き戻す余地を 1 バイト残す
+        const int n = Syscall::sys_read(0, line, sizeof(line) - 1);
+        if (n <= 0)
+        {
+            console->puts("[ECHO] read failed\n");
+            return;
+        }
+
+        // 末尾の改行は数に入れない (表示のときにこちらで足す)
+        auto length = static_cast<uint32_t>(n);
+        if (line[length - 1] == '\n')
+        {
+            length--;
+        }
+
+        if (length == 1 && line[0] == 'q')
+        {
+            console->puts("[ECHO] bye\n");
+            return;
+        }
+
+        for (uint32_t i = 0; i < length; i++)
+        {
+            line[i] = flip_case(line[i]);
+        }
+        line[length] = '\n'; // 読んだ改行を書き戻す (無改行で終わった行にも付く)
+
+        Syscall::sys_write(1, line, length + 1);
+    }
+}
+
 // syscall 層 (open/write/read/close) の往復テスト。
 // FileSystem::writei / readi を直接叩く filesystem_read_write_test と違い、
 // fd を経由するので File テーブルと fd 表まで含めて確認できる。
@@ -852,6 +916,8 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]]
 
 
     syscall_file_test(vga::vga);
+
+    console_case_flip_demo(vga::vga);
 
     while (1)
     {
