@@ -132,9 +132,9 @@ Process *create_process(EntryPoint entry, const char *name)
     proc->entry = entry;
     proc->name  = name; // kstring が容量超過分を切り捨てて null 終端する
 
-    for (size_t i = 0; i < proc->ofile.size(); ++i)
+    for(auto &f: proc->ofile)
     {
-        proc->ofile[i] = nullptr; // プロセスのファイルディスクリプタを初期化
+        f = nullptr;
     }
     proc->ofile[0] = FileSystem::file_open_console(true, false);  // 標準入力
     proc->ofile[1] = FileSystem::file_open_console(false, true);  // 標準出力
@@ -390,9 +390,12 @@ int fork()
     child->name          = parent->name;
     child->sleep_channel = nullptr;
 
-    for (size_t i = 0; i < child->ofile.size(); ++i)
+    for(auto &f: child->ofile)
     {
-        child->ofile[i] = parent->ofile[i]!=nullptr? FileSystem::file_duplicate(parent->ofile[i]) : nullptr; // 親のファイルディスクリプタを複製
+        if(f != nullptr)
+        {
+            f = FileSystem::file_duplicate(f);
+        }
     }
     child->cwd = parent->cwd.duplicate(); // カレントディレクトリの inode への参照をコピー
 
