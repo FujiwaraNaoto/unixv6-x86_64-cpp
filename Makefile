@@ -24,14 +24,15 @@ CFLAGS   = -m64 -std=c++20 -g \
 		   -mcmodel=kernel	\
            -fno-pic -fno-pie \
            -mno-red-zone -mno-mmx -mno-sse -mno-sse2 \
-           -Iinclude $(STD_INC)
+           -Iinclude -Itests $(STD_INC)
 
 LDFLAGS  = -T kernel.ld -nostdlib -z max-page-size=0x1000
 NASMFLAGS = -f elf64 -Iinclude
 
 ASM_SRC  = boot/boot.asm io/io.asm interrupt/isr.asm interrupt/helper.asm boot/switch.asm syscall/syscall_entry.asm syscall/helper.asm user/usermode_entry.asm syscall/fork_ret.asm include/gdt_helper.asm
 CPP_SRC  = kernel/main.cpp \
-           $(wildcard include/*.cpp)
+           $(wildcard include/*.cpp) \
+           $(wildcard tests/*.cpp)
 
 OBJ_DIR  = build
 ASM_OBJ  = $(ASM_SRC:%.asm=$(OBJ_DIR)/%.o)
