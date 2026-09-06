@@ -4,6 +4,7 @@
 #include "gdt.hpp"
 #include "process.hpp"
 #include "file.hpp"
+#include "path.hpp"
 
 extern "C" void syscall_entry();
 extern "C" uint64_t rdmsr(uint32_t msr);
@@ -14,63 +15,45 @@ extern "C" void wrmsr(uint32_t msr, uint64_t value);
 namespace
 {
 
-FileSystem::File *fd_to_file(int fd)
+using FileTable = std::array<FileSystem::File *, NUM_FILE_DESCRIPTORS>;
+
+// プロセス文脈が無いときに使う fd 表。
+// kernel_main から sys_open() などを直接呼べるようにするためのもので、
+// プロセスが走っている間 (current_process() != nullptr) は使われない。
+FileTable kernel_file_table{};
+
+FileTable &current_file_table()
 {
     Process *process = process::current_process();
-    if (process == nullptr || fd < 0 || fd >= static_cast<int>(process->ofile.size()))
+    return process != nullptr ? process->ofile : kernel_file_table;
+}
+
+FileSystem::File *fd_to_file(int fd)
+{
+    FileTable &table = current_file_table();
+    if (fd < 0 || fd >= static_cast<int>(table.size()))
     {
         return nullptr;
     }
-    return process->ofile[fd];
+    return table[fd];
 }
 
 // 空いている fd を探して file を割り当てる。失敗時は -1。
 int fd_allocate(FileSystem::File *file)
 {
-    Process *process = process::current_process();
-    if (process == nullptr)
+    FileTable &table = current_file_table();
+    for (int fd = 0; fd < static_cast<int>(table.size()); fd++)
     {
-        return -1;
-    }
-
-    for (int fd = 0; fd < static_cast<int>(process->ofile.size()); fd++)
-    {
-        if (process->ofile[fd] == nullptr)
+        if (table[fd] == nullptr)
         {
-            process->ofile[fd] = file;
+            table[fd] = file;
             return fd;
         }
     }
     return -1;
 }
 
-} // namespace
-
-static int64_t sys_read(uint64_t fd, uint64_t buffer, uint64_t len)
-{
-    FileSystem::File *file = fd_to_file(static_cast<int>(fd));
-    if(file == nullptr || !file->readable)
-    {
-        return static_cast<int64_t>(-1);
-    }
-    return FileSystem::file_read(file, reinterpret_cast<uint8_t *>(buffer), static_cast<uint32_t>(len));
-}
-
-static int64_t sys_write(uint64_t fd, uint64_t buffer, uint64_t len)
-{
-
-     FileSystem::File *file = fd_to_file(static_cast<int>(fd));
-    if (file == nullptr)
-    {
-        return static_cast<int64_t>(-1);
-    }
-    return FileSystem::file_write(file,
-                                  reinterpret_cast<const uint8_t *>(buffer),
-                                  static_cast<uint32_t>(len));
-
-}
-
-static int64_t sys_exit(uint64_t code)
+[[noreturn]] void sys_exit(uint64_t code)
 {
     vga::vga->set_color(Color::Yellow, Color::Black);
     vga::vga->printf("\n[SYS]  exit(%u) called\n", (unsigned)code);
@@ -78,22 +61,116 @@ static int64_t sys_exit(uint64_t code)
     // フェーズ6ではプロセス連携をせず、ここで停止
     while (1)
         asm volatile("hlt");
-    return static_cast<int64_t>(0); // never reached
 }
+
+} // namespace
 
 namespace Syscall
 {
+
+int sys_open(const char *path, int flags)
+{
+    if (path == nullptr)
+    {
+        return -1;
+    }
+
+    FileSystem::InodeRef inode = FileSystem::namei(path);
+    if (!inode)
+    {
+        if (!(flags & O_CREATE))
+        {
+            return -1; // 存在せず、作成も指定されていない
+        }
+        inode = FileSystem::create_file(path, InodeType::kFile);
+        if (!inode)
+        {
+            return -1;
+        }
+    }
+
+    const bool writable = (flags & (O_WRONLY | O_RDWR)) != 0;
+
+    // ディレクトリの中身は dirlink() 経由でしか触らせない (書き込みでは開けない)
+    if (inode->type == InodeType::kDirectory && writable)
+    {
+        return -1;
+    }
+
+    if ((flags & O_TRUNC) && inode->type == InodeType::kFile)
+    {
+        FileSystem::itrunc(inode);
+    }
+
+    FileSystem::File *file = FileSystem::file_allocate();
+    if (file == nullptr)
+    {
+        return -1; // ファイルテーブル枯渇
+    }
+
+    const int fd = fd_allocate(file);
+    if (fd < 0)
+    {
+        FileSystem::file_close(file);
+        return -1; // fd 表が埋まっている
+    }
+
+    file->type     = FileSystem::FileType::kInode;
+    file->inode    = static_cast<FileSystem::InodeRef &&>(inode);
+    file->offset   = 0;
+    file->readable = !(flags & O_WRONLY);
+    file->writable = writable;
+
+    return fd;
+}
+
+int sys_close(int fd)
+{
+    FileTable &table = current_file_table();
+    if (fd < 0 || fd >= static_cast<int>(table.size()) || table[fd] == nullptr)
+    {
+        return -1;
+    }
+    FileSystem::file_close(table[fd]);
+    table[fd] = nullptr;
+    return 0;
+}
+
+int sys_read(int fd, void *buffer, uint32_t n)
+{
+    FileSystem::File *file = fd_to_file(fd);
+    if (file == nullptr || buffer == nullptr)
+    {
+        return -1;
+    }
+    // readable の判定は file_read() が持つ (コンソールでも同じ規則で弾く)
+    return FileSystem::file_read(file, static_cast<uint8_t *>(buffer), n);
+}
+
+int sys_write(int fd, const void *buffer, uint32_t n)
+{
+    FileSystem::File *file = fd_to_file(fd);
+    if (file == nullptr || buffer == nullptr)
+    {
+        return -1;
+    }
+    return FileSystem::file_write(file, static_cast<const uint8_t *>(buffer), n);
+}
 
 extern "C" int64_t syscall_dispatch(uint64_t num, uint64_t a1, uint64_t a2, uint64_t a3, uint64_t /*a4*/, uint64_t /*a5*/)
 {
     switch (num)
     {
         case SyscallNo::kRead:
-            return sys_read(a1, a2, a3);
+            return sys_read(static_cast<int>(a1), reinterpret_cast<void *>(a2), static_cast<uint32_t>(a3));
         case SyscallNo::kWrite:
-            return sys_write(a1, a2, a3);
+            return sys_write(static_cast<int>(a1), reinterpret_cast<const void *>(a2), static_cast<uint32_t>(a3));
         case SyscallNo::kExit:
-            return sys_exit(a1);
+            sys_exit(a1); // 戻らない
+        case SyscallNo::kOpen:
+            return sys_open(reinterpret_cast<const char *>(a1), static_cast<int>(a2));
+        case SyscallNo::kClose:
+            return sys_close(static_cast<int>(a1));
         default:
             vga::vga->set_color(Color::LightRed, Color::Black);
             vga::vga->printf("[SYS]  unknown syscall %u\n", (unsigned)num);

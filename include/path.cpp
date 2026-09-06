@@ -125,4 +125,69 @@ InodeRef nameiparent(const char *path, FileName &name_out)
     return namex(path, true, &name_out);
 }
 
+InodeRef create_file(const char *path, InodeType type)
+{
+    FileName name;
+    InodeRef parent = nameiparent(path, name);
+    if (!parent || parent->type != InodeType::kDirectory)
+    {
+        return {};
+    }
+
+    // 既にある名前なら作らない。open(O_CREATE) で毎回作り直さないための分岐で、
+    // 通常ファイルを通常ファイルとして開き直す場合だけ既存の inode を返す。
+    if (const uint32_t existing = dirlookup(parent, name, nullptr); existing != 0)
+    {
+        InodeRef found = iget(existing);
+        if (found && type == InodeType::kFile && found->type == InodeType::kFile)
+        {
+            return found;
+        }
+        return {}; // 種類が食い違う (ディレクトリを上書きしようとした等)
+    }
+
+    InodeRef node = ialloc(type);
+    if (!node)
+    {
+        return {};
+    }
+
+    // 以降の失敗はすべて「確保した inode を捨てて空を返す」で終わらせる。
+    // nlink を 0 に戻しておけば、InodeRef が消える時点で iput() が実体を回収する。
+    const auto abandon = [&node]() -> InodeRef
+    {
+        node->nlink = 0;
+        node.update();
+        return {};
+    };
+
+    node->nlink = 1; // 下の dirlink(parent, ...) で張るぶん
+    if (!node.update())
+    {
+        return abandon();
+    }
+
+    if (type == InodeType::kDirectory)
+    {
+        // "." と ".." を先に張る。".." が親を指すぶん、親の nlink が 1 増える。
+        // (ここで失敗しても親にはまだ登録していないので、捨てるだけで整合する)
+        if (!dirlink(node, ".", node.inum()) || !dirlink(node, "..", parent.inum()))
+        {
+            return abandon();
+        }
+        parent->nlink++;
+        if (!parent.update())
+        {
+            return abandon();
+        }
+    }
+
+    if (!dirlink(parent, name, node.inum()))
+    {
+        return abandon();
+    }
+
+    return node;
+}
+
 } // namespace FileSystem

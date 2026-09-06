@@ -18,6 +18,7 @@
 #include "virtioblock.hpp"
 #include "buffer_cache.hpp"
 #include "file_system.hpp"
+#include "file.hpp"
 // inode / ディレクトリ層は path.hpp 経由でも一部入るが、main.cpp から
 // 直接使っているので明示的に include する (依存を芋づるに任せない)。
 #include "inode.hpp"
@@ -219,6 +220,67 @@ static void hexdump(const uint8_t *data, size_t size)
         }
         vga::vga->puts("|\n");
     }
+}
+
+// syscall 層 (open/write/read/close) の往復テスト。
+// FileSystem::writei / readi を直接叩く filesystem_read_write_test と違い、
+// fd を経由するので File テーブルと fd 表まで含めて確認できる。
+//
+// kernel_main にはまだ「現在のプロセス」が無いが、syscall 層はプロセス文脈が
+// 無いときカーネル用の fd 表へフォールバックするので、そのまま呼べる。
+static void syscall_file_test(IConsole *console)
+{
+    auto label = [console](const char *result, const char *what) { console->printf("[SYSFS] %-6s %s\n", result, what); };
+
+    static constexpr char kText[] = "Hello, filesystem!\n";
+    static constexpr uint32_t kLength = sizeof(kText) - 1; // NUL を除いた長さ
+
+    // ── ① 作って書く ──
+    const int write_fd = Syscall::sys_open("/test.txt", O_CREATE | O_WRONLY | O_TRUNC);
+    if (write_fd < 0)
+    {
+        label("FAIL", "open(/test.txt, O_CREATE|O_WRONLY)");
+        return;
+    }
+
+    const int written = Syscall::sys_write(write_fd, kText, kLength);
+    Syscall::sys_close(write_fd);
+    if (written != static_cast<int>(kLength))
+    {
+        console->printf("[SYSFS] FAIL   write: %d of %u bytes\n", written, static_cast<unsigned>(kLength));
+        return;
+    }
+    label("OK", "open + write + close");
+
+    // ── ② 読み返す ──
+    const int read_fd = Syscall::sys_open("/test.txt", O_RDONLY);
+    if (read_fd < 0)
+    {
+        label("FAIL", "open(/test.txt, O_RDONLY)");
+        return;
+    }
+
+    char buffer[64] = {};
+    const int read_bytes = Syscall::sys_read(read_fd, buffer, sizeof(buffer) - 1);
+    Syscall::sys_close(read_fd);
+    if (read_bytes != static_cast<int>(kLength))
+    {
+        console->printf("[SYSFS] FAIL   read: %d of %u bytes\n", read_bytes, static_cast<unsigned>(kLength));
+        return;
+    }
+
+    // ── ③ 書いた内容と一致するか ──
+    bool same = true;
+    for (uint32_t i = 0; i < kLength; i++)
+    {
+        if (buffer[i] != kText[i])
+        {
+            same = false;
+            break;
+        }
+    }
+    label(same ? "OK" : "FAIL", "read back matches");
+    console->printf("[SYSFS]        /test.txt = %s", buffer);
 }
 
 // ファイルシステム層を通した読み書きのテスト。
@@ -559,6 +621,10 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]]
     // }
 
 
+    // ファイルテーブル → プロセス表の順で初期化する。
+    // create_process() が fd 0/1/2 にコンソールを割り当てるので、
+    // その時点でファイルテーブルが空でなければならない。
+    FileSystem::FileTableManager file_table_manager;
     process::ProcessManager process_manager(heap::heap_ptr);
     // Process *procA = process::create_process(thread_A, "Thread A");
     // Process *procB = process::create_process(thread_B, "Thread B");
@@ -784,6 +850,8 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]]
         }
     }
 
+
+    syscall_file_test(vga::vga);
 
     while (1)
     {
