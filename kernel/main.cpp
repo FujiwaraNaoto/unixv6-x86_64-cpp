@@ -12,7 +12,12 @@
 #include "syscall.hpp"
 #include "keyboard.hpp"
 #include "gdt.hpp"
-#include "tests.hpp"
+
+// tests/ 以下は make tests (TESTS=1) のときだけコンパイル・リンクされる。
+// 通常ビルドではテストコードはカーネルに一切含まれない。
+#ifdef ENABLE_TESTS
+#    include "tests.hpp"
+#endif
 
 // CRT 相当: リンカが .init_array に並べたグローバルコンストラクタを
 // 先頭から末尾まで順に呼ぶ。境界シンボルは kernel.ld で定義している。
@@ -36,7 +41,8 @@ extern "C" uint8_t kernel_phys_end[];
 
 // カーネルのエントリポイント。
 // ここではハードウェアとカーネルサブシステムの初期化だけを行い、
-// 各機能の動作確認は tests/ 以下の tests::run_all() に任せる。
+// 各機能の動作確認は tests/ 以下の tests::run_all() に任せる
+// (make tests でビルドしたときのみ呼ばれる)。
 extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]] uint32_t mb_addr)
 {
     // 他のどのグローバル変数を使う前に、コンストラクタを実行する。
@@ -88,8 +94,10 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, [[maybe_unused]]
 
     process::ProcessManager process_manager(heap::heap_ptr);
 
+#ifdef ENABLE_TESTS
     // 各機能の動作確認 (どのテストを走らせるかは tests/tests.cpp で切り替える)
     tests::run_all();
+#endif
 
     while (1)
     {
