@@ -3,7 +3,9 @@
 
 namespace pmm
 {
-PhysicalMemoryManager::PhysicalMemoryManager(Multiboot2MemoryMapTag *memory_map, uint64_t kernel_end)
+PhysicalMemoryManager::PhysicalMemoryManager(Multiboot2MemoryMapTag *memory_map,
+                                             uint64_t kernel_end,
+                                             uint32_t multiboot_address)
 {
     // initialize bitmap (all pages used)
     for (uint32_t i = 0; i < BITMAP_SIZE; i++)
@@ -77,6 +79,11 @@ PhysicalMemoryManager::PhysicalMemoryManager(Multiboot2MemoryMapTag *memory_map,
                 free_pages_--;
         }
     }
+
+    // GRUB が置いた multiboot2 情報構造体を予約する。
+    // これはカーネル終端より後ろに置かれるので、上のループでは押さえられない。
+    // (multiboot_address が 0 なら size も 0 になり、reserve_region は何もしない)
+    reserve_region(multiboot_address, multiboot_address + multiboot_info_size(multiboot_address));
 }
 
 void PhysicalMemoryManager::free(uint64_t page_address)

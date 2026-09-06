@@ -37,21 +37,23 @@ static void print_mm_state([[maybe_unused]] const PhysicalMemoryManagerState &st
 class PhysicalMemoryManager
 {
   public:
-    PhysicalMemoryManager(Multiboot2MemoryMapTag *memory_map, uint64_t kernel_end);
+    // memory_map / multiboot_address はどちらも GRUB が渡してくるブート情報。
+    // memory_map から使用可能な物理メモリを拾い、カーネル本体 ([base, kernel_end))
+    // と multiboot2 情報構造体そのものを「使用中」にして構築する。
+    // 情報構造体を予約しないと、カーネル終端より後ろに置かれているぶんが
+    // 普通の空きページとして配られてしまう。
+    PhysicalMemoryManager(Multiboot2MemoryMapTag *memory_map, uint64_t kernel_end, uint32_t multiboot_address);
     uint64_t allocate();
     void free(uint64_t page_address);
-
-    // [start, end) を「使用中」にして allocate() の対象から外す。
-    // ページ境界に丸めて (start は切り下げ / end は切り上げ) 予約するので、
-    // 範囲にかかるページは必ず保護される。
-    // カーネル本体以外でブートローダが置いた領域 (multiboot2 情報構造体など) を
-    // 踏み潰さないために使う。
-    void reserve_region(uint64_t start, uint64_t end);
-
     PhysicalMemoryManagerState get_state() const;
 
 
   private:
+    // [start, end) を「使用中」にして allocate() の対象から外す。
+    // ページ境界に丸めて (start は切り下げ / end は切り上げ) 予約するので、
+    // 範囲にかかるページは必ず保護される。
+    void reserve_region(uint64_t start, uint64_t end);
+
     // 物理メモリ管理の実装をここに記述 --- IGNORE ---
     uint8_t bitmap_[BITMAP_SIZE];
     uint64_t base_{0};
