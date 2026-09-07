@@ -3,7 +3,9 @@
 
 namespace pmm
 {
-PhysicalMemoryManager::PhysicalMemoryManager(Multiboot2MemoryMapTag *memory_map, uint64_t kernel_end)
+PhysicalMemoryManager::PhysicalMemoryManager(Multiboot2MemoryMapTag *memory_map,
+                                             uint64_t kernel_end,
+                                             uint32_t multiboot_address)
 {
     // initialize bitmap (all pages used)
     for (uint32_t i = 0; i < BITMAP_SIZE; i++)
@@ -77,6 +79,11 @@ PhysicalMemoryManager::PhysicalMemoryManager(Multiboot2MemoryMapTag *memory_map,
                 free_pages_--;
         }
     }
+
+    // GRUB が置いた multiboot2 情報構造体を予約する。
+    // これはカーネル終端より後ろに置かれるので、上のループでは押さえられない。
+    // (multiboot_address が 0 なら size も 0 になり、reserve_region は何もしない)
+    reserve_region(multiboot_address, multiboot_address + multiboot_info_size(multiboot_address));
 }
 
 void PhysicalMemoryManager::free(uint64_t page_address)
@@ -90,6 +97,31 @@ void PhysicalMemoryManager::free(uint64_t page_address)
     {
         clear_bit(page_index);
         free_pages_++;
+    }
+}
+
+void PhysicalMemoryManager::reserve_region(uint64_t start, uint64_t end)
+{
+    if (end <= start)
+        return;
+
+    // start は切り下げ、end は切り上げ。範囲に少しでもかかるページを全部押さえる。
+    uint64_t first_page = start & ~(PAGE_SIZE - 1);
+    uint64_t last_page  = (end + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
+
+    for (uint64_t addr = first_page; addr < last_page; addr += PAGE_SIZE)
+    {
+        if (addr < base_)
+            continue;
+        uint64_t page_index = address_to_page_index(addr);
+        if (page_index >= pages_)
+            continue;
+        if (!test_bit(page_index)) // 既に使用中なら二重に減らさない
+        {
+            set_bit(page_index);
+            if (free_pages_ > 0)
+                free_pages_--;
+        }
     }
 }
 
@@ -109,6 +141,6 @@ uint64_t PhysicalMemoryManager::allocate()
 
 PhysicalMemoryManagerState PhysicalMemoryManager::get_state() const
 {
-    return PhysicalMemoryManagerState(pages_, pages_ - free_pages_, base_, base_ + pages_ * PAGE_SIZE);
+    return PhysicalMemoryManagerState(pages_, free_pages_, base_, base_ + pages_ * PAGE_SIZE);
 }
 } // namespace pmm

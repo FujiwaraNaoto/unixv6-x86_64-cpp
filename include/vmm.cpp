@@ -149,7 +149,18 @@ uint64_t *VirtualMemoryManager::get_or_create_table(uint64_t *parent_table, uint
     {
         // 新しいテーブルを割り当てる
         uint64_t new_table_phys = pmm_ptr_->allocate(); // 物理ページの割り当て関数
-        parent_table[index]     = new_table_phys | flags;
+        if (new_table_phys == 0)
+        {
+            return nullptr; // 物理メモリ不足。Present な 0 番地エントリを作らないこと
+        }
+
+        // PMM が配るページには前の用途のゴミが残っている (カーネル直後の領域には
+        // GRUB が置いたデータなどが入っている)。ゼロクリアせずに配下のテーブルとして
+        // 使うと、ゴミのエントリの Present ビットが偶然立っているところを
+        // 「既存のテーブル」とみなして追いかけ、RAM の外を指すアドレスに書きに行く。
+        std::memset(physical_to_virtual(new_table_phys), 0, PAGE_SIZE);
+
+        parent_table[index] = new_table_phys | flags;
     }
     else
     {
