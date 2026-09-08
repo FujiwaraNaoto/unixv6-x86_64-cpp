@@ -3,6 +3,7 @@
 
 #include <cstdint>
 #include <cstddef>
+#include <functional>
 
 // ─── バッファキャッシュ層 ────────────────────────────────────────
 // 目的:
@@ -34,10 +35,25 @@ namespace BufferCache
 
 // 下位のブロックデバイス。特定のドライバに依存しないよう関数で受け取る。
 // (VirtIOBlock::read_block / write_block をそのまま渡せる形にしてある)
+//
+// 生の関数ポインタではなく std::function にしてあるのは、テストから状態を持つ
+// 偽デバイス (RAM ディスク等) を差し込めるようにするため。実 virtio-blk 無しで
+// ヒット率や eviction を検証できる。
+//
+//   uint8_t disk[NBLOCK][BLOCK_SIZE];
+//   BufferCache::BlockDevice{
+//       .read_block = [&disk](uint64_t n, uint8_t *dst) { ... },
+//       ...
+//   }
+//
+// 注意: キャプチャは 16 バイト以内に収めること。これを超えると std::function が
+//       グローバル operator new を要求するが、このカーネルには実体が無く
+//       リンクエラーになる (crt_stubs.cpp の operator delete も空実装のまま)。
+//       配列そのものではなくポインタや参照 1 個をキャプチャすれば足りる。
 struct BlockDevice
 {
-    bool (*read_block)(uint64_t blockno, uint8_t *buffer);
-    bool (*write_block)(uint64_t blockno, const uint8_t *buffer);
+    std::function<bool(uint64_t blockno, uint8_t *buffer)> read_block;
+    std::function<bool(uint64_t blockno, const uint8_t *buffer)> write_block;
 };
 
 // バッファキャッシュの初期化を担うクラス。
@@ -53,7 +69,7 @@ class Manager final
   public:
     explicit Manager(const BlockDevice &device);
 
-    // 初期化に成功したか。device の関数ポインタが揃っていなければ false。
+    // 初期化に成功したか。device の呼び出し先が揃っていなければ false。
     // (コンストラクタは値を返せず、-fno-exceptions なので送出もできないため
     //  この形で結果を受け取る)
     //

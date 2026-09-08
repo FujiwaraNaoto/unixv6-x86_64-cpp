@@ -24,7 +24,7 @@ Buffer head = {
     .data    = {},
 };
 
-BufferCache::BlockDevice device{}; // 未初期化状態では両方 nullptr
+BufferCache::BlockDevice device{}; // 未初期化状態では両方とも空の std::function
 BufferCache::Statistics stats{.hits = 0, .misses = 0, .evictions = 0, .writebacks = 0};
 
 // buffer をリストから外す
@@ -105,7 +105,8 @@ namespace BufferCache
 
 Manager::Manager(const BlockDevice &block_device)
 {
-    if (block_device.read_block == nullptr || block_device.write_block == nullptr)
+    // std::function の operator bool。呼び出し先が入っていなければ登録しない。
+    if (!block_device.read_block || !block_device.write_block)
     {
         return; // valid_ は false のまま
     }
