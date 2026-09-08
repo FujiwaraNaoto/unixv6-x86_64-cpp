@@ -25,6 +25,31 @@ make run-vscode   # ターミナル直結(-nographic)で起動。終了は Ctrl-
 
 必要なもの: `g++` (C++20)、`nasm`、`ld`、`grub-mkrescue` (+`xorriso`)、`qemu-system-x86_64`。
 
+### 機能テスト
+
+`kernel_main` は初期化して `hlt` ループに入るだけで、各機能の動作確認コードは
+`tests/` 以下にまとめてある。テストは `make tests` (= `TESTS=1`) のときだけ
+`-DENABLE_TESTS` 付きでコンパイル・リンクされ、通常ビルドのカーネルには一切含まれない。
+
+```sh
+make tests        # テスト入りカーネルをビルドしてターミナル直結で起動
+make tests-gui    # 同上を別ウィンドウ(GTK)で
+make tests-gdb    # 同上を gdb 待ち受けで
+make tests-build  # 起動せずビルドだけ
+```
+
+どのテストを走らせるかは [`tests/tests.cpp`](tests/tests.cpp) の `run_all()` で切り替える。
+リング3遷移やキーボードのエコーのように「呼ぶと戻ってこない」テストは `run_all()` には
+入れていないので、必要なときだけ個別に呼ぶこと。
+
+生成物は構成ごとに分かれているので、通常ビルドとテストビルドを行き来しても
+`make clean` は要らない。
+
+| | オブジェクト | ISO |
+|---|---|---|
+| `make` | `build/kernel/` | `unixv6.iso` |
+| `make tests` | `build/tests/` | `unixv6-tests.iso` |
+
 ### デバッグ
 
 QEMU を gdb 待ち受け (`-s -S`) で起動して、別の端末から繋ぐ。
@@ -34,7 +59,7 @@ make run-gdb
 ```
 
 ```sh
-gdb build/kernel.elf
+gdb build/kernel/kernel.elf
 (gdb) target remote :1234
 (gdb) break kernel_main
 (gdb) continue

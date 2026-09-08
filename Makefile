@@ -15,6 +15,32 @@ STD_INC    = -isystem /usr/include/c++/$(GCC_VER) \
              -isystem /usr/include/$(GCC_TRIPLE) \
              -isystem /usr/include
 
+# ─── ビルド構成の切り替え (通常 / テスト) ─────────────────────────
+# TESTS=1 のとき tests/ 以下を一緒にコンパイルし、-DENABLE_TESTS で
+# kernel_main から tests::run_all() を呼ぶ。既定 (TESTS=0) では tests/ は
+# 1 つもコンパイルされず、カーネルは初期化して hlt ループに入るだけになる。
+#
+#   make         … 通常カーネル       build/kernel/ + unixv6.iso
+#   make tests   … テスト入りを起動   build/tests/  + unixv6-tests.iso
+#
+# 生成物のディレクトリと ISO 名を分けてあるので、両者を行き来しても
+# make clean は不要 (フラグの違う .o が混ざらない)。
+TESTS ?= 0
+
+ifeq ($(TESTS),1)
+  BUILD_NAME = tests
+  TEST_FLAGS = -DENABLE_TESTS -Itests
+  TEST_SRC   = $(wildcard tests/*.cpp)
+  ISO        = unixv6-tests.iso
+  GRUB_TITLE = UnixV6 x86-64 C++ (tests)
+else
+  BUILD_NAME = kernel
+  TEST_FLAGS =
+  TEST_SRC   =
+  ISO        = unixv6.iso
+  GRUB_TITLE = UnixV6 x86-64 C++ Ph1
+endif
+
 # NOTE: ubuntuのg++はデフォルトで --enable-default-pie が有効になっている．-mcmodel=kernelと競合するため、-fno-pie を明示的に指定する必要がある。
 CFLAGS   = -m64 -std=c++20 -g \
            -ffreestanding -fno-stack-protector -fno-builtin \
@@ -24,22 +50,23 @@ CFLAGS   = -m64 -std=c++20 -g \
 		   -mcmodel=kernel	\
            -fno-pic -fno-pie \
            -mno-red-zone -mno-mmx -mno-sse -mno-sse2 \
-           -Iinclude $(STD_INC)
+           -Iinclude $(TEST_FLAGS) $(STD_INC)
 
 LDFLAGS  = -T kernel.ld -nostdlib -z max-page-size=0x1000
 NASMFLAGS = -f elf64 -Iinclude
 
 ASM_SRC  = boot/boot.asm io/io.asm interrupt/isr.asm interrupt/helper.asm boot/switch.asm syscall/syscall_entry.asm syscall/helper.asm user/usermode_entry.asm syscall/fork_ret.asm include/gdt_helper.asm
 CPP_SRC  = kernel/main.cpp \
-           $(wildcard include/*.cpp)
+           $(wildcard include/*.cpp) \
+           $(TEST_SRC)
 
-OBJ_DIR  = build
+OBJ_DIR  = build/$(BUILD_NAME)
+ISO_DIR  = $(OBJ_DIR)/iso
 ASM_OBJ  = $(ASM_SRC:%.asm=$(OBJ_DIR)/%.o)
 CPP_OBJ  = $(CPP_SRC:%.cpp=$(OBJ_DIR)/%.o)
 OBJS     = $(ASM_OBJ) $(CPP_OBJ)
 
 KERNEL   = $(OBJ_DIR)/kernel.elf
-ISO      = unixv6.iso
 
 
 fs.img :
@@ -60,7 +87,7 @@ QEMU_GUI       = $(QEMU_COMMON) -display gtk -serial file:serial.log
 
 QEMU_GDB_FLAGS = $(QEMU_TERM) -s -S
 
-.PHONY: all iso run run-vscode run-gui run-gdb clean
+.PHONY: all iso run run-vscode run-gui run-gdb tests tests-build tests-gui tests-gdb clean format
 
 all: $(KERNEL)
 iso: $(ISO)
@@ -76,6 +103,21 @@ run-gui: $(ISO)
 
 run-gdb: $(ISO)
 	$(QEMU) $(QEMU_GDB_FLAGS)
+
+# ─── テスト構成 (TESTS=1 で自分を呼び直す) ───────────────────────
+# NOTE: tests/ というディレクトリが存在するので、.PHONY の宣言は必須。
+#       (無いと make が「tests は最新」と判断してレシピを実行しない)
+tests: fs.img
+	@$(MAKE) --no-print-directory TESTS=1 run
+
+tests-build:
+	@$(MAKE) --no-print-directory TESTS=1 all
+
+tests-gui: fs.img
+	@$(MAKE) --no-print-directory TESTS=1 run-gui
+
+tests-gdb: fs.img
+	@$(MAKE) --no-print-directory TESTS=1 run-gdb
 
 # asm/cpp とも build/ 以下にソースのディレクトリ構造をそのまま掘って出力する。
 # (ベース名だけにすると interrupt/helper.asm と syscall/helper.asm のように
@@ -99,21 +141,22 @@ $(KERNEL): $(OBJS)
 	@echo ">>> build complete: $@"
 	@size $@
 
+# ISO のステージングも構成ごとに分ける (通常/テストで中身が違うため)
 $(ISO): $(KERNEL)
-	mkdir -p iso/boot/grub
-	cp $(KERNEL) iso/boot/kernel.elf
-	@echo 'set timeout=0'                        >  iso/boot/grub/grub.cfg
-	@echo 'set default=0'                        >> iso/boot/grub/grub.cfg
-	@echo 'set gfxpayload=text'                  >> iso/boot/grub/grub.cfg
-	@echo 'menuentry "UnixV6 x86-64 C++ Ph1" {' >> iso/boot/grub/grub.cfg
-	@echo '  multiboot2 /boot/kernel.elf'        >> iso/boot/grub/grub.cfg
-	@echo '  boot'                               >> iso/boot/grub/grub.cfg
-	@echo '}'                                    >> iso/boot/grub/grub.cfg
-	$(GRUB) -o $@ iso
+	mkdir -p $(ISO_DIR)/boot/grub
+	cp $(KERNEL) $(ISO_DIR)/boot/kernel.elf
+	@echo 'set timeout=0'                       >  $(ISO_DIR)/boot/grub/grub.cfg
+	@echo 'set default=0'                       >> $(ISO_DIR)/boot/grub/grub.cfg
+	@echo 'set gfxpayload=text'                 >> $(ISO_DIR)/boot/grub/grub.cfg
+	@echo 'menuentry "$(GRUB_TITLE)" {'         >> $(ISO_DIR)/boot/grub/grub.cfg
+	@echo '  multiboot2 /boot/kernel.elf'       >> $(ISO_DIR)/boot/grub/grub.cfg
+	@echo '  boot'                              >> $(ISO_DIR)/boot/grub/grub.cfg
+	@echo '}'                                   >> $(ISO_DIR)/boot/grub/grub.cfg
+	$(GRUB) -o $@ $(ISO_DIR)
 	@echo ">>> ISO ready: $@"
 
 clean:
-	rm -rf $(OBJ_DIR) iso $(ISO) qemu.log serial.log
+	rm -rf build iso unixv6.iso unixv6-tests.iso qemu.log serial.log
 
 format:
 	@echo "[format] Running clang-format..."
