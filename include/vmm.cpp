@@ -41,11 +41,14 @@ extern "C" void asm_flush_tlb();
 namespace vmm
 {
 
-VirtualMemoryManager::VirtualMemoryManager(pmm::PhysicalMemoryManager *pmm_ptr)
+VirtualMemoryManager::VirtualMemoryManager(pmm::PhysicalMemoryManager *pmm_ptr, IConsole *console)
 {
     this->pmm_ptr_ = pmm_ptr;
     pml4_phys_     = read_cr3(); // CR3の値を読み込む
-    vga::vga->printf("PML4 physical address: 0x%016x, direct map at 0x%016x\n", pml4_phys_, DIRECT_MAP_BASE);
+    if (console != nullptr)
+    {
+        console->printf("PML4 physical address: 0x%016lx, direct map at 0x%016lx\n", pml4_phys_, DIRECT_MAP_BASE);
+    }
 }
 
 bool VirtualMemoryManager::map_page(uint64_t virtual_address, uint64_t physical_address, uint64_t flags)

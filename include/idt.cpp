@@ -1,6 +1,7 @@
 
 #include "idt.hpp"
 #include "gdt.hpp"
+#include "exception.hpp"
 
 
 namespace
@@ -30,8 +31,12 @@ extern "C" uint64_t irq_stubs[]; // isr.asm で定義される IRQ スタブ関�
 
 namespace idt
 {
-InterruptDescriptorTable::InterruptDescriptorTable()
+InterruptDescriptorTable::InterruptDescriptorTable(IConsole *console)
 {
+    // lidt でハンドラが有効になる前に出力先を登録しておく。
+    // こうすると「ハンドラは動くのに出力先が未設定」という期間が生まれない。
+    exception::set_console(console);
+
     for (uint8_t i = 0; i < 32; i++)
     {
         set_idt(i, IDT_INTERRUPT_GATE, isr_stubs[i]);

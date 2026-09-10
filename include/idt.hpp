@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include "console.hpp"
 
 #include <array>
 
@@ -65,7 +66,10 @@ struct [[gnu::packed]] int_frame_t
 class InterruptDescriptorTable
 {
   public:
-    InterruptDescriptorTable();
+    // console は例外・割り込みハンドラの出力先。IDT を有効にする前に
+    // ハンドラへ登録するので、ハンドラが動き出した時点で必ず出力先が決まっている。
+    // nullptr を渡した場合、ハンドラはシリアルに出力する。
+    explicit InterruptDescriptorTable(IConsole *console);
 
   private:
     void set_idt(uint8_t idx, InterruptDescriptorAttribute attribute, uint64_t handler);

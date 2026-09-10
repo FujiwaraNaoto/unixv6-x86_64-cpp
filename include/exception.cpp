@@ -1,12 +1,29 @@
 
 #include "exception.hpp"
-#include "vga.hpp"
+#include "serial.hpp"
 #include "pic.hpp"
 #include "process.hpp"
 #include "keyboard.hpp"
 
 namespace exception
 {
+namespace
+{
+
+// ハンドラの出力先。未登録のときはシリアルに出す。
+// 例外ハンドラでは NullConsole を既定値にしない: 登録前に例外が起きると、
+// 何も表示されずに hlt で止まるだけになり原因を追えなくなるため。
+// serial::serial は call_global_constructors() で最初に初期化され、
+// ヒープなどにも依存しないので、クラッシュ報告の出力先として最も確実。
+IConsole *handler_console = &serial::serial;
+
+} // namespace
+
+void set_console(IConsole *console)
+{
+    handler_console = (console != nullptr) ? console : &serial::serial;
+}
+
 // isr.asmも参照
 constexpr int NUM_EXCEPTIONS                          = 22;
 static const char *exception_messages[NUM_EXCEPTIONS] = {
@@ -36,19 +53,20 @@ static const char *exception_messages[NUM_EXCEPTIONS] = {
 
 void isr_common_handler(register_state_t *regs)
 {
-    vga::vga->set_color(Color::White, Color::Red);
-    vga::vga->printf("**Exception **");
+    handler_console->set_color(Color::White, Color::Red);
+    handler_console->printf("**Exception **");
     if (regs->int_no < NUM_EXCEPTIONS)
     {
-        vga::vga->printf(": %s\n", exception_messages[regs->int_no]);
+        handler_console->printf(": %s\n", exception_messages[regs->int_no]);
     }
     else
     {
-        vga::vga->printf(": Unknown Exception\n");
+        handler_console->printf(": Unknown Exception\n");
     }
 
-    vga::vga->printf("RIP: 0x%016x, CS=0x%016x, RFLAGS=0x%016x\n", regs->rip, regs->cs, regs->rflags);
-    vga::vga->printf("RSP: 0x%016x, SS=0x%016x, ERR=0x%x, INT=%u\n", regs->rsp, regs->ss, regs->err_code, regs->int_no);
+    handler_console->printf("RIP: 0x%016lx, CS=0x%016lx, RFLAGS=0x%016lx\n", regs->rip, regs->cs, regs->rflags);
+    handler_console->printf(
+        "RSP: 0x%016lx, SS=0x%016lx, ERR=0x%lx, INT=%lu\n", regs->rsp, regs->ss, regs->err_code, regs->int_no);
     while (1)
     {
         asm volatile("hlt");
@@ -65,9 +83,9 @@ extern "C" void irq0_handler()
     if (timer_ticks % 100 == 0)
     {
 #ifdef TIMER_TEST
-        vga::vga->set_color(Color::DarkGrey, Color::Black);
-        vga::vga->printf("[TIMER] %u sec\n", timer_ticks / 100);
-        vga::vga->set_color(Color::LightGrey, Color::Black);
+        handler_console->set_color(Color::DarkGrey, Color::Black);
+        handler_console->printf("[TIMER] %lu sec\n", timer_ticks / 100);
+        handler_console->set_color(Color::LightGrey, Color::Black);
 #endif
     }
     pic::send_eoi(0);

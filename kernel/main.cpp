@@ -60,7 +60,7 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, uint32_t mb_addr
     pic::InitializePIC(0x20, 0x28); // IRQ0-7は0x20-0x27、IRQ8-15は0x28-0x2Fに割り当てる
     pic::InitializePIT(100);        // タイマー割り込みを約100Hzで発生させる
 
-    idt::InterruptDescriptorTable idt;
+    idt::InterruptDescriptorTable idt(vga::vga);
     vga::vga->puts("IDT / interrupt handlers\n");
 
     auto *mmap = find_mmap(mb_addr);
@@ -76,7 +76,7 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, uint32_t mb_addr
     // mb_addr も渡すのは、GRUB が置いた multiboot2 情報構造体を PMM に予約させるため。
     // 情報構造体はカーネル終端より後ろにあるので、渡さないと空きページとして配られる。
     pmm::PhysicalMemoryManager pmm(mmap, reinterpret_cast<uint64_t>(kernel_phys_end), mb_addr);
-    vmm::VirtualMemoryManager vmm_instance = vmm::VirtualMemoryManager(&pmm);
+    vmm::VirtualMemoryManager vmm_instance = vmm::VirtualMemoryManager(&pmm, vga::vga);
     // カーネルヒープは高位 (0xFFFFFFFF90000000〜) に置く。
     // 低位の identity map (PML4[0]) には依存しない。
     heap::Heap heap_instance(heap::KERNEL_HEAP_BASE, heap::KERNEL_HEAP_END, &pmm, &vmm_instance);
@@ -86,7 +86,7 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, uint32_t mb_addr
     heap::heap_ptr = &heap_instance; // グローバルにアクセスできるようにする
 
     auto state = pmm.get_state();
-    pmm::print_mm_state(state);
+    pmm::print_mm_state(state, vga::vga);
 
     // syscall の MSR (LSTAR/STAR/SFMASK) を設定する。
     Syscall::init();
@@ -110,7 +110,7 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, uint32_t mb_addr
     }
 #ifdef ENABLE_TESTS
     // 各機能の動作確認 (どのテストを走らせるかは tests/tests.cpp で切り替える)
-    tests::run_all();
+    tests::run_all(vga::vga);
 #endif
 
     while (1)

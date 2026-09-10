@@ -1,6 +1,5 @@
 #include "tests.hpp"
 #include "process.hpp"
-#include "vga.hpp"
 
 namespace tests
 {
@@ -11,19 +10,23 @@ namespace
 int sleep_channel;
 volatile bool sleeper_woke = false;
 
+// スレッド関数は EntryPoint (void (*)()) として create_process に渡すので引数を
+// 取れない。出力先はテスト関数がプロセスを作る前にここへ設定する。
+IConsole *thread_console = nullptr;
+
 void sleeper_thread()
 {
-    vga::vga->set_color(Color::LightCyan, Color::Black);
-    vga::vga->puts("[SLEEP] sleeper going to sleep...\n");
-    vga::vga->set_color(Color::LightGrey, Color::Black);
+    thread_console->set_color(Color::LightCyan, Color::Black);
+    thread_console->puts("[SLEEP] sleeper going to sleep...\n");
+    thread_console->set_color(Color::LightGrey, Color::Black);
 
     process::sleep(&sleep_channel); // ここで寝る
 
     // 起こされたら再開
     sleeper_woke = true;
-    vga::vga->set_color(Color::LightCyan, Color::Black);
-    vga::vga->puts("[SLEEP] sleeper woke up!\n");
-    vga::vga->set_color(Color::LightGrey, Color::Black);
+    thread_console->set_color(Color::LightCyan, Color::Black);
+    thread_console->puts("[SLEEP] sleeper woke up!\n");
+    thread_console->set_color(Color::LightGrey, Color::Black);
 }
 
 void waker_thread()
@@ -32,24 +35,26 @@ void waker_thread()
     for (int i = 0; i < 3; i++)
         process::yield();
 
-    vga::vga->set_color(Color::LightMagenta, Color::Black);
-    vga::vga->puts("[WAKE]  waking sleeper...\n");
-    vga::vga->set_color(Color::LightGrey, Color::Black);
+    thread_console->set_color(Color::LightMagenta, Color::Black);
+    thread_console->puts("[WAKE]  waking sleeper...\n");
+    thread_console->set_color(Color::LightGrey, Color::Black);
     process::wakeup(&sleep_channel);
 }
 
 } // namespace
 
-void sleep_wakeup()
+void sleep_wakeup(IConsole *console)
 {
+    thread_console = console;
+
     process::create_process(sleeper_thread, "sleeper");
     process::create_process(waker_thread, "waker");
     process::yield();
 
-    vga::vga->set_color(Color::LightGreen, Color::Black);
-    vga::vga->puts("[SLEEP] ");
-    vga::vga->set_color(Color::LightGrey, Color::Black);
-    vga::vga->printf("result: sleeper %s\n", sleeper_woke ? "WOKE-OK" : "STILL-SLEEPING-FAIL");
+    console->set_color(Color::LightGreen, Color::Black);
+    console->puts("[SLEEP] ");
+    console->set_color(Color::LightGrey, Color::Black);
+    console->printf("result: sleeper %s\n", sleeper_woke ? "WOKE-OK" : "STILL-SLEEPING-FAIL");
 }
 
 } // namespace tests
