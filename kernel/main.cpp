@@ -60,7 +60,7 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, uint32_t mb_addr
     pic::InitializePIC(0x20, 0x28); // IRQ0-7は0x20-0x27、IRQ8-15は0x28-0x2Fに割り当てる
     pic::InitializePIT(100);        // タイマー割り込みを約100Hzで発生させる
 
-    idt::InterruptDescriptorTable idt;
+    idt::InterruptDescriptorTable idt(vga::vga);
     vga::vga->puts("IDT / interrupt handlers\n");
 
     auto *mmap = find_mmap(mb_addr);
