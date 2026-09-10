@@ -12,6 +12,9 @@
 #include "syscall.hpp"
 #include "keyboard.hpp"
 #include "gdt.hpp"
+#include "usermode.hpp"
+#include "virtioblock.hpp"
+#include "buffer_cache.hpp"
 
 // tests/ 以下は make tests (TESTS=1) のときだけコンパイル・リンクされる。
 // 通常ビルドではテストコードはカーネルに一切含まれない。
@@ -86,7 +89,7 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, uint32_t mb_addr
     pmm::print_mm_state(state);
 
     // syscall の MSR (LSTAR/STAR/SFMASK) を設定する。
-    syscall::init();
+    Syscall::init();
 
     keyboard::initialize();
 
@@ -96,6 +99,15 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, uint32_t mb_addr
 
     process::ProcessManager process_manager(heap::heap_ptr);
 
+    BufferCache::Manager buffer_cache(BufferCache::BlockDevice{
+        .read_block  = &VirtIOBlock::read_block,
+        .write_block = &VirtIOBlock::write_block,
+    });
+    if (not buffer_cache.valid())
+    {
+        vga::vga->puts("BufferCache initialization failed\n");
+        asm volatile("hlt");
+    }
 #ifdef ENABLE_TESTS
     // 各機能の動作確認 (どのテストを走らせるかは tests/tests.cpp で切り替える)
     tests::run_all();

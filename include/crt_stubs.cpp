@@ -14,6 +14,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 
 extern "C"
 {
@@ -79,3 +80,16 @@ extern "C"
 // so it is never called and an empty body is sufficient.
 void operator delete(void *) noexcept { }
 void operator delete(void *, std::size_t) noexcept { }
+
+// std::function を空のまま呼び出すと libstdc++ がこれを呼ぶ。-fno-exceptions
+// なので送出はできず、そもそも libstdc++ 本体をリンクしていないので実体を
+// カーネル側で持つ必要がある。到達したら上位層のバグなので停止する。
+// (宣言は <bits/functexcept.h> にあり、<functional> 経由で取り込まれる)
+namespace std
+{
+void __throw_bad_function_call()
+{
+    while (1)
+        __asm__ volatile("hlt");
+}
+} // namespace std
