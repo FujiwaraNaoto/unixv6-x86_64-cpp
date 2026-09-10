@@ -35,7 +35,19 @@ constexpr size_t MAX_PROCESSES     = 64;
 constexpr size_t KERNEL_STACK_SIZE = 0x4000; // 16KB
 
 // プロセスのエントリポイント (引数なし・戻り値なしの関数)。
-// NOTE: std::function などの C++ 標準ライブラリは使えないので、関数ポインタで表現する
+//
+// std::function ではなく関数ポインタにしている理由:
+//   1. std::function はキャプチャが 16 バイト (libstdc++ の内部バッファ) を超えると
+//      operator new でヒープから確保するが、このカーネルには operator new が無く
+//      リンクエラーになる (operator delete も空実装なので、足してもリークする)。
+//      fork() で entry をコピーするときにも同じ確保が発生する。
+//   2. entry は create_process() が戻った後に、別のカーネルスタック上で実行される。
+//      参照キャプチャ ([&]) した呼び出し元のローカル変数は、その時点で寿命が切れている。
+//      関数ポインタは何もキャプチャできないので、この問題が構造上起きない。
+//
+// NOTE: 標準ライブラリ自体が使えないわけではない (std::array などは使っている)。
+//       また entry はアセンブリから直接ジャンプされる先ではなく trampoline() から
+//       呼ばれるので、呼び出し可能オブジェクトにすること自体は技術的に可能。
 using EntryPoint = void (*)();
 
 struct Process
