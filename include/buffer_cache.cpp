@@ -3,7 +3,7 @@
 namespace
 {
 
-Buffer buffers[NBUF];
+std::array<Buffer, NBUF> buffers;
 
 // LRU リストの番兵。
 //   head.next … 最近使ったバッファ (MRU)
