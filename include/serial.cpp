@@ -28,7 +28,15 @@ static bool tx_ready()
     return (io::inb(PORT + 5) & 0x20) != 0;
 }
 
-void Serial::putchar(char c)
+void Serial::write(const char *s, size_t n)
+{
+    for (size_t i = 0; i < n; i++)
+    {
+        put(s[i]);
+    }
+}
+
+void Serial::put(char c)
 {
     if (c == '\n')
     {
@@ -41,12 +49,6 @@ void Serial::putchar(char c)
     {
     }
     io::outb(PORT, (uint8_t)c);
-}
-
-void Serial::puts(const char *s)
-{
-    while (*s)
-        putchar(*s++);
 }
 
 } // namespace serial

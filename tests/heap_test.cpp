@@ -16,7 +16,7 @@ void heap_sbrk_alloc()
     vga::vga->set_color(Color::LightGreen, Color::Black);
     vga::vga->puts("[SBRK] ");
     vga::vga->set_color(Color::LightGrey, Color::Black);
-    vga::vga->printf("brk before=0x%016x  returned=0x%016x  now=0x%016x\n",
+    vga::vga->printf("brk before=0x%016lx  returned=0x%016lx  now=0x%016lx\n",
                      reinterpret_cast<uintptr_t>(brk0),
                      reinterpret_cast<uintptr_t>(brk1),
                      reinterpret_cast<uintptr_t>(heap->sbrk(0)));
@@ -30,7 +30,7 @@ void heap_sbrk_alloc()
     vga::vga->set_color(Color::LightGreen, Color::Black);
     vga::vga->puts("[HEAP] ");
     vga::vga->set_color(Color::LightGrey, Color::Black);
-    vga::vga->printf("p1=0x%016x p2=0x%016x p3=0x%016x p4=0x%016x reuse=%s\n",
+    vga::vga->printf("p1=0x%016lx p2=0x%016lx p3=0x%016lx p4=0x%016lx reuse=%s\n",
                      reinterpret_cast<uintptr_t>(p1),
                      reinterpret_cast<uintptr_t>(p2),
                      reinterpret_cast<uintptr_t>(p3),

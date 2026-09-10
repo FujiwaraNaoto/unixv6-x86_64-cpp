@@ -26,13 +26,11 @@ static constexpr uint32_t BITMAP_SIZE = MAX_PAGES / 8;
 // TODO:vgaと依存するので剥がしたい
 static void print_mm_state([[maybe_unused]] const PhysicalMemoryManagerState &state)
 {
-    // 自前 printf は 'l' 長さ修飾子を解釈しない (%llu と書くと "llu" がそのまま出る)。
-    // %u / %x が既に unsigned long long を取り出すので、これで 64bit 表示になる。
     vga::vga->printf("Physical Memory Manager State:\n");
-    vga::vga->printf("  Total Pages: %u\n", state.total_pages);
-    vga::vga->printf("  Free Pages: %u\n", state.free_pages);
-    vga::vga->printf("  Base Address: 0x%016x\n", state.base);
-    vga::vga->printf("  Top Address: 0x%016x\n", state.top);
+    vga::vga->printf("  Total Pages: %lu\n", state.total_pages);
+    vga::vga->printf("  Free Pages: %lu\n", state.free_pages);
+    vga::vga->printf("  Base Address: 0x%016lx\n", state.base);
+    vga::vga->printf("  Top Address: 0x%016lx\n", state.top);
 }
 class PhysicalMemoryManager
 {

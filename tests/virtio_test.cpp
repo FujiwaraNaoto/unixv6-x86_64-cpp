@@ -25,14 +25,12 @@ void hexdump(const uint8_t *data, size_t size)
     {
         const size_t line_length = (size - offset < COLUMNS) ? (size - offset) : COLUMNS;
 
-        // 自前 printf の可変長引数は unsigned long long として取り出されるので、
-        // 呼び出し側で 64bit に揃えておく。
-        vga::vga->printf("%04x: ", static_cast<unsigned long long>(offset));
+        vga::vga->printf("%04zx: ", offset);
 
         for (size_t i = 0; i < COLUMNS; i++)
         {
             if (i < line_length)
-                vga::vga->printf("%02x ", static_cast<unsigned long long>(data[offset + i]));
+                vga::vga->printf("%02x ", static_cast<unsigned>(data[offset + i]));
             else
                 vga::vga->puts("   ");
         }
@@ -102,7 +100,7 @@ void virtio_block_read()
         vga::vga->set_color(Color::LightGreen, Color::Black);
         vga::vga->puts("[BCACHE] ");
         vga::vga->set_color(Color::LightGrey, Color::Black);
-        vga::vga->printf("initialized: %u buffers x %u bytes\n",
+        vga::vga->printf("initialized: %llu buffers x %llu bytes\n",
                          static_cast<unsigned long long>(NBUF),
                          static_cast<unsigned long long>(BLOCK_SIZE));
 
@@ -145,7 +143,7 @@ void virtio_block_read()
             vga::vga->set_color(Color::LightGreen, Color::Black);
             vga::vga->puts("[BCACHE] ");
             vga::vga->set_color(Color::LightGrey, Color::Black);
-            vga::vga->printf("hits=%u misses=%u evictions=%u writebacks=%u\n",
+            vga::vga->printf("hits=%llu misses=%llu evictions=%llu writebacks=%llu\n",
                              static_cast<unsigned long long>(stats.hits),
                              static_cast<unsigned long long>(stats.misses),
                              static_cast<unsigned long long>(stats.evictions),
