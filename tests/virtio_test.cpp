@@ -115,7 +115,7 @@ void virtio_block_read()
             vga::vga->set_color(Color::LightGrey, Color::Black);
             vga::vga->puts("block 0:\n");
             vga::vga->set_color(Color::LightCyan, Color::Black);
-            hexdump(block0->data, BLOCK_SIZE);
+            hexdump(block0->data.data(), block0->data.size());
             vga::vga->set_color(Color::LightGrey, Color::Black);
             block0.reset(); // 明示的に手放す (以降のスコープでも自動解放される)
 

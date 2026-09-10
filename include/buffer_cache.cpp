@@ -46,7 +46,7 @@ void link_as_most_recent(Buffer *buffer)
 // デバイスへ書き戻す。成功したら dirty を下ろす。
 bool write_back(Buffer *buffer)
 {
-    if (!device.write_block(buffer->blockno, buffer->data))
+    if (!device.write_block(buffer->blockno, buffer->data.data()))
     {
         return false;
     }
@@ -143,7 +143,7 @@ Buffer *read(uint32_t blockno)
 
     // 再利用したバッファなので、ここで初めてデバイスを叩く
     stats.misses++;
-    if (!device.read_block(blockno, buffer->data))
+    if (!device.read_block(blockno, buffer->data.data()))
     {
         release(buffer); // 中身が無いまま掴ませない
         return nullptr;

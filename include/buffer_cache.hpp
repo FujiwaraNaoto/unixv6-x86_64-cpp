@@ -1,6 +1,7 @@
 #ifndef BUFFER_CACHE_HPP
 #define BUFFER_CACHE_HPP
 
+#include <array>
 #include <cstdint>
 #include <cstddef>
 #include <functional>
@@ -22,12 +23,12 @@ constexpr int NBUF            = 30; // キャッシュ数
 
 struct Buffer
 {
-    uint32_t blockno;         // ブロック番号
-    bool valid;               // ディスクから読み込み済みか
-    bool dirty;               // 変更されたか (書き戻しが必要)
-    int refcnt;               // 参照カウント (使用中の数)
-    Buffer *prev, *next;      // LRUリスト用
-    uint8_t data[BLOCK_SIZE]; // ブロックの中身
+    uint32_t blockno;                     // ブロック番号
+    bool valid;                           // ディスクから読み込み済みか
+    bool dirty;                           // 変更されたか (書き戻しが必要)
+    int refcnt;                           // 参照カウント (使用中の数)
+    Buffer *prev, *next;                  // LRUリスト用
+    std::array<uint8_t, BLOCK_SIZE> data; // ブロックの中身
 };
 
 namespace BufferCache
