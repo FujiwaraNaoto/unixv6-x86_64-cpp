@@ -1,7 +1,6 @@
 #include <cstdint>
 #include <array>
 #include "process.hpp"
-#include "vga.hpp" // vga::vga を直接使うので明示する
 #include "heap.hpp"
 #include "gdt.hpp"
 
@@ -158,7 +157,6 @@ Process *create_process(EntryPoint entry, const char *name)
     proc->sleep_channel = nullptr; // 初期状態では起きている
 
     proc->state = ProcessState::Runnable; // 構築完了。これでスケジューラが拾えるようになる
-    vga::vga->printf("[PROCESS] Created process %s (pid=%u)\n", proc->name.c_str(), static_cast<unsigned>(proc->pid));
     return proc;
 }
 
