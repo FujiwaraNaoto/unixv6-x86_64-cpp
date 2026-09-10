@@ -3,7 +3,6 @@
 #include "process.hpp"
 #include "pmm.hpp"
 #include "vmm.hpp"
-#include "vga.hpp"
 
 namespace tests
 {
@@ -14,6 +13,7 @@ namespace
 // 同じ仮想アドレスに別の値を書いて確認する。
 // 低位 identity map 撤去後は PML4[0] もプロセスごとに独立しているが、
 // このテストは従来どおり PML4 スロット1 (512GiB〜) を使う。
+// (スレッドは何も出力しないので、出力先の受け渡しは要らない)
 constexpr uint64_t kAddrTestVirt = 0x8000000000; // PML4 index 1
 volatile uint64_t test_result_a  = 0;
 volatile uint64_t test_result_b  = 0;
@@ -36,15 +36,15 @@ void addrspace_thread_b()
 
 } // namespace
 
-void addrspace_separation()
+void addrspace_separation(IConsole *console)
 {
     Process *pa = process::create_process(addrspace_thread_a, "addr-a");
     Process *pb = process::create_process(addrspace_thread_b, "addr-b");
     if (pa == nullptr || pb == nullptr)
     {
-        vga::vga->set_color(Color::LightRed, Color::Black);
-        vga::vga->puts("[ADDR] failed to create test processes\n");
-        vga::vga->set_color(Color::LightGrey, Color::Black);
+        console->set_color(Color::LightRed, Color::Black);
+        console->puts("[ADDR] failed to create test processes\n");
+        console->set_color(Color::LightGrey, Color::Black);
         return;
     }
 
@@ -57,13 +57,13 @@ void addrspace_separation()
     process::yield(); // スケジューラ起動
 
     // 両方のスレッド終了後に結果を確認
-    vga::vga->set_color(Color::LightGreen, Color::Black);
-    vga::vga->puts("[ADDR] ");
-    vga::vga->set_color(Color::LightGrey, Color::Black);
-    vga::vga->printf("A wrote 0xAAAA read 0x%x / B wrote 0xBBBB read 0x%x  %s\n",
-                     (unsigned)test_result_a,
-                     (unsigned)test_result_b,
-                     (test_result_a == 0xAAAA && test_result_b == 0xBBBB) ? "SEPARATED-OK" : "SHARED-FAIL");
+    console->set_color(Color::LightGreen, Color::Black);
+    console->puts("[ADDR] ");
+    console->set_color(Color::LightGrey, Color::Black);
+    console->printf("A wrote 0xAAAA read 0x%x / B wrote 0xBBBB read 0x%x  %s\n",
+                    (unsigned)test_result_a,
+                    (unsigned)test_result_b,
+                    (test_result_a == 0xAAAA && test_result_b == 0xBBBB) ? "SEPARATED-OK" : "SHARED-FAIL");
 }
 
 } // namespace tests

@@ -3,7 +3,6 @@
 #include "usermode.hpp"
 #include "pmm.hpp"
 #include "vmm.hpp"
-#include "vga.hpp"
 
 namespace tests
 {
@@ -63,16 +62,16 @@ namespace
 //                : "=r"(ret)
 //                : "r"(msg), "r"((uint64_t)(sizeof(msg) - 1))
 //                : "rax", "rdi", "rsi", "rdx", "rcx", "r11", "memory");
-void usermode_ring3()
+void usermode_ring3(IConsole *console)
 {
     // ユーザープログラムのコードページを User 許可で貼り直す
     const uint64_t code_page = reinterpret_cast<uint64_t>(&user_program) & PAGE_MASK;
     const auto code_phys     = vmm::vmm_ptr->virtual_to_physical(code_page);
     if (!code_phys)
     {
-        vga::vga->set_color(Color::LightRed, Color::Black);
-        vga::vga->puts("[USER] failed to resolve user_program physical address\n");
-        vga::vga->set_color(Color::LightGrey, Color::Black);
+        console->set_color(Color::LightRed, Color::Black);
+        console->puts("[USER] failed to resolve user_program physical address\n");
+        console->set_color(Color::LightGrey, Color::Black);
         hang();
     }
     vmm::vmm_ptr->map_page(code_page,
