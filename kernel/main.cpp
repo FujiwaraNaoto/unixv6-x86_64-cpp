@@ -76,7 +76,7 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, uint32_t mb_addr
     // mb_addr も渡すのは、GRUB が置いた multiboot2 情報構造体を PMM に予約させるため。
     // 情報構造体はカーネル終端より後ろにあるので、渡さないと空きページとして配られる。
     pmm::PhysicalMemoryManager pmm(mmap, reinterpret_cast<uint64_t>(kernel_phys_end), mb_addr);
-    vmm::VirtualMemoryManager vmm_instance = vmm::VirtualMemoryManager(&pmm);
+    vmm::VirtualMemoryManager vmm_instance = vmm::VirtualMemoryManager(&pmm, vga::vga);
     // カーネルヒープは高位 (0xFFFFFFFF90000000〜) に置く。
     // 低位の identity map (PML4[0]) には依存しない。
     heap::Heap heap_instance(heap::KERNEL_HEAP_BASE, heap::KERNEL_HEAP_END, &pmm, &vmm_instance);

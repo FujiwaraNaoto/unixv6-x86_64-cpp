@@ -2,6 +2,7 @@
 #include <cstdint>
 #include <optional>
 #include "pmm.hpp"
+#include "console.hpp"
 
 constexpr uint64_t PAGE_SIZE = 4096;
 constexpr uint64_t PAGE_MASK = ~(PAGE_SIZE - 1);
@@ -40,7 +41,10 @@ constexpr uint64_t NoExecute = 1ULL << 63;
 class VirtualMemoryManager final
 {
   public:
-    VirtualMemoryManager(pmm::PhysicalMemoryManager *pmm_ptr);
+    // console は初期化時の情報 (PML4 のアドレスなど) の出力先。
+    // 出力先を注入で受け取るので、VMM は VGA / シリアルのどちらに出るかを知らない。
+    // nullptr を渡した場合は何も出力しない。
+    VirtualMemoryManager(pmm::PhysicalMemoryManager *pmm_ptr, IConsole *console);
     bool map_page(uint64_t virtual_address, uint64_t physical_address, uint64_t flags);
     // map解除とTLBフラッシュ
     bool unmap_page(uint64_t virtual_address);
