@@ -1,6 +1,7 @@
 #include <cstdint>
 #include <array>
 #include "process.hpp"
+#include "vga.hpp" // vga::vga を直接使うので明示する
 #include "heap.hpp"
 #include "gdt.hpp"
 

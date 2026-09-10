@@ -86,7 +86,7 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, uint32_t mb_addr
     heap::heap_ptr = &heap_instance; // グローバルにアクセスできるようにする
 
     auto state = pmm.get_state();
-    pmm::print_mm_state(state);
+    pmm::print_mm_state(state, vga::vga);
 
     // syscall の MSR (LSTAR/STAR/SFMASK) を設定する。
     Syscall::init();

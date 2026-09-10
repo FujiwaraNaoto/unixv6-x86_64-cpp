@@ -1,8 +1,7 @@
 #pragma once
 #include <cstdint>
 #include "multiboot2.hpp"
-
-#include "vga.hpp"
+#include "console.hpp"
 
 namespace pmm
 {
@@ -23,14 +22,20 @@ struct PhysicalMemoryManagerState
 static constexpr uint32_t MAX_PAGES   = 65536;
 static constexpr uint32_t BITMAP_SIZE = MAX_PAGES / 8;
 
-// TODO:vgaと依存するので剥がしたい
-static void print_mm_state([[maybe_unused]] const PhysicalMemoryManagerState &state)
+// 物理メモリの状態を表示する。
+// 出力先は注入で受け取るので、PMM は VGA / シリアルのどちらに出るかを知らない。
+// console に nullptr を渡した場合は何も出力しない。
+static void print_mm_state(const PhysicalMemoryManagerState &state, IConsole *console)
 {
-    vga::vga->printf("Physical Memory Manager State:\n");
-    vga::vga->printf("  Total Pages: %lu\n", state.total_pages);
-    vga::vga->printf("  Free Pages: %lu\n", state.free_pages);
-    vga::vga->printf("  Base Address: 0x%016lx\n", state.base);
-    vga::vga->printf("  Top Address: 0x%016lx\n", state.top);
+    if (console == nullptr)
+    {
+        return;
+    }
+    console->printf("Physical Memory Manager State:\n");
+    console->printf("  Total Pages: %lu\n", state.total_pages);
+    console->printf("  Free Pages: %lu\n", state.free_pages);
+    console->printf("  Base Address: 0x%016lx\n", state.base);
+    console->printf("  Top Address: 0x%016lx\n", state.top);
 }
 class PhysicalMemoryManager
 {

@@ -1,6 +1,7 @@
 
 #include <cstdint>
 #include "vmm.hpp"
+#include "vga.hpp" // vga::vga を直接使うので明示する
 #include <cstring>
 
 namespace
