@@ -1,0 +1,114 @@
+#ifndef FILE_SYSTEM_HPP
+#define FILE_SYSTEM_HPP
+#include <cstdint>
+#include <array>
+#include "console.hpp"
+#include "block_store.hpp"
+
+constexpr uint32_t FS_MAGIC     = 0x10203040;
+constexpr uint32_t FSBLOCK_SIZE = 512;
+constexpr int NDIRECT           = 12;                              // 直接ブロック数
+constexpr int NINDIRECT         = FSBLOCK_SIZE / sizeof(uint32_t); // 128
+constexpr int MAXFILE           = NDIRECT + NINDIRECT;             // 140ブロック
+constexpr int DIRSIZ            = 14;                              // ファイル名長 (V6と同じ)
+constexpr uint32_t ROOTINO      = 1;                               // ルートの inode 番号
+
+// inode の種類。
+// ディスク上の DiskInode::type にそのまま格納されるので、基底型を uint16_t に
+// 固定してレイアウトを保つ。固定基底型の enum は基底型の範囲すべてが有効な値
+// なので、壊れたディスクから読んだ未知の値を保持しても未定義動作にはならない
+// (その代わり switch には default が要る)。
+enum class InodeType : uint16_t
+{
+    kUnused    = 0,
+    kDirectory = 1,
+    kFile      = 2,
+};
+// ─── スーパーブロック (ブロック1) ────────────────────────────────
+struct SuperBlock
+{
+    uint32_t magic;
+    uint32_t size;       // 全ブロック数
+    uint32_t nblocks;    // データブロック数
+    uint32_t ninodes;    // inode 数
+    uint32_t inodestart; // inode 領域の開始ブロック
+    uint32_t bmapstart;  // ビットマップの開始ブロック
+};
+// ─── ディスク上の inode (64バイト) ───────────────────────────────
+struct [[gnu::packed]] DiskInode
+{
+    InodeType type;
+    uint16_t major;
+    uint16_t minor;
+    uint16_t nlink;
+    uint32_t size;
+    std::array<uint32_t, NDIRECT + 1> addrs; // 直接12 + 間接1
+};
+static_assert(sizeof(DiskInode) == 64, "DiskInode must be 64 bytes");
+
+constexpr int IPB = FSBLOCK_SIZE / sizeof(DiskInode); // 8個/ブロック
+constexpr int BPB = FSBLOCK_SIZE * 8;                 // 4096ブロック/ビットマップ
+// ─── ディレクトリエントリ (16バイト) ─────────────────────────────
+struct [[gnu::packed]] DirEntry
+{
+    uint16_t inum;
+    char name[DIRSIZ];
+};
+static_assert(sizeof(DirEntry) == 16, "DirEntry must be 16 bytes");
+
+
+class IBlockStore
+{
+  public:
+    virtual BlockRef acquire(uint32_t blockno) = 0;
+    virtual bool write_back(uint32_t blockno)  = 0;
+    virtual void release(uint32_t blockno)      = 0;
+    virtual ~IBlockStore()                      = default;
+};
+
+class NullBlockStore final : public IBlockStore
+{
+  public:
+    BlockRef acquire(uint32_t) override
+    {
+        return BlockRef{};
+    }
+    bool write_back(uint32_t) override
+    {
+        return false;
+    }
+    void release(uint32_t) override { }
+};
+
+
+namespace FileSystem
+{
+
+// ファイルシステムの初期化を担うクラス。
+// コンストラクタが「スーパーブロックを読み、未フォーマットならフォーマットする」
+// 処理を行う。状態は fs.cpp のモジュール内 static が持ち、
+// superblock() / balloc() などはフリー関数としてそれを操作する
+// (BufferCache::Manager と同じ形)。
+class Manager final
+{
+public:
+    explicit Manager(uint32_t total_blocks, IConsole *console =  NullConsole::instance());
+    // 初期化に成功したか。
+    // フォーマット済みだった場合も、新規にフォーマットした場合も true。
+    bool valid() const
+    {
+        return valid_;
+    }
+
+private:
+    bool valid_ = false;
+    IConsole *console_ = nullptr;
+};
+
+const SuperBlock &superblock();
+// inode番号 inum が入っているブロック番号
+uint32_t inode_block(uint32_t inum);
+
+}// namespace FileSystem
+
+#endif // FILE_SYSTEM_HPP
