@@ -48,8 +48,8 @@ struct [[gnu::packed]] DiskInode
 };
 static_assert(sizeof(DiskInode) == 64, "DiskInode must be 64 bytes");
 
-constexpr int IPB = FSBLOCK_SIZE / sizeof(DiskInode); // 8個/ブロック
-constexpr int BPB = FSBLOCK_SIZE * 8;                 // 4096ブロック/ビットマップ
+constexpr int INODES_PER_BLOCK = FSBLOCK_SIZE / sizeof(DiskInode); // 8個/ブロック
+constexpr int BLOCKS_PER_BITMAP_BLOCK = FSBLOCK_SIZE * 8;                 // 4096ブロック/ビットマップ
 // ─── ディレクトリエントリ (16バイト) ─────────────────────────────
 struct [[gnu::packed]] DirectoryEntry
 {

@@ -17,9 +17,9 @@ namespace
 
     bool mark_block_used(uint32_t blockno)
     {
-        auto block = FileSystem::block_store.acquire(superblock_state.bmapstart + blockno / BPB);
+        auto block = FileSystem::block_store->acquire(superblock_state.bmapstart + blockno / BLOCKS_PER_BITMAP_BLOCK);
         if (!block) return false;
-        uint32_t bit_index = blockno % BPB;
+        uint32_t bit_index = blockno % BLOCKS_PER_BITMAP_BLOCK;
         uint32_t byte_index = bit_index / 8;
         uint8_t bit_mask = 1 << (bit_index % 8);
         block.data()[byte_index] |= bit_mask;
@@ -31,17 +31,28 @@ namespace
     }
 
 
+    bool write_inode(uint32_t inum, const DiskInode &inode)
+    {
+        uint32_t blockno = superblock_state.inodestart + inum / INODES_PER_BLOCK;
+        auto block = FileSystem::block_store->acquire(blockno);
+        if (!block) return false;
+        auto* entries = reinterpret_cast<DiskInode*>(block.data());
+        entries[inum % INODES_PER_BLOCK] = inode;
+        return block.write_back();
+    }
+
 
 
 
 bool format(uint32_t total_blocks, IConsole *console)
 {
-    uint32_t inode_blocks  = (NINODES + INODES_PER_BLOCK - 1) / INODES_PER_BLOCK;
+    constexpr uint32_t NUM_INODES = 200; // 適当な値。xv6 は 200 で固定している。
+    uint32_t inode_blocks  = (NUM_INODES + INODES_PER_BLOCK - 1) / INODES_PER_BLOCK;
     uint32_t bitmap_blocks = (total_blocks + BLOCKS_PER_BITMAP_BLOCK - 1) / BLOCKS_PER_BITMAP_BLOCK;
 
     superblock_state.magic      = FS_MAGIC;
     superblock_state.size       = total_blocks;
-    superblock_state.ninodes    = NINODES;
+    superblock_state.ninodes    = NUM_INODES;
     superblock_state.inodestart = 2; // 0=boot, 1=super
     superblock_state.bmapstart  = superblock_state.inodestart + inode_blocks;
 
