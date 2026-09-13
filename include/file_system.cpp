@@ -38,6 +38,14 @@ namespace
         return true;
     }
 
+    bool load_superblock()
+    {
+        auto block = FileSystem::block_store->acquire(1); // superblock
+        if (!block) return false;
+        superblock_state = *reinterpret_cast<const SuperBlock *>(block.data());
+        return superblock_state.magic == FS_MAGIC;
+    }
+
 
     bool write_inode(uint32_t inum, const DiskInode &inode)
     {
@@ -130,6 +138,22 @@ Manager::Manager(uint32_t total_blocks, IBlockStore *block_store, IConsole *cons
 {
     FileSystem::block_store = block_store ? block_store : &null_block_store;
     FileSystem::console     = console ? console : &null_console;
+
+    if(load_superblock())
+    {
+        valid_ = true;
+        return;
+    }
+
+    // if the magic number is not matched, the disk is not formatted yet. format it.
+    console->puts("[FS]   not formatted, creating filesystem...\n");
+    
+    if(!format(total_blocks, console))
+    {
+        valid_ = false;
+        return;
+    }
+    valid_ = load_superblock();
 }
 
 } // namespace FileSystem
