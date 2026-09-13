@@ -5,6 +5,8 @@
 #include <cstdint>
 #include <cstddef>
 #include <functional>
+#include "block_store.hpp"
+#include "file_system.hpp"
 
 // ─── バッファキャッシュ層 ────────────────────────────────────────
 // 目的:
@@ -185,6 +187,7 @@ class BufferRef final
 
 // read() の RAII 版。失敗時は空の BufferRef (operator bool が false) を返す。
 BufferRef acquire(uint32_t blockno);
+
 
 class BlockStore final : public IBlockStore
 {
