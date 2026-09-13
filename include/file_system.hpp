@@ -15,6 +15,46 @@ constexpr int MAXFILE           = NDIRECT + NINDIRECT;             // 140ブロ�
 constexpr int DIRSIZ            = 14;                              // ファイル名長 (V6と同じ)
 constexpr uint32_t ROOTINO      = 1;                               // ルートの inode 番号
 
+
+// block 0        1         2 ...            bmapstart ...      data_start ...
+// ┌────────┬──────────┬──────────────────┬───────────────┬──────────────────┐
+// │  boot  │  super   │  inode blocks    │  bitmap       │   data blocks    │
+// └────────┴──────────┴──────────────────┴───────────────┴──────────────────┘
+//          ↑ ここに書く  ← inode_blocks →   ← bitmap_blocks →  ← nblocks →
+// └───────────────────────── size (= total_blocks) ─────────────────────────┘
+//
+// ディスクは FSBLOCK_SIZE (512 バイト) のブロックの並びで、先頭から上の順に使う。
+// 各領域の位置と大きさは format() で計算し、スーパーブロックに記録する。
+//
+//   boot         (block 0)
+//     ファイルシステムとしては使わない (xv6 ではブートセクタ用に空けている)。
+//   super        (block 1)
+//     SuperBlock を置く。magic でフォーマット済みかを判定でき、
+//     ここを読めば以下の各領域の位置が分かる。
+//   inode blocks (inodestart から inode_blocks 個)
+//     DiskInode を 1 ブロックに INODES_PER_BLOCK (8) 個ずつ並べる。
+//     inodestart は 2 固定、inode_blocks = ceil(ninodes / INODES_PER_BLOCK)。
+//     inode 番号 inum は、inodestart + inum / INODES_PER_BLOCK 番目のブロックの
+//     inum % INODES_PER_BLOCK 番目に入っている。
+//   bitmap       (bmapstart から bitmap_blocks 個)
+//     ブロックの使用状況を 1 ブロック = 1 ビットで記録する (1 = 使用中)。
+//     データ領域だけでなく block 0 からの全ブロックが対象なので
+//     bitmap_blocks = ceil(size / BLOCKS_PER_BITMAP_BLOCK)。
+//     boot からビットマップ自身までのメタデータ領域は、format() で使用中にしておく。
+//     bmapstart = inodestart + inode_blocks。
+//   data blocks  (data_start から nblocks 個)
+//     ファイルとディレクトリの中身。空きはビットマップで管理する。
+//     data_start = bmapstart + bitmap_blocks (スーパーブロックには持たず、計算で求める)。
+//     nblocks = size - data_start。
+//
+// size はブロック 0 から数えた全ブロック数 (= total_blocks) で、boot も含む。
+//
+// 例: fs.img (2048 ブロック) を ninodes = 200 でフォーマットした場合
+//   inodestart = 2, inode_blocks = 25   → bmapstart  = 27
+//   bitmap_blocks = 1                   → data_start = 28
+//   nblocks = 2048 - 28 = 2020
+
+
 // inode の種類。
 // ディスク上の DiskInode::type にそのまま格納されるので、基底型を uint16_t に
 // 固定してレイアウトを保つ。固定基底型の enum は基底型の範囲すべてが有効な値
