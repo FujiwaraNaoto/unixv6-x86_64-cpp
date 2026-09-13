@@ -6,7 +6,6 @@
 #include <cstddef>
 #include <functional>
 #include "block_store.hpp"
-#include "file_system.hpp"
 
 // ─── バッファキャッシュ層 ────────────────────────────────────────
 // 目的:
@@ -114,7 +113,6 @@ void release(Buffer *buffer);
 //       block.mark_dirty();
 //   } // ここで自動的に release される
 //
-// コピーすると解放が二重になるのでコピー禁止、受け渡し用にムーブのみ許可する。
 class BufferRef final
 {
   public:
