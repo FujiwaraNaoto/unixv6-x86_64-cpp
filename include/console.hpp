@@ -67,4 +67,4 @@ class NullConsole final : public IConsole
     void write(const char *, size_t) override { }
 };
 
-NullConsole null_console; // グローバルにアクセスできるようにする
+inline NullConsole null_console; // グローバルにアクセスできるようにする
