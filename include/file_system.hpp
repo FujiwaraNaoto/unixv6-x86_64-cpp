@@ -2,10 +2,12 @@
 #define FILE_SYSTEM_HPP
 #include <cstdint>
 #include <array>
+#include <optional>
 #include "console.hpp"
 #include "block_store.hpp"
 
-constexpr uint32_t FS_MAGIC     = 0x10203040;
+
+constexpr uint32_t FS_MAGIC     = 0x10203040;//xv6 の 0x10203040 と同じ値にしておく。リトルエンディアンとビックエンディアンの両方で同じ値にならないように
 constexpr uint32_t FSBLOCK_SIZE = 512;
 constexpr int NDIRECT           = 12;                              // 直接ブロック数
 constexpr int NINDIRECT         = FSBLOCK_SIZE / sizeof(uint32_t); // 128
@@ -49,22 +51,13 @@ static_assert(sizeof(DiskInode) == 64, "DiskInode must be 64 bytes");
 constexpr int IPB = FSBLOCK_SIZE / sizeof(DiskInode); // 8個/ブロック
 constexpr int BPB = FSBLOCK_SIZE * 8;                 // 4096ブロック/ビットマップ
 // ─── ディレクトリエントリ (16バイト) ─────────────────────────────
-struct [[gnu::packed]] DirEntry
+struct [[gnu::packed]] DirectoryEntry
 {
     uint16_t inum;
     char name[DIRSIZ];
 };
-static_assert(sizeof(DirEntry) == 16, "DirEntry must be 16 bytes");
+static_assert(sizeof(DirectoryEntry) == 16, "DirectoryEntry must be 16 bytes");
 
-
-class IBlockStore
-{
-  public:
-    virtual BlockRef acquire(uint32_t blockno) = 0;
-    virtual bool write_back(uint32_t blockno)  = 0;
-    virtual void release(uint32_t blockno)      = 0;
-    virtual ~IBlockStore()                      = default;
-};
 
 class NullBlockStore final : public IBlockStore
 {
@@ -80,9 +73,13 @@ class NullBlockStore final : public IBlockStore
     void release(uint32_t) override { }
 };
 
+NullBlockStore null_block_store; // グローバルにアクセスできるようにする
+
 
 namespace FileSystem
 {
+    IBlockStore *block_store;
+    IConsole *console;
 
 // ファイルシステムの初期化を担うクラス。
 // コンストラクタが「スーパーブロックを読み、未フォーマットならフォーマットする」
@@ -92,7 +89,11 @@ namespace FileSystem
 class Manager final
 {
 public:
-    explicit Manager(uint32_t total_blocks, IConsole *console =  NullConsole::instance());
+    explicit Manager(uint32_t total_blocks, IBlockStore *block_store=nullptr, IConsole *console=nullptr){
+        
+        FileSystem::block_store = block_store ? block_store : &null_block_store;
+        FileSystem::console     = console ? console : &null_console;
+    }
     // 初期化に成功したか。
     // フォーマット済みだった場合も、新規にフォーマットした場合も true。
     bool valid() const
@@ -102,12 +103,16 @@ public:
 
 private:
     bool valid_ = false;
-    IConsole *console_ = nullptr;
+    
+
 };
 
 const SuperBlock &superblock();
 // inode番号 inum が入っているブロック番号
 uint32_t inode_block(uint32_t inum);
+
+std::optional<uint32_t> allocate_block();
+bool free_block(uint32_t blockno);
 
 }// namespace FileSystem
 
