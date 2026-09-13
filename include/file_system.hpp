@@ -73,13 +73,11 @@ class NullBlockStore final : public IBlockStore
     void release(uint32_t) override { }
 };
 
-NullBlockStore null_block_store; // グローバルにアクセスできるようにする
+inline NullBlockStore null_block_store; // グローバルにアクセスできるようにする
 
 
 namespace FileSystem
 {
-    IBlockStore *block_store;
-    IConsole *console;
 
 // ファイルシステムの初期化を担うクラス。
 // コンストラクタが「スーパーブロックを読み、未フォーマットならフォーマットする」
@@ -89,11 +87,7 @@ namespace FileSystem
 class Manager final
 {
 public:
-    explicit Manager(uint32_t total_blocks, IBlockStore *block_store=nullptr, IConsole *console=nullptr){
-        
-        FileSystem::block_store = block_store ? block_store : &null_block_store;
-        FileSystem::console     = console ? console : &null_console;
-    }
+    explicit Manager(uint32_t total_blocks, IBlockStore *block_store = nullptr, IConsole *console = nullptr);
     // 初期化に成功したか。
     // フォーマット済みだった場合も、新規にフォーマットした場合も true。
     bool valid() const

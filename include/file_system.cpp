@@ -2,6 +2,14 @@
 #include <cstdint>
 #include <cstring>
 
+// file_system.hpp で extern 宣言している変数の実体。
+// Manager のコンストラクタが差し替え、各関数はここから読む。
+namespace FileSystem
+{
+IBlockStore *block_store = nullptr;
+IConsole *console        = nullptr;
+} // namespace FileSystem
+
 namespace
 {
 
@@ -114,3 +122,14 @@ bool format(uint32_t total_blocks, IConsole *console)
 
 
 }// namespace
+
+namespace FileSystem
+{
+
+Manager::Manager(uint32_t total_blocks, IBlockStore *block_store, IConsole *console)
+{
+    FileSystem::block_store = block_store ? block_store : &null_block_store;
+    FileSystem::console     = console ? console : &null_console;
+}
+
+} // namespace FileSystem
