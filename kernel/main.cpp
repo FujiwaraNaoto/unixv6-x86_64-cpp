@@ -111,15 +111,21 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, uint32_t mb_addr
 
     process::ProcessManager process_manager(heap::heap_ptr);
 
-    BufferCache::Manager buffer_cache(BufferCache::BlockDevice{
+    auto device = BufferCache::BlockDevice{
         .read_block  = &VirtIOBlock::read_block,
         .write_block = &VirtIOBlock::write_block,
-    });
+    };
+
+    BufferCache::Manager buffer_cache(device);
     if (not buffer_cache.valid())
     {
         vga::vga->puts("BufferCache initialization failed\n");
         asm volatile("hlt");
     }
+    BufferCache::BlockStore block_store(
+        device
+    );
+    FileSystem::Manager fs_manager(VirtIOBlock::capacity(), &block_store, vga::vga);
 #ifdef ENABLE_TESTS
     // 各機能の動作確認 (どのテストを走らせるかは tests/tests.cpp で切り替える)
     tests::run_all(vga::vga);
