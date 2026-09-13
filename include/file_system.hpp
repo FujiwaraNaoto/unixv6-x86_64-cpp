@@ -142,8 +142,6 @@ private:
 };
 
 const SuperBlock &superblock();
-// inode番号 inum が入っているブロック番号
-uint32_t inode_block(uint32_t inum);
 
 std::optional<uint32_t> allocate_block();
 bool free_block(uint32_t blockno);
