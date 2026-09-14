@@ -3,7 +3,7 @@
 
 BITS 32
 
-; 高位仮想オフセット (この値を引くと物理アドレスになる)
+; 高位仮想オフセット (この値を引くと物理アドレスになる) high-half kernel の仮想アドレスは 0xFFFFFFFF80000000 から始まる上のアドレス空間に配置される。リンカがこの値を加えたアドレスを焼き込むので、低位で実行中のブートコードは物理アドレスに変換するためにこの値を引く必要がある。
 KERNEL_VMA equ 0xFFFFFFFF80000000
 
 ; リンカが高位アドレスを付けるので、低位で使うシンボルは
@@ -100,7 +100,7 @@ setup_paging:
     ; PML4[0] → PDPT
     ; ─── 低位 identity map (PML4[0], ブート実行用) ───
     mov eax, PHYS(pdpt_table)
-    or  eax, 0x3        ; Present + Writable
+    or  eax, 0x3        ; Present(bit0) + Writable(bit1)
     mov [PHYS(pml4_table)], eax
 
     ; PDPT[0] → PD
