@@ -246,7 +246,7 @@ bool VirtualMemoryManager::map_page_in(uint64_t pml4_phys,
     return true;
 }
 
-void copy_user_pages(uint64_t src_pml4_phys, uint64_t dst_pml4_phys)
+void VirtualMemoryManager::copy_user_pages(uint64_t src_pml4_phys, uint64_t dst_pml4_phys)
 {
     auto *src = physical_to_virtual(src_pml4_phys);
 
