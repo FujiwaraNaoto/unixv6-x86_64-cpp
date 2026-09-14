@@ -8,9 +8,9 @@ PhysicalMemoryManager::PhysicalMemoryManager(Multiboot2MemoryMapTag *memory_map,
                                              uint32_t multiboot_address)
 {
     // initialize bitmap (all pages used)
-    for (uint32_t i = 0; i < BITMAP_SIZE; i++)
+    for(auto &b : bitmap_)
     {
-        bitmap_[i] = 0xFF;
+        b = 0xFF;
     }
 
     uint64_t total = 0, base_found = 0;
