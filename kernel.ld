@@ -64,3 +64,7 @@ SECTIONS {
     /* 物理アドレスでのカーネル終端 (pmm用) */
     kernel_phys_end = kernel_end - KERNEL_VMA;
 }
+
+/* boot.asm は高位側に物理 0-2MiB (pd_high[0] -> pt_table) しかマップしないので、
+ * カーネルイメージがそこからはみ出すと起動直後に #PF になる */
+ASSERT(kernel_end <= KERNEL_VMA + 0x200000, "kernel image exceeds 2MiB boot mapping")
