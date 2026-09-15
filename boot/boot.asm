@@ -252,7 +252,8 @@ higher_half_entry:
     mov rax, pml4_table
     mov qword [rax], 0
 
-    ; CR3 を再ロードして、低位マップの TLB エントリを捨てる
+    ; cr3=control register 3 = 現在有効なページテーブルのルート(PML4)のphysical addressを指す。
+    ; cr3を再ロードするとTLBがクリアされるので、低位マップのTLBエントリを捨てることができる
     mov rax, cr3
     mov cr3, rax
 

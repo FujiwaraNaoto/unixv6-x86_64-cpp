@@ -21,7 +21,7 @@ struct PhysicalMemoryManagerState
     }
 };
 
-static constexpr uint32_t MAX_PAGES   = 65536;
+static constexpr uint32_t MAX_PAGES   = 65536;// 65536 * 4KB = 256MB
 static constexpr uint32_t BITMAP_SIZE = MAX_PAGES / 8;
 
 // 物理メモリの状態を表示する。
@@ -58,7 +58,7 @@ class PhysicalMemoryManager
     // ページ境界に丸めて (start は切り下げ / end は切り上げ) 予約するので、
     // 範囲にかかるページは必ず保護される。
     void reserve_region(uint64_t start, uint64_t end);
-    
+
     // a bitmap which tracks the usage of physical memory. 1 bit = 1 page. 0 = free, 1 = used.
     std::array<uint8_t, BITMAP_SIZE> bitmap_{};
     uint64_t base_{0};

@@ -3,6 +3,13 @@
 #include "vmm.hpp"
 #include <cstring>
 
+//  63      48 47    39 38    30 29    21 20    12 11         0
+// ┌──────────┬────────┬────────┬────────┬────────┬────────────┐
+// │  符号拡張 │  PML4  │  PDPT  │   PD   │   PT   │  ページ内   │
+// │          │  9bit  │  9bit  │  9bit  │  9bit  │ 12bit      │
+// └──────────┴────────┴────────┴────────┴────────┴────────────┘
+//    (va >> 39) & 0x1FF ─┘        ...              4096 バイト内の位置
+
 namespace
 {
 uint64_t pml4_index(uint64_t va)
@@ -21,7 +28,7 @@ uint64_t pt_index(uint64_t va)
 {
     return (va >> 12) & 0x1FF;
 }
-
+// ページテーブルのエントリからフラグを取り除いて物理アドレスだけを取り出す関数
 uint64_t entry_to_phys(uint64_t entry)
 {
     return entry & 0x000FFFFFFFFFF000ULL;
@@ -201,6 +208,8 @@ uint64_t VirtualMemoryManager::create_address_space()
 }
 
 // ─── アドレス空間の切り替え ──────────────────────────────────────
+// CR3を切り替えることで、プロセスを切り替えることを実現する
+// NOTE: 実行中のコードスタックは、切り替え後のアドレス空間にマップされている必要がある。
 void VirtualMemoryManager::switch_address_space(uint64_t pml4_phys)
 {
     if (pml4_phys == 0)

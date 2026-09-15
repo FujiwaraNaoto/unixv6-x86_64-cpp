@@ -125,7 +125,7 @@ void PhysicalMemoryManager::reserve_region(uint64_t start, uint64_t end)
     }
 }
 
-// bitが0のページを先頭から探して、見つかったらそのページを使用中にして物理アドレスを返す。
+// bitが0のページを先頭から探し、未使用ページが見つかったらそのページを使用中にして物理アドレスを返す。
 uint64_t PhysicalMemoryManager::allocate()
 {
     for (uint64_t i = 0; i < pages_; i++)
