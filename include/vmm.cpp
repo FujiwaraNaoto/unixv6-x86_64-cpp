@@ -12,6 +12,11 @@
 
 namespace
 {
+// 表 1 枚のエントリ数 (インデックスが 9bit なので 2^9)。
+// 8 バイト × 512 = 4096 バイトで、表 1 枚がちょうど 1 ページに収まる。
+// PDPT / PD / PT の各表も同じく 512 エントリで、1 ページに収まる。
+constexpr int ENTRIES_PER_TABLE = 512;
+
 uint64_t pml4_index(uint64_t va)
 {
     return (va >> 39) & 0x1FF;
@@ -192,7 +197,7 @@ uint64_t VirtualMemoryManager::create_address_space()
     uint64_t *new_pml4 = physical_to_virtual(new_pml4_phys);
     auto *current_pml4 = physical_to_virtual(pml4_phys_);
 
-    std::memset(new_pml4, 0, 512 * sizeof(uint64_t)); // 新しいPML4をゼロクリア
+    std::memset(new_pml4, 0, PAGE_SIZE); // 新しいPML4をゼロクリア (表 1 枚 = 1 ページ)
 
 
     // カーネル空間を共有:
@@ -267,7 +272,7 @@ void VirtualMemoryManager::copy_user_pages(uint64_t src_pml4_phys, uint64_t dst_
     auto src_pdpt = physical_to_virtual(entry_to_phys(src[0]));
 
 
-    for (int i = 0; i < 512; i++)
+    for (int i = 0; i < ENTRIES_PER_TABLE; i++)
     {
         if (!(src_pdpt[i] & PageFlag::Present))
         {
@@ -275,7 +280,7 @@ void VirtualMemoryManager::copy_user_pages(uint64_t src_pml4_phys, uint64_t dst_
         }
         auto *src_pd = physical_to_virtual(entry_to_phys(src_pdpt[i]));
 
-        for (int j = 0; j < 512; j++)
+        for (int j = 0; j < ENTRIES_PER_TABLE; j++)
         {
             if (!(src_pd[j] & PageFlag::Present))
             {
@@ -283,7 +288,7 @@ void VirtualMemoryManager::copy_user_pages(uint64_t src_pml4_phys, uint64_t dst_
             }
             auto *src_pt = physical_to_virtual(entry_to_phys(src_pd[j]));
 
-            for (int k = 0; k < 512; k++)
+            for (int k = 0; k < ENTRIES_PER_TABLE; k++)
             {
 
                 uint64_t e = src_pt[k];
@@ -310,10 +315,7 @@ void VirtualMemoryManager::copy_user_pages(uint64_t src_pml4_phys, uint64_t dst_
                 auto *dist_page = physical_to_virtual(new_phys);
                 auto *src_page  = physical_to_virtual(entry_to_phys(e));
 
-                for (int l = 0; l < 512; l++)
-                {
-                    dist_page[l] = src_page[l]; // ページの内容をコピー
-                }
+                std::memcpy(dist_page, src_page, PAGE_SIZE); // ページの内容をコピー
 
                 //子供のPML4に同じ仮想アドレスでマップ
                 uint64_t flags = e & 0xFFF;
