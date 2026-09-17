@@ -99,12 +99,6 @@ static void schedule(Process *prev_proc)
         switch_context(&prev_proc->context, scheduler_context_);
     }
 
-
-    // if (!prev_proc || prev_proc->state != ProcessState::Running)
-    // {
-    //     asm volatile("sti"); //割り込みは受け付ける
-    //     asm volatile("hlt");
-    // }
 }
 
 Process *create_process(EntryPoint entry, const char *name)
