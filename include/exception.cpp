@@ -1,9 +1,10 @@
-
 #include "exception.hpp"
 #include "serial.hpp"
 #include "pic.hpp"
 #include "process.hpp"
 #include "keyboard.hpp"
+#include "console.hpp"
+#include <array>
 
 namespace exception
 {
@@ -26,7 +27,7 @@ void set_console(IConsole *console)
 
 // isr.asmも参照
 constexpr int NUM_EXCEPTIONS                          = 22;
-static const char *exception_messages[NUM_EXCEPTIONS] = {
+static std::array<const char *, NUM_EXCEPTIONS> exception_messages = {
     "Division By Zero",
     "Debug",
     "Non Maskable Interrupt",
@@ -55,7 +56,7 @@ void isr_common_handler(register_state_t *regs)
 {
     handler_console->set_color(Color::White, Color::Red);
     handler_console->printf("**Exception **");
-    if (regs->int_no < NUM_EXCEPTIONS)
+    if (regs->int_no < exception_messages.size())
     {
         handler_console->printf(": %s\n", exception_messages[regs->int_no]);
     }
