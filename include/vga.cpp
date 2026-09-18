@@ -79,7 +79,10 @@ void VGA::scroll()
 // 画面側は 1 文字ずつ put() に流す。
 void VGA::write(const char *s, size_t n)
 {
-    serial::serial.write(s, n); // 端末確認用にシリアルへもミラー出力
+    if (serial::serial != nullptr)
+    {
+        serial::serial->write(s, n); // 端末確認用にシリアルへもミラー出力
+    }
     for (size_t i = 0; i < n; i++)
     {
         put(s[i]);
