@@ -90,10 +90,10 @@ class VirtualMemoryManager final
     // physical_address が無効 (nullopt) なら何もせず false を返す。
     bool map_page(PageVirtualAddress virtual_address, PhysicalAddress physical_address, uint64_t flags);
     // map解除とTLBフラッシュ
-    bool unmap_page(uint64_t virtual_address);
+    bool unmap_page(PageVirtualAddress virtual_address);
     // マップされていなければ nullopt を返す。
     // (物理 0 は「未マップ」ではなく実在するページなので、番兵値には使えない)
-    PhysicalAddress virtual_to_physical(uint64_t virtual_address) const;
+    PhysicalAddress virtual_to_physical(PageVirtualAddress virtual_address) const;
 
     void flush_tlb();
 
@@ -106,7 +106,7 @@ class VirtualMemoryManager final
     void switch_address_space(uint64_t pml4_phys);
 
     // 指定PML4に対して、指定仮想アドレスを指定物理アドレスにマッピングする。(プロセスにアドレス空間構築用)
-    bool map_page_in(uint64_t pml4_phys, uint64_t virtual_address, uint64_t physical_address, uint64_t flags);
+    bool map_page_in(uint64_t pml4_phys, PageVirtualAddress virtual_address, PhysicalAddress physical_address, uint64_t flags);
 
     void copy_user_pages(uint64_t src_pml4_phys, uint64_t dst_pml4_phys);
 

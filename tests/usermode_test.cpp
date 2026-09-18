@@ -65,7 +65,7 @@ namespace
 void usermode_ring3(IConsole *console)
 {
     // ユーザープログラムのコードページを User 許可で貼り直す
-    const uint64_t code_page = reinterpret_cast<uint64_t>(&user_program) & PAGE_MASK;
+    const vmm::PageVirtualAddress code_page{reinterpret_cast<uint64_t>(&user_program) & PAGE_MASK};
     const auto code_phys     = vmm::vmm_ptr->virtual_to_physical(code_page);
     if (!code_phys)
     {
@@ -74,7 +74,7 @@ void usermode_ring3(IConsole *console)
         console->set_color(Color::LightGrey, Color::Black);
         hang();
     }
-    vmm::vmm_ptr->map_page(vmm::PageVirtualAddress{code_page},
+    vmm::vmm_ptr->map_page(code_page,
                            code_phys,
                            vmm::PageFlag::User | vmm::PageFlag::Present | vmm::PageFlag::Writable);
 
@@ -88,13 +88,13 @@ void usermode_ring3(IConsole *console)
         hang();
     }
     const vmm::PhysicalAddress ustack_phys{*ustack_allocated};
-    constexpr uint64_t ustack_virt = 0x600000;
-    vmm::vmm_ptr->map_page(vmm::PageVirtualAddress{ustack_virt},
+    constexpr vmm::PageVirtualAddress ustack_virt{0x600000};
+    vmm::vmm_ptr->map_page(ustack_virt,
                            ustack_phys,
                            vmm::PageFlag::Present | vmm::PageFlag::Writable | vmm::PageFlag::User);
 
     // リング3へ遷移 (16バイト境界に揃える)。ここから戻らない。
-    usermode::enter(reinterpret_cast<uint64_t>(&user_program), ustack_virt + PAGE_SIZE - 16);
+    usermode::enter(reinterpret_cast<uint64_t>(&user_program), ustack_virt.address + PAGE_SIZE - 16);
 }
 
 } // namespace tests
