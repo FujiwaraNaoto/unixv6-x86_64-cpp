@@ -38,6 +38,26 @@ constexpr uint64_t NoExecute = 1ULL << 63;
 } // namespace PageFlag
 
 
+// direct map 上の仮想アドレス。
+// 物理アドレス (uint64_t) と取り違えないよう、型で区別する。
+struct VirtualAddress
+{
+    uint64_t *ptr;
+
+    // ページテーブルのエントリを table[i] の形で読み書きできるようにする
+    uint64_t &operator[](uint64_t index) const
+    {
+        return ptr[index];
+    }
+
+    // if (!table) で「テーブルが無い (nullptr)」を判定できるようにする。
+    // explicit なので整数などへ暗黙に変換されることはない。
+    explicit operator bool() const
+    {
+        return ptr != nullptr;
+    }
+};
+
 class VirtualMemoryManager final
 {
   public:
@@ -68,7 +88,7 @@ class VirtualMemoryManager final
     void copy_user_pages(uint64_t src_pml4_phys, uint64_t dst_pml4_phys);
 
   private:
-    uint64_t *get_or_create_table(uint64_t *parent_table, uint64_t index, uint64_t flags);
+    VirtualAddress get_or_create_table(VirtualAddress parent_table, uint64_t index, uint64_t flags);
 
     uint64_t pml4_phys_                  = 0;
     pmm::PhysicalMemoryManager *pmm_ptr_ = nullptr;

@@ -39,9 +39,9 @@ uint64_t entry_to_phys(uint64_t entry)
     return entry & 0x000FFFFFFFFFF000ULL;
 }
 // direct map経由: 物理アドレス + DIRECT_MAP_BASE = 仮想アドレス
-uint64_t *physical_to_virtual(uint64_t phys)
+vmm::VirtualAddress physical_to_virtual(uint64_t phys)
 {
-    return reinterpret_cast<uint64_t *>(phys + DIRECT_MAP_BASE);
+    return vmm::VirtualAddress{reinterpret_cast<uint64_t *>(phys + DIRECT_MAP_BASE)};
 }
 
 extern "C" void load_cr3(uint64_t value);
@@ -65,7 +65,7 @@ VirtualMemoryManager::VirtualMemoryManager(pmm::PhysicalMemoryManager *pmm_ptr, 
 
 bool VirtualMemoryManager::map_page(uint64_t virtual_address, uint64_t physical_address, uint64_t flags)
 {
-    uint64_t *pml4 = physical_to_virtual(pml4_phys_);
+    VirtualAddress pml4 = physical_to_virtual(pml4_phys_);
     if (!pml4)
     {
         return false; // PML4が存在しない場合はマッピングできない
@@ -74,17 +74,17 @@ bool VirtualMemoryManager::map_page(uint64_t virtual_address, uint64_t physical_
     // 最終 PTE だけ User にしても、上位エントリのどれか一つでも User=0 なら
     // CPL=3 からのアクセスは拒否される (Intel SDM Vol.3A 4.6 "Access Rights")。
     const uint64_t table_flags = PageFlag::Present | PageFlag::Writable | (flags & PageFlag::User);
-    uint64_t *pdpt             = get_or_create_table(pml4, pml4_index(virtual_address), table_flags);
+    VirtualAddress pdpt        = get_or_create_table(pml4, pml4_index(virtual_address), table_flags);
     if (!pdpt)
     {
         return false; // PDPTが存在しない場合はマッピングできない
     }
-    uint64_t *pd = get_or_create_table(pdpt, pdpt_index(virtual_address), table_flags);
+    VirtualAddress pd = get_or_create_table(pdpt, pdpt_index(virtual_address), table_flags);
     if (!pd)
     {
         return false; // PDが存在しない場合はマッピングできない
     }
-    uint64_t *pt = get_or_create_table(pd, pd_index(virtual_address), table_flags);
+    VirtualAddress pt = get_or_create_table(pd, pd_index(virtual_address), table_flags);
     if (!pt)
     {
         return false; // PTが存在しない場合はマッピングできない
@@ -97,26 +97,26 @@ bool VirtualMemoryManager::map_page(uint64_t virtual_address, uint64_t physical_
 
 bool VirtualMemoryManager::unmap_page(uint64_t virtual_address)
 {
-    uint64_t *pml4 = physical_to_virtual(pml4_phys_);
+    VirtualAddress pml4 = physical_to_virtual(pml4_phys_);
 
     if (!(pml4[pml4_index(virtual_address)] & PageFlag::Present))
     {
         return false; // PML4エントリが存在しない場合はアンマッピングできない
     }
 
-    uint64_t *pdpt = physical_to_virtual(entry_to_phys(pml4[pml4_index(virtual_address)]));
+    VirtualAddress pdpt = physical_to_virtual(entry_to_phys(pml4[pml4_index(virtual_address)]));
 
     if (!(pdpt[pdpt_index(virtual_address)] & PageFlag::Present))
     {
         return false; // PDPTエントリが存在しない場合はアンマッピングできない
     }
 
-    uint64_t *pd = physical_to_virtual(entry_to_phys(pdpt[pdpt_index(virtual_address)]));
+    VirtualAddress pd = physical_to_virtual(entry_to_phys(pdpt[pdpt_index(virtual_address)]));
     if (!(pd[pd_index(virtual_address)] & PageFlag::Present))
     {
         return false; // PDエントリが存在しない場合はアンマッピングできない
     }
-    uint64_t *pt = physical_to_virtual(entry_to_phys(pd[pd_index(virtual_address)]));
+    VirtualAddress pt = physical_to_virtual(entry_to_phys(pd[pd_index(virtual_address)]));
     if (!(pt[pt_index(virtual_address)] & PageFlag::Present))
     {
         return false; // PTエントリが存在しない場合はアンマッピングできない
@@ -129,22 +129,22 @@ bool VirtualMemoryManager::unmap_page(uint64_t virtual_address)
 
 std::optional<uint64_t> VirtualMemoryManager::virtual_to_physical(uint64_t virtual_address) const
 {
-    uint64_t *pml4 = physical_to_virtual(pml4_phys_);
+    VirtualAddress pml4 = physical_to_virtual(pml4_phys_);
     if (!(pml4[pml4_index(virtual_address)] & PageFlag::Present))
     {
         return std::nullopt; // PML4エントリが存在しない場合は物理アドレスを返せない
     }
-    uint64_t *pdpt = physical_to_virtual(entry_to_phys(pml4[pml4_index(virtual_address)]));
+    VirtualAddress pdpt = physical_to_virtual(entry_to_phys(pml4[pml4_index(virtual_address)]));
     if (!(pdpt[pdpt_index(virtual_address)] & PageFlag::Present))
     {
         return std::nullopt; // PDPTエントリが存在しない場合は物理アドレスを返せない
     }
-    uint64_t *pd = physical_to_virtual(entry_to_phys(pdpt[pdpt_index(virtual_address)]));
+    VirtualAddress pd = physical_to_virtual(entry_to_phys(pdpt[pdpt_index(virtual_address)]));
     if (!(pd[pd_index(virtual_address)] & PageFlag::Present))
     {
         return std::nullopt; // PDエントリが存在しない場合は物理アドレスを返せない
     }
-    uint64_t *pt = physical_to_virtual(entry_to_phys(pd[pd_index(virtual_address)]));
+    VirtualAddress pt = physical_to_virtual(entry_to_phys(pd[pd_index(virtual_address)]));
     if (!(pt[pt_index(virtual_address)] & PageFlag::Present))
     {
         return std::nullopt; // PTエントリが存在しない場合は物理アドレスを返せない
@@ -158,7 +158,7 @@ void VirtualMemoryManager::flush_tlb()
 }
 
 
-uint64_t *VirtualMemoryManager::get_or_create_table(uint64_t *parent_table, uint64_t index, uint64_t flags)
+VirtualAddress VirtualMemoryManager::get_or_create_table(VirtualAddress parent_table, uint64_t index, uint64_t flags)
 {
     if (!(parent_table[index] & PageFlag::Present))
     {
@@ -166,7 +166,7 @@ uint64_t *VirtualMemoryManager::get_or_create_table(uint64_t *parent_table, uint
         const auto allocated = pmm_ptr_->allocate(); // 物理ページの割り当て関数
         if (!allocated)
         {
-            return nullptr; // 物理メモリ不足。確保できないまま Present なエントリを作らないこと
+            return VirtualAddress{nullptr}; // 物理メモリ不足。確保できないまま Present なエントリを作らないこと
         }
         const uint64_t new_table_phys = *allocated;
 
@@ -174,7 +174,7 @@ uint64_t *VirtualMemoryManager::get_or_create_table(uint64_t *parent_table, uint
         // GRUB が置いたデータなどが入っている)。ゼロクリアせずに配下のテーブルとして
         // 使うと、ゴミのエントリの Present ビットが偶然立っているところを
         // 「既存のテーブル」とみなして追いかけ、RAM の外を指すアドレスに書きに行く。
-        std::memset(physical_to_virtual(new_table_phys), 0, PAGE_SIZE);
+        std::memset(physical_to_virtual(new_table_phys).ptr, 0, PAGE_SIZE);
 
         parent_table[index] = new_table_phys | flags;
     }
@@ -196,10 +196,10 @@ uint64_t VirtualMemoryManager::create_address_space()
         return 0; // メモリ不足
     }
     const uint64_t new_pml4_phys = *allocated;
-    uint64_t *new_pml4 = physical_to_virtual(new_pml4_phys);
-    auto *current_pml4 = physical_to_virtual(pml4_phys_);
+    VirtualAddress new_pml4 = physical_to_virtual(new_pml4_phys);
+    VirtualAddress current_pml4 = physical_to_virtual(pml4_phys_);
 
-    std::memset(new_pml4, 0, PAGE_SIZE); // 新しいPML4をゼロクリア (表 1 枚 = 1 ページ)
+    std::memset(new_pml4.ptr, 0, PAGE_SIZE); // 新しいPML4をゼロクリア (表 1 枚 = 1 ページ)
 
 
     // カーネル空間を共有:
@@ -234,9 +234,9 @@ bool VirtualMemoryManager::map_page_in(uint64_t pml4_phys,
                                        uint64_t flags)
 {
 
-    auto *original_pml4 = physical_to_virtual(pml4_phys);
+    VirtualAddress original_pml4 = physical_to_virtual(pml4_phys);
 
-    auto *pdpt = get_or_create_table(original_pml4,
+    VirtualAddress pdpt = get_or_create_table(original_pml4,
                                      pml4_index(virtual_address),
                                      PageFlag::Present | PageFlag::Writable | PageFlag::User);
 
@@ -244,14 +244,14 @@ bool VirtualMemoryManager::map_page_in(uint64_t pml4_phys,
     {
         return false; // PDPTが存在しない場合はマッピングできない
     }
-    auto *pd =
+    VirtualAddress pd =
         get_or_create_table(pdpt, pdpt_index(virtual_address), PageFlag::Present | PageFlag::Writable | PageFlag::User);
     if (!pd)
     {
         return false; // PDが存在しない場合はマッピングできない
     }
 
-    auto *pt =
+    VirtualAddress pt =
         get_or_create_table(pd, pd_index(virtual_address), PageFlag::Present | PageFlag::Writable | PageFlag::User);
     if (!pt)
     {
@@ -264,14 +264,14 @@ bool VirtualMemoryManager::map_page_in(uint64_t pml4_phys,
 
 void VirtualMemoryManager::copy_user_pages(uint64_t src_pml4_phys, uint64_t dst_pml4_phys)
 {
-    auto *src = physical_to_virtual(src_pml4_phys);
+    VirtualAddress src = physical_to_virtual(src_pml4_phys);
 
     if (!(src[0] & PageFlag::Present))
     {
         return; // PML4エントリが存在しない場合はコピーできない
     }
 
-    auto src_pdpt = physical_to_virtual(entry_to_phys(src[0]));
+    VirtualAddress src_pdpt = physical_to_virtual(entry_to_phys(src[0]));
 
 
     for (int i = 0; i < ENTRIES_PER_TABLE; i++)
@@ -280,7 +280,7 @@ void VirtualMemoryManager::copy_user_pages(uint64_t src_pml4_phys, uint64_t dst_
         {
             continue; // PDPTエントリが存在しない場合はコピーできない
         }
-        auto *src_pd = physical_to_virtual(entry_to_phys(src_pdpt[i]));
+        VirtualAddress src_pd = physical_to_virtual(entry_to_phys(src_pdpt[i]));
 
         for (int j = 0; j < ENTRIES_PER_TABLE; j++)
         {
@@ -288,7 +288,7 @@ void VirtualMemoryManager::copy_user_pages(uint64_t src_pml4_phys, uint64_t dst_
             {
                 continue; // PDエントリが存在しない場合はコピーできない
             }
-            auto *src_pt = physical_to_virtual(entry_to_phys(src_pd[j]));
+            VirtualAddress src_pt = physical_to_virtual(entry_to_phys(src_pd[j]));
 
             for (int k = 0; k < ENTRIES_PER_TABLE; k++)
             {
@@ -315,10 +315,10 @@ void VirtualMemoryManager::copy_user_pages(uint64_t src_pml4_phys, uint64_t dst_
                 }
                 const uint64_t new_phys = *allocated;
 
-                auto *dist_page = physical_to_virtual(new_phys);
-                auto *src_page  = physical_to_virtual(entry_to_phys(e));
+                VirtualAddress dist_page = physical_to_virtual(new_phys);
+                VirtualAddress src_page  = physical_to_virtual(entry_to_phys(e));
 
-                std::memcpy(dist_page, src_page, PAGE_SIZE);
+                std::memcpy(dist_page.ptr, src_page.ptr, PAGE_SIZE);
 
                 //子供のPML4に同じ仮想アドレスでマップ
                 uint64_t flags = e & 0xFFF;
