@@ -58,7 +58,7 @@ void virtio_block_read(IConsole *console)
         }
         // virtual_to_physical() 自体も未マップなら nullopt を返すので、そのまま伝播させる。
         // ドライバを vmm の型に依存させないよう、PhysicalAddress から中身を取り出して渡す。
-        return vmm::vmm_ptr->virtual_to_physical(vmm::PageVirtualAddress{reinterpret_cast<uint64_t>(p)}).address;
+        return vmm::vmm_ptr->virtual_to_physical(PageVirtualAddress{reinterpret_cast<uint64_t>(p)}).address;
     };
 
     if (!VirtIOBlock::initialize(resolve_physical))

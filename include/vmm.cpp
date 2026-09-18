@@ -17,36 +17,36 @@ namespace
 // PDPT / PD / PT の各表も同じく 512 エントリで、1 ページに収まる。
 constexpr int ENTRIES_PER_TABLE = 512;
 
-uint64_t pml4_index(vmm::PageVirtualAddress va)
+uint64_t pml4_index(PageVirtualAddress va)
 {
     return (va.address >> 39) & 0x1FF;
 }
-uint64_t pdpt_index(vmm::PageVirtualAddress va)
+uint64_t pdpt_index(PageVirtualAddress va)
 {
     return (va.address >> 30) & 0x1FF;
 }
-uint64_t pd_index(vmm::PageVirtualAddress va)
+uint64_t pd_index(PageVirtualAddress va)
 {
     return (va.address >> 21) & 0x1FF;
 }
-uint64_t pt_index(vmm::PageVirtualAddress va)
+uint64_t pt_index(PageVirtualAddress va)
 {
     return (va.address >> 12) & 0x1FF;
 }
 // ページテーブルのエントリからフラグを取り除いて物理アドレスだけを取り出す関数
-vmm::PhysicalAddress entry_to_phys(uint64_t entry)
+PhysicalAddress entry_to_phys(uint64_t entry)
 {
-    return vmm::PhysicalAddress{entry & 0x000FFFFFFFFFF000ULL};
+    return PhysicalAddress{entry & 0x000FFFFFFFFFF000ULL};
 }
 // direct map経由: 物理アドレス + DIRECT_MAP_BASE = 仮想アドレス
 // 無効な物理アドレス (nullopt) は nullptr の仮想アドレスになる。
-vmm::VirtualAddress physical_to_virtual(vmm::PhysicalAddress phys)
+VirtualAddress physical_to_virtual(PhysicalAddress phys)
 {
     if (!phys.address)
     {
-        return vmm::VirtualAddress{nullptr};
+        return VirtualAddress{nullptr};
     }
-    return vmm::VirtualAddress{reinterpret_cast<uint64_t *>(*phys.address + DIRECT_MAP_BASE)};
+    return VirtualAddress{reinterpret_cast<uint64_t *>(*phys.address + DIRECT_MAP_BASE)};
 }
 
 extern "C" void load_cr3(uint64_t value);

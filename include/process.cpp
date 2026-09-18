@@ -2,6 +2,7 @@
 #include <array>
 #include "process.hpp"
 #include "heap.hpp"
+#include "vmm.hpp"
 #include "gdt.hpp"
 
 extern "C" void switch_context(ProcessContext **old_ctx, ProcessContext *new_ctx);
@@ -281,7 +282,7 @@ void free_process_resources(Process *proc)
         proc->kernel_stack = 0;
     }
 
-    proc->pml4          = vmm::PhysicalAddress{};
+    proc->pml4          = PhysicalAddress{};
     proc->parent        = nullptr;
     proc->sleep_channel = nullptr;
     proc->exit_status   = static_cast<int>(ProcessState::Unused);

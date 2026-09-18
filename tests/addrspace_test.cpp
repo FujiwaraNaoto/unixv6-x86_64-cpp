@@ -14,7 +14,7 @@ namespace
 // 低位 identity map 撤去後は PML4[0] もプロセスごとに独立しているが、
 // このテストは従来どおり PML4 スロット1 (512GiB〜) を使う。
 // (スレッドは何も出力しないので、出力先の受け渡しは要らない)
-constexpr vmm::PageVirtualAddress kAddrTestVirt{0x8000000000}; // PML4 index 1
+constexpr PageVirtualAddress kAddrTestVirt{0x8000000000}; // PML4 index 1
 volatile uint64_t test_result_a  = 0;
 volatile uint64_t test_result_b  = 0;
 
@@ -58,8 +58,8 @@ void addrspace_separation(IConsole *console)
         console->set_color(Color::LightGrey, Color::Black);
         return;
     }
-    const vmm::PhysicalAddress phys_a{*alloc_a};
-    const vmm::PhysicalAddress phys_b{*alloc_b};
+    const PhysicalAddress phys_a{*alloc_a};
+    const PhysicalAddress phys_b{*alloc_b};
     vmm::vmm_ptr->map_page_in(pa->pml4, kAddrTestVirt, phys_a, vmm::PageFlag::Present | vmm::PageFlag::Writable);
     vmm::vmm_ptr->map_page_in(pb->pml4, kAddrTestVirt, phys_b, vmm::PageFlag::Present | vmm::PageFlag::Writable);
 

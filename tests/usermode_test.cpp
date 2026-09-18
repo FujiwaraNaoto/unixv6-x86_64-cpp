@@ -65,7 +65,7 @@ namespace
 void usermode_ring3(IConsole *console)
 {
     // ユーザープログラムのコードページを User 許可で貼り直す
-    const vmm::PageVirtualAddress code_page{reinterpret_cast<uint64_t>(&user_program) & PAGE_MASK};
+    const PageVirtualAddress code_page{reinterpret_cast<uint64_t>(&user_program) & PAGE_MASK};
     const auto code_phys     = vmm::vmm_ptr->virtual_to_physical(code_page);
     if (!code_phys)
     {
@@ -87,8 +87,8 @@ void usermode_ring3(IConsole *console)
         console->set_color(Color::LightGrey, Color::Black);
         hang();
     }
-    const vmm::PhysicalAddress ustack_phys{*ustack_allocated};
-    constexpr vmm::PageVirtualAddress ustack_virt{0x600000};
+    const PhysicalAddress ustack_phys{*ustack_allocated};
+    constexpr PageVirtualAddress ustack_virt{0x600000};
     vmm::vmm_ptr->map_page(ustack_virt,
                            ustack_phys,
                            vmm::PageFlag::Present | vmm::PageFlag::Writable | vmm::PageFlag::User);
