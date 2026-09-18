@@ -390,8 +390,7 @@ int fork()
     // ── 案B: カーネルスレッド fork ─────────────────────────────────────
     // 子は sysret を使わず、リング0のまま「fork_capture を呼んだ直後」から復帰し、
     // current_proc_ で親子を判定して 0 を返す。あとは fork の通常エピローグが
-    // コピー済みスタック上で parent_thread へ ret する。詳細は fork.md 【B】。
-    //
+    // コピー済みスタック上で parent_thread へ ret する。
     // fork_capture は現在の callee-saved と復帰ポイント(=直後の★)を switch_context
     // 形式で snap に保存し、呼び出し元(この fork)の rsp を返す。
     ProcessContext snap;
