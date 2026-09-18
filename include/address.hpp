@@ -1,4 +1,5 @@
-#pragma once
+#ifndef INCLUDE_ADDRESS_HPP
+#define INCLUDE_ADDRESS_HPP
 #include <cstdint>
 #include <optional>
 
@@ -43,3 +44,5 @@ struct VirtualAddress
         return ptr != nullptr;
     }
 };
+
+#endif // INCLUDE_ADDRESS_HPP
