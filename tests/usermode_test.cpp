@@ -75,7 +75,7 @@ void usermode_ring3(IConsole *console)
         hang();
     }
     vmm::vmm_ptr->map_page(code_page,
-                           *code_phys,
+                           code_phys,
                            vmm::PageFlag::User | vmm::PageFlag::Present | vmm::PageFlag::Writable);
 
     // ユーザースタックを確保して User許可でマップ
@@ -87,7 +87,7 @@ void usermode_ring3(IConsole *console)
         console->set_color(Color::LightGrey, Color::Black);
         hang();
     }
-    const uint64_t ustack_phys     = *ustack_allocated;
+    const vmm::PhysicalAddress ustack_phys{*ustack_allocated};
     constexpr uint64_t ustack_virt = 0x600000;
     vmm::vmm_ptr->map_page(ustack_virt,
                            ustack_phys,

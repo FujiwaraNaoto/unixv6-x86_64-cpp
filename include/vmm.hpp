@@ -44,6 +44,12 @@ constexpr uint64_t NoExecute = 1ULL << 63;
 struct PhysicalAddress
 {
     std::optional<uint64_t> address;
+
+    // if (!phys) で「無効 (nullopt)」を判定できるようにする。
+    explicit operator bool() const
+    {
+        return address.has_value();
+    }
 };
 
 // direct map 上の仮想アドレス。
@@ -73,12 +79,13 @@ class VirtualMemoryManager final
     // 出力先を注入で受け取るので、VMM は VGA / シリアルのどちらに出るかを知らない。
     // nullptr を渡した場合は何も出力しない。
     VirtualMemoryManager(pmm::PhysicalMemoryManager *pmm_ptr, IConsole *console);
-    bool map_page(uint64_t virtual_address, uint64_t physical_address, uint64_t flags);
+    // physical_address が無効 (nullopt) なら何もせず false を返す。
+    bool map_page(uint64_t virtual_address, PhysicalAddress physical_address, uint64_t flags);
     // map解除とTLBフラッシュ
     bool unmap_page(uint64_t virtual_address);
     // マップされていなければ nullopt を返す。
     // (物理 0 は「未マップ」ではなく実在するページなので、番兵値には使えない)
-    std::optional<uint64_t> virtual_to_physical(uint64_t virtual_address) const;
+    PhysicalAddress virtual_to_physical(uint64_t virtual_address) const;
 
     void flush_tlb();
 

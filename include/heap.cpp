@@ -37,7 +37,7 @@ void *Heap::sbrk(intptr_t increment)
         {
             return (void *)-1; // 物理ページの割り当てに失敗
         }
-        const uint64_t pa = *allocated;
+        const vmm::PhysicalAddress pa{*allocated};
         if (!vmm_ptr_->map_page(va, pa, vmm::PageFlag::Present | vmm::PageFlag::Writable))
         {
             return (void *)-1;

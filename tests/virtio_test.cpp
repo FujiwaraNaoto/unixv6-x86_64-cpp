@@ -56,8 +56,9 @@ void virtio_block_read(IConsole *console)
         {
             return std::nullopt; // VMM 未初期化: 変換できない
         }
-        // virtual_to_physical() 自体も未マップなら nullopt を返すので、そのまま伝播させる
-        return vmm::vmm_ptr->virtual_to_physical(reinterpret_cast<uint64_t>(p));
+        // virtual_to_physical() 自体も未マップなら nullopt を返すので、そのまま伝播させる。
+        // ドライバを vmm の型に依存させないよう、PhysicalAddress から中身を取り出して渡す。
+        return vmm::vmm_ptr->virtual_to_physical(reinterpret_cast<uint64_t>(p)).address;
     };
 
     if (!VirtIOBlock::initialize(resolve_physical))

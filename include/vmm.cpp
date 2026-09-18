@@ -68,8 +68,12 @@ VirtualMemoryManager::VirtualMemoryManager(pmm::PhysicalMemoryManager *pmm_ptr, 
     }
 }
 
-bool VirtualMemoryManager::map_page(uint64_t virtual_address, uint64_t physical_address, uint64_t flags)
+bool VirtualMemoryManager::map_page(uint64_t virtual_address, PhysicalAddress physical_address, uint64_t flags)
 {
+    if (!physical_address)
+    {
+        return false; // 無効な物理アドレスはマップできない
+    }
     VirtualAddress pml4 = physical_to_virtual(pml4_phys_);
     if (!pml4)
     {
@@ -94,7 +98,7 @@ bool VirtualMemoryManager::map_page(uint64_t virtual_address, uint64_t physical_
     {
         return false; // PTが存在しない場合はマッピングできない
     }
-    pt[pt_index(virtual_address)] = (physical_address & PAGE_MASK) | flags | PageFlag::Present;
+    pt[pt_index(virtual_address)] = (*physical_address.address & PAGE_MASK) | flags | PageFlag::Present;
 
     asm volatile("invlpg (%0)" ::"r"(virtual_address) : "memory"); // TLBフラッシュ
     return true;
@@ -132,29 +136,29 @@ bool VirtualMemoryManager::unmap_page(uint64_t virtual_address)
     return true;
 }
 
-std::optional<uint64_t> VirtualMemoryManager::virtual_to_physical(uint64_t virtual_address) const
+PhysicalAddress VirtualMemoryManager::virtual_to_physical(uint64_t virtual_address) const
 {
     VirtualAddress pml4 = physical_to_virtual(pml4_phys_);
     if (!(pml4[pml4_index(virtual_address)] & PageFlag::Present))
     {
-        return std::nullopt; // PML4エントリが存在しない場合は物理アドレスを返せない
+        return PhysicalAddress{}; // PML4エントリが存在しない場合は物理アドレスを返せない
     }
     VirtualAddress pdpt = physical_to_virtual(entry_to_phys(pml4[pml4_index(virtual_address)]));
     if (!(pdpt[pdpt_index(virtual_address)] & PageFlag::Present))
     {
-        return std::nullopt; // PDPTエントリが存在しない場合は物理アドレスを返せない
+        return PhysicalAddress{}; // PDPTエントリが存在しない場合は物理アドレスを返せない
     }
     VirtualAddress pd = physical_to_virtual(entry_to_phys(pdpt[pdpt_index(virtual_address)]));
     if (!(pd[pd_index(virtual_address)] & PageFlag::Present))
     {
-        return std::nullopt; // PDエントリが存在しない場合は物理アドレスを返せない
+        return PhysicalAddress{}; // PDエントリが存在しない場合は物理アドレスを返せない
     }
     VirtualAddress pt = physical_to_virtual(entry_to_phys(pd[pd_index(virtual_address)]));
     if (!(pt[pt_index(virtual_address)] & PageFlag::Present))
     {
-        return std::nullopt; // PTエントリが存在しない場合は物理アドレスを返せない
+        return PhysicalAddress{}; // PTエントリが存在しない場合は物理アドレスを返せない
     }
-    return *entry_to_phys(pt[pt_index(virtual_address)]).address | (virtual_address & ~PAGE_MASK);
+    return PhysicalAddress{*entry_to_phys(pt[pt_index(virtual_address)]).address | (virtual_address & ~PAGE_MASK)};
 }
 
 void VirtualMemoryManager::flush_tlb()
