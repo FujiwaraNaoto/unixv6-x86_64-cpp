@@ -89,7 +89,7 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, uint32_t mb_addr
     pmm::print_mm_state(state, vga::vga);
 
     // syscall の MSR (LSTAR/STAR/SFMASK) を設定する。
-    SystemCall::init();
+    SystemCall::init(vga::vga);
 
     keyboard::initialize();
 
