@@ -163,11 +163,12 @@ uint64_t *VirtualMemoryManager::get_or_create_table(uint64_t *parent_table, uint
     if (!(parent_table[index] & PageFlag::Present))
     {
         // 新しいテーブルを割り当てる
-        uint64_t new_table_phys = pmm_ptr_->allocate(); // 物理ページの割り当て関数
-        if (new_table_phys == 0)
+        const auto allocated = pmm_ptr_->allocate(); // 物理ページの割り当て関数
+        if (!allocated)
         {
-            return nullptr; // 物理メモリ不足。Present な 0 番地エントリを作らないこと
+            return nullptr; // 物理メモリ不足。確保できないまま Present なエントリを作らないこと
         }
+        const uint64_t new_table_phys = *allocated;
 
         // PMM が配るページには前の用途のゴミが残っている (カーネル直後の領域には
         // GRUB が置いたデータなどが入っている)。ゼロクリアせずに配下のテーブルとして
@@ -189,11 +190,12 @@ uint64_t *VirtualMemoryManager::get_or_create_table(uint64_t *parent_table, uint
 
 uint64_t VirtualMemoryManager::create_address_space()
 {
-    uint64_t new_pml4_phys = pmm_ptr_->allocate();
-    if (new_pml4_phys == 0)
+    const auto allocated = pmm_ptr_->allocate();
+    if (!allocated)
     {
         return 0; // メモリ不足
     }
+    const uint64_t new_pml4_phys = *allocated;
     uint64_t *new_pml4 = physical_to_virtual(new_pml4_phys);
     auto *current_pml4 = physical_to_virtual(pml4_phys_);
 
@@ -306,11 +308,12 @@ void VirtualMemoryManager::copy_user_pages(uint64_t src_pml4_phys, uint64_t dst_
                 uint64_t virtual_address = shift(i, 30) | shift(j, 21) |
                                            shift(k, 12); // PDPTのインデックスを仮想アドレスに変換
 
-                uint64_t new_phys = pmm::pmm_ptr->allocate(); // 新しい物理ページを割り当てて内容をコピーする
-                if (not new_phys)
+                const auto allocated = pmm::pmm_ptr->allocate(); // 新しい物理ページを割り当てて内容をコピーする
+                if (!allocated)
                 {
                     return; // メモリ不足
                 }
+                const uint64_t new_phys = *allocated;
 
                 auto *dist_page = physical_to_virtual(new_phys);
                 auto *src_page  = physical_to_virtual(entry_to_phys(e));

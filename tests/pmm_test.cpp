@@ -9,9 +9,17 @@ void pmm_alloc_free(IConsole *console)
 {
     auto *pmm = pmm::pmm_ptr;
 
-    uint64_t p1 = pmm->allocate();
-    uint64_t p2 = pmm->allocate();
-    uint64_t p3 = pmm->allocate();
+    const auto a1 = pmm->allocate();
+    const auto a2 = pmm->allocate();
+    const auto a3 = pmm->allocate();
+    if (!a1 || !a2 || !a3)
+    {
+        console->puts("[PMM]  alloc test: out of memory\n");
+        return;
+    }
+    const uint64_t p1 = *a1;
+    const uint64_t p2 = *a2;
+    const uint64_t p3 = *a3;
     console->set_color(Color::LightGreen, Color::Black);
     console->puts("[PMM]  ");
     console->set_color(Color::LightGrey, Color::Black);
@@ -22,7 +30,13 @@ void pmm_alloc_free(IConsole *console)
 
     // 解放したページが次の allocate で再利用されるか
     pmm->free(p2);
-    uint64_t p4 = pmm->allocate();
+    const auto a4 = pmm->allocate();
+    if (!a4)
+    {
+        console->puts("[PMM]  free+realloc: out of memory\n");
+        return;
+    }
+    const uint64_t p4 = *a4;
     console->set_color(Color::LightGreen, Color::Black);
     console->puts("[PMM]  ");
     console->set_color(Color::LightGrey, Color::Black);
