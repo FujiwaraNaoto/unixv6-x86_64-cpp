@@ -197,12 +197,12 @@ VirtualAddress VirtualMemoryManager::get_or_create_table(VirtualAddress parent_t
     return physical_to_virtual(entry_to_phys(parent_table[index]));
 }
 
-uint64_t VirtualMemoryManager::create_address_space()
+PhysicalAddress VirtualMemoryManager::create_address_space()
 {
     const auto allocated = pmm_ptr_->allocate();
     if (!allocated)
     {
-        return 0; // メモリ不足
+        return PhysicalAddress{}; // メモリ不足
     }
     const PhysicalAddress new_pml4_phys{*allocated};
     VirtualAddress new_pml4 = physical_to_virtual(new_pml4_phys);
@@ -220,24 +220,24 @@ uint64_t VirtualMemoryManager::create_address_space()
     //  親のユーザ用 PDPT を子が共有してしまい、以降の map_page_in が
     //  親のテーブルを書き換えることになる)
     memcpy(&new_pml4[256], &current_pml4[256], 256 * sizeof(uint64_t)); // カーネル空間のマッピングをコピー
-    return *new_pml4_phys.address;
+    return new_pml4_phys;
 }
 
 // ─── アドレス空間の切り替え ──────────────────────────────────────
 // CR3を切り替えることで、プロセスを切り替えることを実現する
 // NOTE: 実行中のコードスタックは、切り替え後のアドレス空間にマップされている必要がある。
-void VirtualMemoryManager::switch_address_space(uint64_t pml4_phys)
+void VirtualMemoryManager::switch_address_space(PhysicalAddress pml4_phys)
 {
-    if (pml4_phys == 0)
+    if (!pml4_phys)
     {
         return; // 無効なPML4物理アドレスは無視
     }
-    pml4_phys_ = PhysicalAddress{pml4_phys};
-    load_cr3(pml4_phys); // CR3を切り替えてTLB(=Translation Lookaside Buffer)をフラッシュ
+    pml4_phys_ = pml4_phys;
+    load_cr3(*pml4_phys.address); // CR3を切り替えてTLB(=Translation Lookaside Buffer)をフラッシュ
 }
 
 
-bool VirtualMemoryManager::map_page_in(uint64_t pml4_phys,
+bool VirtualMemoryManager::map_page_in(PhysicalAddress pml4_phys,
                                        PageVirtualAddress virtual_address,
                                        PhysicalAddress physical_address,
                                        uint64_t flags)
@@ -247,7 +247,11 @@ bool VirtualMemoryManager::map_page_in(uint64_t pml4_phys,
         return false; // 無効な物理アドレスはマップできない
     }
 
-    VirtualAddress original_pml4 = physical_to_virtual(PhysicalAddress{pml4_phys});
+    VirtualAddress original_pml4 = physical_to_virtual(pml4_phys);
+    if (!original_pml4)
+    {
+        return false; // PML4が存在しない場合はマッピングできない
+    }
 
     VirtualAddress pdpt = get_or_create_table(original_pml4,
                                      pml4_index(virtual_address),
@@ -275,9 +279,13 @@ bool VirtualMemoryManager::map_page_in(uint64_t pml4_phys,
     return true;
 }
 
-void VirtualMemoryManager::copy_user_pages(uint64_t src_pml4_phys, uint64_t dst_pml4_phys)
+void VirtualMemoryManager::copy_user_pages(PhysicalAddress src_pml4_phys, PhysicalAddress dst_pml4_phys)
 {
-    VirtualAddress src = physical_to_virtual(PhysicalAddress{src_pml4_phys});
+    VirtualAddress src = physical_to_virtual(src_pml4_phys);
+    if (!src)
+    {
+        return; // PML4が存在しない場合はコピーできない
+    }
 
     if (!(src[0] & PageFlag::Present))
     {

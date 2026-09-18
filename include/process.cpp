@@ -74,7 +74,7 @@ static void schedule(Process *prev_proc)
         if (current_proc_ == prev_proc)
             return;
 
-        if (current_proc_->pml4 != 0)
+        if (current_proc_->pml4)
         {
             vmm::vmm_ptr->switch_address_space(current_proc_->pml4);
         }
@@ -219,7 +219,7 @@ static void schedule_from_zombie(ProcessContext **discard_context)
 
         current_proc_        = &process_table_[idx];
         current_proc_->state = ProcessState::Running;
-        if (current_proc_->pml4 != 0)
+        if (current_proc_->pml4)
         {
             vmm::vmm_ptr->switch_address_space(current_proc_->pml4);
         }
@@ -281,7 +281,7 @@ void free_process_resources(Process *proc)
         proc->kernel_stack = 0;
     }
 
-    proc->pml4          = 0;
+    proc->pml4          = vmm::PhysicalAddress{};
     proc->parent        = nullptr;
     proc->sleep_channel = nullptr;
     proc->exit_status   = static_cast<int>(ProcessState::Unused);
