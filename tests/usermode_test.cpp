@@ -74,7 +74,7 @@ void usermode_ring3(IConsole *console)
         console->set_color(Color::LightGrey, Color::Black);
         hang();
     }
-    vmm::vmm_ptr->map_page(code_page,
+    vmm::vmm_ptr->map_page(vmm::PageVirtualAddress{code_page},
                            code_phys,
                            vmm::PageFlag::User | vmm::PageFlag::Present | vmm::PageFlag::Writable);
 
@@ -89,7 +89,7 @@ void usermode_ring3(IConsole *console)
     }
     const vmm::PhysicalAddress ustack_phys{*ustack_allocated};
     constexpr uint64_t ustack_virt = 0x600000;
-    vmm::vmm_ptr->map_page(ustack_virt,
+    vmm::vmm_ptr->map_page(vmm::PageVirtualAddress{ustack_virt},
                            ustack_phys,
                            vmm::PageFlag::Present | vmm::PageFlag::Writable | vmm::PageFlag::User);
 

@@ -52,6 +52,14 @@ struct PhysicalAddress
     }
 };
 
+// マップ対象の仮想アドレス (ユーザー空間やヒープなど任意の場所)。
+// VirtualAddress (direct map 上のページテーブルを指すポインタ) とは用途が違うので、
+// 中身を読み書きするポインタではなく、ただのアドレス値として持つ。
+struct PageVirtualAddress
+{
+    uint64_t address;
+};
+
 // direct map 上の仮想アドレス。
 // 物理アドレス (uint64_t) と取り違えないよう、型で区別する。
 struct VirtualAddress
@@ -80,7 +88,7 @@ class VirtualMemoryManager final
     // nullptr を渡した場合は何も出力しない。
     VirtualMemoryManager(pmm::PhysicalMemoryManager *pmm_ptr, IConsole *console);
     // physical_address が無効 (nullopt) なら何もせず false を返す。
-    bool map_page(uint64_t virtual_address, PhysicalAddress physical_address, uint64_t flags);
+    bool map_page(PageVirtualAddress virtual_address, PhysicalAddress physical_address, uint64_t flags);
     // map解除とTLBフラッシュ
     bool unmap_page(uint64_t virtual_address);
     // マップされていなければ nullopt を返す。

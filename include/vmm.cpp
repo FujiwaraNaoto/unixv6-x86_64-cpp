@@ -68,7 +68,7 @@ VirtualMemoryManager::VirtualMemoryManager(pmm::PhysicalMemoryManager *pmm_ptr, 
     }
 }
 
-bool VirtualMemoryManager::map_page(uint64_t virtual_address, PhysicalAddress physical_address, uint64_t flags)
+bool VirtualMemoryManager::map_page(PageVirtualAddress virtual_address, PhysicalAddress physical_address, uint64_t flags)
 {
     if (!physical_address)
     {
@@ -83,24 +83,24 @@ bool VirtualMemoryManager::map_page(uint64_t virtual_address, PhysicalAddress ph
     // 最終 PTE だけ User にしても、上位エントリのどれか一つでも User=0 なら
     // CPL=3 からのアクセスは拒否される (Intel SDM Vol.3A 4.6 "Access Rights")。
     const uint64_t table_flags = PageFlag::Present | PageFlag::Writable | (flags & PageFlag::User);
-    VirtualAddress pdpt        = get_or_create_table(pml4, pml4_index(virtual_address), table_flags);
+    VirtualAddress pdpt        = get_or_create_table(pml4, pml4_index(virtual_address.address), table_flags);
     if (!pdpt)
     {
         return false; // PDPTが存在しない場合はマッピングできない
     }
-    VirtualAddress pd = get_or_create_table(pdpt, pdpt_index(virtual_address), table_flags);
+    VirtualAddress pd = get_or_create_table(pdpt, pdpt_index(virtual_address.address), table_flags);
     if (!pd)
     {
         return false; // PDが存在しない場合はマッピングできない
     }
-    VirtualAddress pt = get_or_create_table(pd, pd_index(virtual_address), table_flags);
+    VirtualAddress pt = get_or_create_table(pd, pd_index(virtual_address.address), table_flags);
     if (!pt)
     {
         return false; // PTが存在しない場合はマッピングできない
     }
-    pt[pt_index(virtual_address)] = (*physical_address.address & PAGE_MASK) | flags | PageFlag::Present;
+    pt[pt_index(virtual_address.address)] = (*physical_address.address & PAGE_MASK) | flags | PageFlag::Present;
 
-    asm volatile("invlpg (%0)" ::"r"(virtual_address) : "memory"); // TLBフラッシュ
+    asm volatile("invlpg (%0)" ::"r"(virtual_address.address) : "memory"); // TLBフラッシュ
     return true;
 }
 
