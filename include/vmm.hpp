@@ -38,6 +38,14 @@ constexpr uint64_t NoExecute = 1ULL << 63;
 } // namespace PageFlag
 
 
+// 物理アドレス。
+// 仮想アドレスや普通の整数と取り違えないよう、型で区別する。
+// 物理 0 も実在するページなので、「無効」は 0 ではなく nullopt で表す。
+struct PhysicalAddress
+{
+    std::optional<uint64_t> address;
+};
+
 // direct map 上の仮想アドレス。
 // 物理アドレス (uint64_t) と取り違えないよう、型で区別する。
 struct VirtualAddress
@@ -90,7 +98,7 @@ class VirtualMemoryManager final
   private:
     VirtualAddress get_or_create_table(VirtualAddress parent_table, uint64_t index, uint64_t flags);
 
-    uint64_t pml4_phys_                  = 0;
+    PhysicalAddress pml4_phys_;
     pmm::PhysicalMemoryManager *pmm_ptr_ = nullptr;
 };
 
