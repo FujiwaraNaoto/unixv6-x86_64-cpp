@@ -1,4 +1,4 @@
-#include "syscall.hpp"
+#include "systemcall.hpp"
 #include "vga.hpp"
 #include "keyboard.hpp"
 #include "gdt.hpp"
@@ -55,7 +55,7 @@ static long sys_exit(uint64_t code)
     return 0;
 }
 
-namespace Syscall
+namespace SystemCall
 {
 
 extern "C" long syscall_dispatch(uint64_t num, uint64_t a1, uint64_t a2, uint64_t a3, uint64_t /*a4*/, uint64_t /*a5*/)
@@ -119,4 +119,4 @@ void init()
     vga::vga->printf("syscall enabled  LSTAR=0x%x\n", static_cast<unsigned>(reinterpret_cast<uint64_t>(syscall_entry)));
 }
 
-} // namespace Syscall
+} // namespace SystemCall
