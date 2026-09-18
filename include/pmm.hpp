@@ -1,5 +1,7 @@
-#pragma once
+#ifndef PMM_HPP
+#define PMM_HPP
 #include <cstdint>
+#include <array>
 #include "multiboot2.hpp"
 #include "console.hpp"
 
@@ -19,7 +21,7 @@ struct PhysicalMemoryManagerState
     }
 };
 
-static constexpr uint32_t MAX_PAGES   = 65536;
+static constexpr uint32_t MAX_PAGES   = 65536;// 65536 * 4KB = 256MB
 static constexpr uint32_t BITMAP_SIZE = MAX_PAGES / 8;
 
 // 物理メモリの状態を表示する。
@@ -57,8 +59,8 @@ class PhysicalMemoryManager
     // 範囲にかかるページは必ず保護される。
     void reserve_region(uint64_t start, uint64_t end);
 
-    // 物理メモリ管理の実装をここに記述 --- IGNORE ---
-    uint8_t bitmap_[BITMAP_SIZE];
+    // a bitmap which tracks the usage of physical memory. 1 bit = 1 page. 0 = free, 1 = used.
+    std::array<uint8_t, BITMAP_SIZE> bitmap_{};
     uint64_t base_{0};
     uint64_t pages_{0};
     uint64_t free_pages_{0};
@@ -93,3 +95,5 @@ class PhysicalMemoryManager
 inline PhysicalMemoryManager *pmm_ptr = nullptr;
 
 } // namespace pmm
+
+#endif // PMM_HPP

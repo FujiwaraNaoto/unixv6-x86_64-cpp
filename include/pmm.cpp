@@ -8,9 +8,9 @@ PhysicalMemoryManager::PhysicalMemoryManager(Multiboot2MemoryMapTag *memory_map,
                                              uint32_t multiboot_address)
 {
     // initialize bitmap (all pages used)
-    for (uint32_t i = 0; i < BITMAP_SIZE; i++)
+    for(auto &b : bitmap_)
     {
-        bitmap_[i] = 0xFF;
+        b = 0xFF;
     }
 
     uint64_t total = 0, base_found = 0;
@@ -53,7 +53,7 @@ PhysicalMemoryManager::PhysicalMemoryManager(Multiboot2MemoryMapTag *memory_map,
         {
             if (addr < kernel_end)
                 continue; // カーネル領域はスキップ
-            free(addr);
+            free(addr);// release the page to the free list
         }
     }
 
@@ -125,6 +125,7 @@ void PhysicalMemoryManager::reserve_region(uint64_t start, uint64_t end)
     }
 }
 
+// bitが0のページを先頭から探し、未使用ページが見つかったらそのページを使用中にして物理アドレスを返す。
 uint64_t PhysicalMemoryManager::allocate()
 {
     for (uint64_t i = 0; i < pages_; i++)

@@ -41,7 +41,7 @@ struct Process
     EntryPoint entry;
     kstring<16> name;    // NOTE: kstring は固定容量の文字列で、容量超過分は切り捨てられる.
                          // C++の標準ライブラリは使えないので、std::string は使えない
-    uint64_t pml4;       // プロセスのページテーブルの物理アドレス
+    uint64_t pml4;       // プロセスのページテーブルの物理アドレス(Page Map Level 4)
     void *sleep_channel; // プロセスが sleep している場合のチャネル (待機理由) 0=起きている
     Process *parent;     // 親プロセスへのポインタ (fork などで使う)
     int exit_status;     // プロセスの終了ステータス (exit() で設定される)

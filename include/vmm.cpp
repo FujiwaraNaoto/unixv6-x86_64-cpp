@@ -3,8 +3,20 @@
 #include "vmm.hpp"
 #include <cstring>
 
+//  63      48 47    39 38    30 29    21 20    12 11         0
+// ┌──────────┬────────┬────────┬────────┬────────┬────────────┐
+// │  符号拡張 │  PML4  │  PDPT  │   PD   │   PT   │  ページ内   │
+// │          │  9bit  │  9bit  │  9bit  │  9bit  │ 12bit      │
+// └──────────┴────────┴────────┴────────┴────────┴────────────┘
+//    (va >> 39) & 0x1FF ─┘        ...              4096 バイト内の位置
+
 namespace
 {
+// 表 1 枚のエントリ数 (インデックスが 9bit なので 2^9)。
+// 8 バイト × 512 = 4096 バイトで、表 1 枚がちょうど 1 ページに収まる。
+// PDPT / PD / PT の各表も同じく 512 エントリで、1 ページに収まる。
+constexpr int ENTRIES_PER_TABLE = 512;
+
 uint64_t pml4_index(uint64_t va)
 {
     return (va >> 39) & 0x1FF;
@@ -21,7 +33,7 @@ uint64_t pt_index(uint64_t va)
 {
     return (va >> 12) & 0x1FF;
 }
-
+// ページテーブルのエントリからフラグを取り除いて物理アドレスだけを取り出す関数
 uint64_t entry_to_phys(uint64_t entry)
 {
     return entry & 0x000FFFFFFFFFF000ULL;
@@ -185,7 +197,7 @@ uint64_t VirtualMemoryManager::create_address_space()
     uint64_t *new_pml4 = physical_to_virtual(new_pml4_phys);
     auto *current_pml4 = physical_to_virtual(pml4_phys_);
 
-    std::memset(new_pml4, 0, 512 * sizeof(uint64_t)); // 新しいPML4をゼロクリア
+    std::memset(new_pml4, 0, PAGE_SIZE); // 新しいPML4をゼロクリア (表 1 枚 = 1 ページ)
 
 
     // カーネル空間を共有:
@@ -201,6 +213,8 @@ uint64_t VirtualMemoryManager::create_address_space()
 }
 
 // ─── アドレス空間の切り替え ──────────────────────────────────────
+// CR3を切り替えることで、プロセスを切り替えることを実現する
+// NOTE: 実行中のコードスタックは、切り替え後のアドレス空間にマップされている必要がある。
 void VirtualMemoryManager::switch_address_space(uint64_t pml4_phys)
 {
     if (pml4_phys == 0)
@@ -246,7 +260,7 @@ bool VirtualMemoryManager::map_page_in(uint64_t pml4_phys,
     return true;
 }
 
-void copy_user_pages(uint64_t src_pml4_phys, uint64_t dst_pml4_phys)
+void VirtualMemoryManager::copy_user_pages(uint64_t src_pml4_phys, uint64_t dst_pml4_phys)
 {
     auto *src = physical_to_virtual(src_pml4_phys);
 
@@ -258,7 +272,7 @@ void copy_user_pages(uint64_t src_pml4_phys, uint64_t dst_pml4_phys)
     auto src_pdpt = physical_to_virtual(entry_to_phys(src[0]));
 
 
-    for (int i = 0; i < 512; i++)
+    for (int i = 0; i < ENTRIES_PER_TABLE; i++)
     {
         if (!(src_pdpt[i] & PageFlag::Present))
         {
@@ -266,7 +280,7 @@ void copy_user_pages(uint64_t src_pml4_phys, uint64_t dst_pml4_phys)
         }
         auto *src_pd = physical_to_virtual(entry_to_phys(src_pdpt[i]));
 
-        for (int j = 0; j < 512; j++)
+        for (int j = 0; j < ENTRIES_PER_TABLE; j++)
         {
             if (!(src_pd[j] & PageFlag::Present))
             {
@@ -274,7 +288,7 @@ void copy_user_pages(uint64_t src_pml4_phys, uint64_t dst_pml4_phys)
             }
             auto *src_pt = physical_to_virtual(entry_to_phys(src_pd[j]));
 
-            for (int k = 0; k < 512; k++)
+            for (int k = 0; k < ENTRIES_PER_TABLE; k++)
             {
 
                 uint64_t e = src_pt[k];
@@ -301,10 +315,7 @@ void copy_user_pages(uint64_t src_pml4_phys, uint64_t dst_pml4_phys)
                 auto *dist_page = physical_to_virtual(new_phys);
                 auto *src_page  = physical_to_virtual(entry_to_phys(e));
 
-                for (int l = 0; l < 512; l++)
-                {
-                    dist_page[l] = src_page[l]; // ページの内容をコピー
-                }
+                std::memcpy(dist_page, src_page, PAGE_SIZE);
 
                 //子供のPML4に同じ仮想アドレスでマップ
                 uint64_t flags = e & 0xFFF;

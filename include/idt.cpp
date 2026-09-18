@@ -55,6 +55,12 @@ InterruptDescriptorTable::InterruptDescriptorTable(IConsole *console)
 }
 
 
+// byte:  0   1   2   3   4   5   6   7   8   9  10  11  12  13  14  15
+//       +-------+-------+-------+-------+---------------+---------------+
+//       |offset | seg   | attr  |offset | offset_high   |  reserved     |
+//       | _low  |selector|      |_middle|   (32bit)     |   (32bit)     |
+//       |(16bit)|(16bit)|(16bit)|(16bit)|               |               |
+//       +-------+-------+-------+-------+---------------+---------------+
 void InterruptDescriptorTable::set_idt(uint8_t idx, InterruptDescriptorAttribute attribute, uint64_t handler)
 {
     entries[idx].offset_low = handler & 0xFFFF;
