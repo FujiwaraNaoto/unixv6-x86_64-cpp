@@ -5,6 +5,7 @@
 #include <optional>
 #include "multiboot2.hpp"
 #include "console.hpp"
+#include "address.hpp"
 
 namespace pmm
 {
@@ -49,8 +50,8 @@ class PhysicalMemoryManager
     // 情報構造体を予約しないと、カーネル終端より後ろに置かれているぶんが
     // 普通の空きページとして配られてしまう。
     PhysicalMemoryManager(Multiboot2MemoryMapTag *memory_map, uint64_t kernel_end, uint32_t multiboot_address);
-    // 空きページを 1 つ確保し、その物理アドレスを返す。空きが無ければ nullopt。
-    std::optional<uint64_t> allocate();
+    // 空きページを 1 つ確保し、その物理アドレスを返す。空きが無ければ無効 (nullopt) な PhysicalAddress。
+    PhysicalAddress allocate();
     void free(uint64_t page_address);
     PhysicalMemoryManagerState get_state() const;
 

@@ -49,17 +49,15 @@ void addrspace_separation(IConsole *console)
     }
 
     // 各プロセスの同一仮想アドレスに物理ページを別々にマップ
-    const auto alloc_a = pmm::pmm_ptr->allocate();
-    const auto alloc_b = pmm::pmm_ptr->allocate();
-    if (!alloc_a || !alloc_b)
+    const PhysicalAddress phys_a = pmm::pmm_ptr->allocate();
+    const PhysicalAddress phys_b = pmm::pmm_ptr->allocate();
+    if (!phys_a || !phys_b)
     {
         console->set_color(Color::LightRed, Color::Black);
         console->puts("[ADDR] failed to allocate test pages\n");
         console->set_color(Color::LightGrey, Color::Black);
         return;
     }
-    const PhysicalAddress phys_a{*alloc_a};
-    const PhysicalAddress phys_b{*alloc_b};
     vmm::vmm_ptr->map_page_in(pa->pml4, kAddrTestVirt, phys_a, vmm::PageFlag::Present | vmm::PageFlag::Writable);
     vmm::vmm_ptr->map_page_in(pb->pml4, kAddrTestVirt, phys_b, vmm::PageFlag::Present | vmm::PageFlag::Writable);
 

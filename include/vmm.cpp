@@ -172,12 +172,11 @@ VirtualAddress VirtualMemoryManager::get_or_create_table(VirtualAddress parent_t
     if (!(parent_table[index] & PageFlag::Present))
     {
         // 新しいテーブルを割り当てる
-        const auto allocated = pmm_ptr_->allocate(); // 物理ページの割り当て関数
-        if (!allocated)
+        const PhysicalAddress new_table_phys = pmm_ptr_->allocate(); // 物理ページの割り当て関数
+        if (!new_table_phys)
         {
             return VirtualAddress{nullptr}; // 物理メモリ不足。確保できないまま Present なエントリを作らないこと
         }
-        const PhysicalAddress new_table_phys{*allocated};
 
         // PMM が配るページには前の用途のゴミが残っている (カーネル直後の領域には
         // GRUB が置いたデータなどが入っている)。ゼロクリアせずに配下のテーブルとして
@@ -199,12 +198,11 @@ VirtualAddress VirtualMemoryManager::get_or_create_table(VirtualAddress parent_t
 
 PhysicalAddress VirtualMemoryManager::create_address_space()
 {
-    const auto allocated = pmm_ptr_->allocate();
-    if (!allocated)
+    const PhysicalAddress new_pml4_phys = pmm_ptr_->allocate();
+    if (!new_pml4_phys)
     {
         return PhysicalAddress{}; // メモリ不足
     }
-    const PhysicalAddress new_pml4_phys{*allocated};
     VirtualAddress new_pml4 = physical_to_virtual(new_pml4_phys);
     VirtualAddress current_pml4 = physical_to_virtual(pml4_phys_);
 
@@ -329,12 +327,11 @@ void VirtualMemoryManager::copy_user_pages(PhysicalAddress src_pml4_phys, Physic
                 const PageVirtualAddress virtual_address{shift(i, 30) | shift(j, 21) |
                                                          shift(k, 12)}; // PDPTのインデックスを仮想アドレスに変換
 
-                const auto allocated = pmm::pmm_ptr->allocate(); // 新しい物理ページを割り当てて内容をコピーする
-                if (!allocated)
+                const PhysicalAddress new_phys = pmm::pmm_ptr->allocate(); // 新しい物理ページを割り当てて内容をコピーする
+                if (!new_phys)
                 {
                     return; // メモリ不足
                 }
-                const PhysicalAddress new_phys{*allocated};
 
                 VirtualAddress dist_page = physical_to_virtual(new_phys);
                 VirtualAddress src_page  = physical_to_virtual(entry_to_phys(e));

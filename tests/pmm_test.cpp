@@ -17,9 +17,9 @@ void pmm_alloc_free(IConsole *console)
         console->puts("[PMM]  alloc test: out of memory\n");
         return;
     }
-    const uint64_t p1 = *a1;
-    const uint64_t p2 = *a2;
-    const uint64_t p3 = *a3;
+    const uint64_t p1 = *a1.address;
+    const uint64_t p2 = *a2.address;
+    const uint64_t p3 = *a3.address;
     console->set_color(Color::LightGreen, Color::Black);
     console->puts("[PMM]  ");
     console->set_color(Color::LightGrey, Color::Black);
@@ -36,7 +36,7 @@ void pmm_alloc_free(IConsole *console)
         console->puts("[PMM]  free+realloc: out of memory\n");
         return;
     }
-    const uint64_t p4 = *a4;
+    const uint64_t p4 = *a4.address;
     console->set_color(Color::LightGreen, Color::Black);
     console->puts("[PMM]  ");
     console->set_color(Color::LightGrey, Color::Black);

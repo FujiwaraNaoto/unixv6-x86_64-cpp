@@ -126,7 +126,7 @@ void PhysicalMemoryManager::reserve_region(uint64_t start, uint64_t end)
 }
 
 // bitが0のページを先頭から探し、未使用ページが見つかったらそのページを使用中にして物理アドレスを返す。
-std::optional<uint64_t> PhysicalMemoryManager::allocate()
+PhysicalAddress PhysicalMemoryManager::allocate()
 {
     for (uint64_t i = 0; i < pages_; i++)
     {
@@ -134,10 +134,10 @@ std::optional<uint64_t> PhysicalMemoryManager::allocate()
         {
             set_bit(i);
             free_pages_--;
-            return base_ + i * PAGE_SIZE;
+            return PhysicalAddress{base_ + i * PAGE_SIZE};
         }
     }
-    return std::nullopt; // メモリ不足
+    return PhysicalAddress{}; // メモリ不足
 }
 
 PhysicalMemoryManagerState PhysicalMemoryManager::get_state() const
