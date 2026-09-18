@@ -29,7 +29,7 @@ void pmm_alloc_free(IConsole *console)
                     static_cast<unsigned>(p3));
 
     // 解放したページが次の allocate で再利用されるか
-    pmm->free(p2);
+    pmm->free(a2);
     const auto a4 = pmm->allocate();
     if (!a4)
     {

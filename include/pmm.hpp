@@ -52,7 +52,8 @@ class PhysicalMemoryManager
     PhysicalMemoryManager(Multiboot2MemoryMapTag *memory_map, uint64_t kernel_end, uint32_t multiboot_address);
     // 空きページを 1 つ確保し、その物理アドレスを返す。空きが無ければ無効 (nullopt) な PhysicalAddress。
     PhysicalAddress allocate();
-    void free(uint64_t page_address);
+    // 確保したページを解放する。無効 (nullopt) な物理アドレスは無視する。
+    void free(PhysicalAddress page_address);
     PhysicalMemoryManagerState get_state() const;
 
 
