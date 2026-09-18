@@ -315,7 +315,7 @@ void VirtualMemoryManager::copy_user_pages(uint64_t src_pml4_phys, uint64_t dst_
                 auto *dist_page = physical_to_virtual(new_phys);
                 auto *src_page  = physical_to_virtual(entry_to_phys(e));
 
-                std::memcpy(dist_page, src_page, PAGE_SIZE); // ページの内容をコピー
+                std::memcpy(dist_page, src_page, PAGE_SIZE);
 
                 //子供のPML4に同じ仮想アドレスでマップ
                 uint64_t flags = e & 0xFFF;
