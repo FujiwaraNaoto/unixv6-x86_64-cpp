@@ -3,6 +3,7 @@
 #include "process.hpp"
 #include "heap.hpp"
 #include "vmm.hpp"
+#include "address.hpp"
 #include "gdt.hpp"
 
 extern "C" void switch_context(ProcessContext **old_ctx, ProcessContext *new_ctx);
