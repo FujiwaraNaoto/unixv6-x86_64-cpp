@@ -2,6 +2,8 @@
 #include <array>
 #include "process.hpp"
 #include "heap.hpp"
+#include "vmm.hpp"
+#include "address.hpp"
 #include "gdt.hpp"
 
 extern "C" void switch_context(ProcessContext **old_ctx, ProcessContext *new_ctx);
@@ -74,7 +76,7 @@ static void schedule(Process *prev_proc)
         if (current_proc_ == prev_proc)
             return;
 
-        if (current_proc_->pml4 != 0)
+        if (current_proc_->pml4)
         {
             vmm::vmm_ptr->switch_address_space(current_proc_->pml4);
         }
@@ -219,7 +221,7 @@ static void schedule_from_zombie(ProcessContext **discard_context)
 
         current_proc_        = &process_table_[idx];
         current_proc_->state = ProcessState::Running;
-        if (current_proc_->pml4 != 0)
+        if (current_proc_->pml4)
         {
             vmm::vmm_ptr->switch_address_space(current_proc_->pml4);
         }
@@ -281,7 +283,7 @@ void free_process_resources(Process *proc)
         proc->kernel_stack = 0;
     }
 
-    proc->pml4          = 0;
+    proc->pml4          = PhysicalAddress{};
     proc->parent        = nullptr;
     proc->sleep_channel = nullptr;
     proc->exit_status   = static_cast<int>(ProcessState::Unused);
@@ -389,8 +391,7 @@ int fork()
     // ── 案B: カーネルスレッド fork ─────────────────────────────────────
     // 子は sysret を使わず、リング0のまま「fork_capture を呼んだ直後」から復帰し、
     // current_proc_ で親子を判定して 0 を返す。あとは fork の通常エピローグが
-    // コピー済みスタック上で parent_thread へ ret する。詳細は fork.md 【B】。
-    //
+    // コピー済みスタック上で parent_thread へ ret する。
     // fork_capture は現在の callee-saved と復帰ポイント(=直後の★)を switch_context
     // 形式で snap に保存し、呼び出し元(この fork)の rsp を返す。
     ProcessContext snap;

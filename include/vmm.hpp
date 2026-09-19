@@ -3,6 +3,7 @@
 #include <optional>
 #include "pmm.hpp"
 #include "console.hpp"
+#include "address.hpp"
 
 constexpr uint64_t PAGE_SIZE = 4096;
 constexpr uint64_t PAGE_MASK = ~(PAGE_SIZE - 1);
@@ -45,32 +46,34 @@ class VirtualMemoryManager final
     // 出力先を注入で受け取るので、VMM は VGA / シリアルのどちらに出るかを知らない。
     // nullptr を渡した場合は何も出力しない。
     VirtualMemoryManager(pmm::PhysicalMemoryManager *pmm_ptr, IConsole *console);
-    bool map_page(uint64_t virtual_address, uint64_t physical_address, uint64_t flags);
+    // physical_address が無効 (nullopt) なら何もせず false を返す。
+    bool map_page(PageVirtualAddress virtual_address, PhysicalAddress physical_address, uint64_t flags);
     // map解除とTLBフラッシュ
-    bool unmap_page(uint64_t virtual_address);
+    bool unmap_page(PageVirtualAddress virtual_address);
     // マップされていなければ nullopt を返す。
     // (物理 0 は「未マップ」ではなく実在するページなので、番兵値には使えない)
-    std::optional<uint64_t> virtual_to_physical(uint64_t virtual_address) const;
+    PhysicalAddress virtual_to_physical(PageVirtualAddress virtual_address) const;
 
     void flush_tlb();
 
 
     // 新しいアドレス空間(PML4)を作成し，その物理アドレスを返す
     // カーネル領域のエントリは現在の PML4からコピーされる
-    uint64_t create_address_space();
+    // メモリ不足で作成できなければ無効 (nullopt) な PhysicalAddress を返す
+    PhysicalAddress create_address_space();
 
     // CR3を指定PML4に切り替える。
-    void switch_address_space(uint64_t pml4_phys);
+    void switch_address_space(PhysicalAddress pml4_phys);
 
     // 指定PML4に対して、指定仮想アドレスを指定物理アドレスにマッピングする。(プロセスにアドレス空間構築用)
-    bool map_page_in(uint64_t pml4_phys, uint64_t virtual_address, uint64_t physical_address, uint64_t flags);
+    bool map_page_in(PhysicalAddress pml4_phys, PageVirtualAddress virtual_address, PhysicalAddress physical_address, uint64_t flags);
 
-    void copy_user_pages(uint64_t src_pml4_phys, uint64_t dst_pml4_phys);
+    void copy_user_pages(PhysicalAddress src_pml4_phys, PhysicalAddress dst_pml4_phys);
 
   private:
-    uint64_t *get_or_create_table(uint64_t *parent_table, uint64_t index, uint64_t flags);
+    VirtualAddress get_or_create_table(VirtualAddress parent_table, uint64_t index, uint64_t flags);
 
-    uint64_t pml4_phys_                  = 0;
+    PhysicalAddress pml4_phys_;
     pmm::PhysicalMemoryManager *pmm_ptr_ = nullptr;
 };
 

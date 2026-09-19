@@ -14,13 +14,13 @@ namespace
 // 低位 identity map 撤去後は PML4[0] もプロセスごとに独立しているが、
 // このテストは従来どおり PML4 スロット1 (512GiB〜) を使う。
 // (スレッドは何も出力しないので、出力先の受け渡しは要らない)
-constexpr uint64_t kAddrTestVirt = 0x8000000000; // PML4 index 1
+constexpr PageVirtualAddress kAddrTestVirt{0x8000000000}; // PML4 index 1
 volatile uint64_t test_result_a  = 0;
 volatile uint64_t test_result_b  = 0;
 
 void addrspace_thread_a()
 {
-    volatile uint64_t *p = reinterpret_cast<volatile uint64_t *>(kAddrTestVirt);
+    volatile uint64_t *p = reinterpret_cast<volatile uint64_t *>(kAddrTestVirt.address);
     *p                   = 0xAAAA;
     process::yield();   // Bに切り替わる
     test_result_a = *p; // 戻ってきて自分の値を再確認
@@ -28,7 +28,7 @@ void addrspace_thread_a()
 
 void addrspace_thread_b()
 {
-    volatile uint64_t *p = reinterpret_cast<volatile uint64_t *>(kAddrTestVirt);
+    volatile uint64_t *p = reinterpret_cast<volatile uint64_t *>(kAddrTestVirt.address);
     *p                   = 0xBBBB;
     process::yield(); // Aに切り替わる
     test_result_b = *p;
@@ -49,8 +49,15 @@ void addrspace_separation(IConsole *console)
     }
 
     // 各プロセスの同一仮想アドレスに物理ページを別々にマップ
-    uint64_t phys_a = pmm::pmm_ptr->allocate();
-    uint64_t phys_b = pmm::pmm_ptr->allocate();
+    const PhysicalAddress phys_a = pmm::pmm_ptr->allocate();
+    const PhysicalAddress phys_b = pmm::pmm_ptr->allocate();
+    if (!phys_a || !phys_b)
+    {
+        console->set_color(Color::LightRed, Color::Black);
+        console->puts("[ADDR] failed to allocate test pages\n");
+        console->set_color(Color::LightGrey, Color::Black);
+        return;
+    }
     vmm::vmm_ptr->map_page_in(pa->pml4, kAddrTestVirt, phys_a, vmm::PageFlag::Present | vmm::PageFlag::Writable);
     vmm::vmm_ptr->map_page_in(pb->pml4, kAddrTestVirt, phys_b, vmm::PageFlag::Present | vmm::PageFlag::Writable);
 

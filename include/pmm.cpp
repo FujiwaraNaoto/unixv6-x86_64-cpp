@@ -53,7 +53,7 @@ PhysicalMemoryManager::PhysicalMemoryManager(Multiboot2MemoryMapTag *memory_map,
         {
             if (addr < kernel_end)
                 continue; // カーネル領域はスキップ
-            free(addr);// release the page to the free list
+            free(PhysicalAddress{addr});// release the page to the free list
         }
     }
 
@@ -86,11 +86,11 @@ PhysicalMemoryManager::PhysicalMemoryManager(Multiboot2MemoryMapTag *memory_map,
     reserve_region(multiboot_address, multiboot_address + multiboot_info_size(multiboot_address));
 }
 
-void PhysicalMemoryManager::free(uint64_t page_address)
+void PhysicalMemoryManager::free(PhysicalAddress page_address)
 {
-    if (page_address < base_)
+    if (!page_address || *page_address.address < base_)
         return;
-    uint64_t page_index = address_to_page_index(page_address);
+    uint64_t page_index = address_to_page_index(*page_address.address);
     if (page_index >= MAX_PAGES)
         return;
     if (test_bit(page_index))
@@ -126,7 +126,7 @@ void PhysicalMemoryManager::reserve_region(uint64_t start, uint64_t end)
 }
 
 // bitが0のページを先頭から探し、未使用ページが見つかったらそのページを使用中にして物理アドレスを返す。
-uint64_t PhysicalMemoryManager::allocate()
+PhysicalAddress PhysicalMemoryManager::allocate()
 {
     for (uint64_t i = 0; i < pages_; i++)
     {
@@ -134,10 +134,10 @@ uint64_t PhysicalMemoryManager::allocate()
         {
             set_bit(i);
             free_pages_--;
-            return base_ + i * PAGE_SIZE;
+            return PhysicalAddress{base_ + i * PAGE_SIZE};
         }
     }
-    return 0; // メモリ不足
+    return PhysicalAddress{}; // メモリ不足
 }
 
 PhysicalMemoryManagerState PhysicalMemoryManager::get_state() const

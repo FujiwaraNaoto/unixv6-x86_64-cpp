@@ -32,12 +32,12 @@ void *Heap::sbrk(intptr_t increment)
 
     for (uint64_t va = map_start; va < new_brk; va += pmm::PAGE_SIZE)
     {
-        uint64_t pa = pmm_ptr_->allocate();
-        if (pa == 0)
+        const PhysicalAddress pa = pmm_ptr_->allocate();
+        if (!pa)
         {
             return (void *)-1; // 物理ページの割り当てに失敗
         }
-        if (!vmm_ptr_->map_page(va, pa, vmm::PageFlag::Present | vmm::PageFlag::Writable))
+        if (!vmm_ptr_->map_page(PageVirtualAddress{va}, pa, vmm::PageFlag::Present | vmm::PageFlag::Writable))
         {
             return (void *)-1;
         }

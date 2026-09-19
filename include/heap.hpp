@@ -1,8 +1,18 @@
 #pragma once
 #include <cstdint>
 #include <cstddef>
-#include "pmm.hpp"
-#include "vmm.hpp"
+
+// Heap はポインタとして持つだけなので、ヘッダは読み込まず前方宣言で済ませる。
+// (pmm.hpp / vmm.hpp を読み込むと、heap.hpp を使う側にまで依存が広がる)
+namespace pmm
+{
+class PhysicalMemoryManager;
+}
+namespace vmm
+{
+class VirtualMemoryManager;
+}
+
 namespace heap
 {
 // ─── カーネルヒープの仮想アドレス配置 ─────────────────────────────
