@@ -1,4 +1,4 @@
 build/*
 serial.log
-unixv6.iso
+*.iso
 iso/
