@@ -14,15 +14,15 @@ namespace
 // ハンドラの出力先。未登録のときはシリアルに出す。
 // 例外ハンドラでは NullConsole を既定値にしない: 登録前に例外が起きると、
 // 何も表示されずに hlt で止まるだけになり原因を追えなくなるため。
-// serial::serial は call_global_constructors() で最初に初期化され、
-// ヒープなどにも依存しないので、クラッシュ報告の出力先として最も確実。
-IConsole *handler_console = &serial::serial;
+// シリアルはヒープなどに依存しないので、クラッシュ報告の出力先として最も確実。
+// 実体は kernel_main が作ることを期待しているので、nullptr で初期化しておく。
+IConsole *handler_console = nullptr;
 
 } // namespace
 
 void set_console(IConsole *console)
 {
-    handler_console = (console != nullptr) ? console : &serial::serial;
+    handler_console = (console != nullptr) ? console : serial::serial;
 }
 
 // isr.asmも参照

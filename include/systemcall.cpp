@@ -11,7 +11,8 @@ namespace
 {
 // システムコールの出力先。SystemCall::init() で登録される。
 // syscall_dispatch は引数で受け取れないので、ここに保持する。
-IConsole *syscall_console = &serial::serial;
+// syscall は init() で有効にするので、登録前に dispatch が走ることはない。
+IConsole *syscall_console = nullptr;
 } // namespace
 
 static long sys_read(uint64_t fd, uint64_t buf, uint64_t len)
@@ -85,7 +86,7 @@ extern "C" long syscall_dispatch(uint64_t num, uint64_t a1, uint64_t a2, uint64_
 void init(IConsole *console)
 {
     // syscall を有効にする前に出力先を登録しておく
-    syscall_console = (console != nullptr) ? console : &serial::serial;
+    syscall_console = (console != nullptr) ? console : serial::serial;
 
     // 1. EFER.SCE (System Call Enable) を立てる
     uint64_t efer = rdmsr(MSR::EFER);

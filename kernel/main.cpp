@@ -1,6 +1,7 @@
 #include <cstdint>
 #include "vga.hpp"
 #include "serial.hpp"
+#include "exception.hpp"
 #include "idt.hpp"
 #include "pic.hpp"
 #include "io.hpp"
@@ -48,8 +49,19 @@ extern "C" uint8_t kernel_phys_end[];
 // (make tests でビルドしたときのみ呼ばれる)。
 extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, uint32_t mb_addr)
 {
-    // 他のどのグローバル変数を使う前に、コンストラクタを実行する。
-    // これで serial / vga はグローバル宣言だけで初期化される。
+    // シリアルは最初に作る。以降の初期化で問題が起きたときの報告先になる。
+    // (kernel_main は戻らないので、ローカルに置いても寿命はカーネルと同じ)
+    serial::Serial serial_instance;
+    serial::serial = &serial_instance;
+
+    // 例外ハンドラは asm から呼ばれて引数を受け取れないので、出力先を登録しておく。
+    // IDT の構築時に VGA へ差し替わるが、それまでの例外はシリアルに出る。
+    exception::set_console(serial::serial);
+
+    // グローバル変数のコンストラクタを実行する。
+    // 初期化順序は .init_array の並び = リンク順 (Makefile の CPP_SRC の順) なので、
+    // グローバル同士が互いのメンバを呼ぶと、まだ構築されていない相手に触ってしまう。
+    // そうならないよう、順序が要るものは main で明示的に構築すること。
     call_global_constructors();
 
     vga::VGA vga_instance;
