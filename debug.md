@@ -10,7 +10,7 @@ $ make run-gdb
 ```
 
 ```sh
-$ gdb build/kernel.elf
+$ gdb build/kernel/kernel.elf
 (gdb) target remote :1234
 ```
 
