@@ -50,6 +50,7 @@ CFLAGS   = -m64 -std=c++20 -g \
 		   -mcmodel=kernel	\
            -fno-pic -fno-pie \
            -mno-red-zone -mno-mmx -mno-sse -mno-sse2 \
+		   -MMD -MP \
            -Iinclude $(TEST_FLAGS) $(STD_INC)
 
 LDFLAGS  = -T kernel.ld -nostdlib -z max-page-size=0x1000
@@ -65,6 +66,7 @@ ISO_DIR  = $(OBJ_DIR)/iso
 ASM_OBJ  = $(ASM_SRC:%.asm=$(OBJ_DIR)/%.o)
 CPP_OBJ  = $(CPP_SRC:%.cpp=$(OBJ_DIR)/%.o)
 OBJS     = $(ASM_OBJ) $(CPP_OBJ)
+DEPS     = $(CPP_OBJ:.o=.d)
 
 KERNEL   = $(OBJ_DIR)/kernel.elf
 
@@ -162,3 +164,8 @@ format:
 	@echo "[format] Running clang-format..."
 	@find . -type f \( -name '*.c' -o -name '*.cpp' -o -name '*.h' -o -name '*.hpp' \) -print0 | xargs -0 clang-format -i
 	@echo "[format] Done."
+
+# コンパイル時に -MMD -MP で生成したヘッダ依存 (.d) を取り込む。
+# ヘッダを変えたとき、それをインクルードしている .cpp も再コンパイルされる。
+# 先頭の - で、初回ビルドなど .d がまだ無いときもエラーにしない。
+-include $(DEPS)
