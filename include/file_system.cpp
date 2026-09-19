@@ -1,0 +1,123 @@
+#include "file_system.hpp"
+#include "file_system_internal.hpp"
+#include <cstdint>
+#include <cstring>
+
+// file_system.hpp で extern 宣言している変数の実体。
+// Manager のコンストラクタが差し替え、各関数はここから読む。
+namespace FileSystem
+{
+IBlockStore *block_store = nullptr;
+IConsole *console        = nullptr;
+} // namespace FileSystem
+
+
+namespace
+{
+using FileSystem::internal::mark_block_used;
+using FileSystem::internal::write_inode;
+using FileSystem::internal::zero_block;
+
+
+    bool add_root_entry(DiskInode &root, uint32_t inum, const char* name){
+        return true;
+    }
+
+
+bool format(uint32_t total_blocks, IConsole *console)
+{
+    SuperBlock &superblock_state = FileSystem::internal::mutable_superblock();
+    constexpr uint32_t NUM_INODES = 200; // 適当な値。xv6 は 200 で固定している。
+    uint32_t inode_blocks  = (NUM_INODES + INODES_PER_BLOCK - 1) / INODES_PER_BLOCK;
+    uint32_t bitmap_blocks = (total_blocks + BLOCKS_PER_BITMAP_BLOCK - 1) / BLOCKS_PER_BITMAP_BLOCK;
+
+    superblock_state.magic      = FS_MAGIC;
+    superblock_state.size       = total_blocks;
+    superblock_state.ninodes    = NUM_INODES;
+    superblock_state.inodestart = 2; // 0=boot, 1=super
+    superblock_state.bmapstart  = superblock_state.inodestart + inode_blocks;
+
+
+    uint32_t data_start      = superblock_state.bmapstart + bitmap_blocks;
+    superblock_state.nblocks = total_blocks - data_start;
+
+    for(uint32_t b=superblock_state.inodestart; b<data_start; ++b)
+    {
+        if(!zero_block(b))
+        {
+            return false;
+        }
+    }
+
+    // make meta blocks used (0〜data_start-1)
+    for (uint32_t b = 0; b < data_start; b++)
+    {
+        if (!mark_block_used(b))
+        {
+            return false;
+        }
+    }
+
+    // write superblock to block 1. 0 is boot block, so skip it.
+    {
+        auto block = FileSystem::block_store->acquire(1); // superblock
+        if (!block) return false;
+        std::memset(block.data(), 0, FSBLOCK_SIZE);
+
+        *reinterpret_cast<SuperBlock *>(block.data()) = superblock_state;
+        if (!block.write_back()) return false;
+
+    }
+
+    DiskInode root_inode{
+        .type  = InodeType::kDirectory,
+        .nlink = 1,
+        .size  = 0,
+    };
+
+    if (!add_root_entry(root_inode, ROOTINO, "."))
+    {
+        return false;
+    }
+    if (!add_root_entry(root_inode, ROOTINO, ".."))
+    {
+        return false;
+    }
+    if (!write_inode(ROOTINO, root_inode))
+    {
+        return false;
+    }
+
+
+    return true;
+}
+
+
+}// namespace
+
+namespace FileSystem
+{
+
+Manager::Manager(uint32_t total_blocks, IBlockStore *block_store, IConsole *console)
+{
+    FileSystem::block_store = block_store ? block_store : &null_block_store;
+    FileSystem::console     = console ? console : &null_console;
+
+    if(internal::load_superblock())
+    {
+        valid_ = true;
+        return;
+    }
+
+    // if the magic number is not matched, the disk is not formatted yet. format it.
+    console->puts("[FS]   not formatted, creating filesystem...\n");
+    
+    if(!format(total_blocks, console))
+    {
+        valid_ = false;
+        return;
+    }
+    valid_ = internal::load_superblock();
+}
+
+} // namespace FileSystem

@@ -1,0 +1,151 @@
+#ifndef FILE_SYSTEM_HPP
+#define FILE_SYSTEM_HPP
+#include <cstdint>
+#include <array>
+#include <optional>
+#include "console.hpp"
+#include "block_store.hpp"
+
+
+constexpr uint32_t FS_MAGIC     = 0x10203040;//xv6 の 0x10203040 と同じ値にしておく。リトルエンディアンとビックエンディアンの両方で同じ値にならないように
+constexpr uint32_t FSBLOCK_SIZE = 512;
+constexpr int NDIRECT           = 12;                              // 直接ブロック数
+constexpr int NINDIRECT         = FSBLOCK_SIZE / sizeof(uint32_t); // 128
+constexpr int MAXFILE           = NDIRECT + NINDIRECT;             // 140ブロック
+constexpr int DIRSIZ            = 14;                              // ファイル名長 (V6と同じ)
+constexpr uint32_t ROOTINO      = 1;                               // ルートの inode 番号
+
+
+// block 0        1         2 ...            bmapstart ...      data_start ...
+// ┌────────┬──────────┬──────────────────┬───────────────┬──────────────────┐
+// │  boot  │  super   │  inode blocks    │  bitmap       │   data blocks    │
+// └────────┴──────────┴──────────────────┴───────────────┴──────────────────┘
+//          ↑ ここに書く  ← inode_blocks →   ← bitmap_blocks →  ← nblocks →
+// └───────────────────────── size (= total_blocks) ─────────────────────────┘
+//
+// ディスクは FSBLOCK_SIZE (512 バイト) のブロックの並びで、先頭から上の順に使う。
+// 各領域の位置と大きさは format() で計算し、スーパーブロックに記録する。
+//
+//   boot         (block 0)
+//     ファイルシステムとしては使わない (xv6 ではブートセクタ用に空けている)。
+//   super        (block 1)
+//     SuperBlock を置く。magic でフォーマット済みかを判定でき、
+//     ここを読めば以下の各領域の位置が分かる。
+//   inode blocks (inodestart から inode_blocks 個)
+//     DiskInode を 1 ブロックに INODES_PER_BLOCK (8) 個ずつ並べる。
+//     inodestart は 2 固定、inode_blocks = ceil(ninodes / INODES_PER_BLOCK)。
+//     inode 番号 inum は、inodestart + inum / INODES_PER_BLOCK 番目のブロックの
+//     inum % INODES_PER_BLOCK 番目に入っている。
+//   bitmap       (bmapstart から bitmap_blocks 個)
+//     ブロックの使用状況を 1 ブロック = 1 ビットで記録する (1 = 使用中)。
+//     データ領域だけでなく block 0 からの全ブロックが対象なので
+//     bitmap_blocks = ceil(size / BLOCKS_PER_BITMAP_BLOCK)。
+//     boot からビットマップ自身までのメタデータ領域は、format() で使用中にしておく。
+//     bmapstart = inodestart + inode_blocks。
+//   data blocks  (data_start から nblocks 個)
+//     ファイルとディレクトリの中身。空きはビットマップで管理する。
+//     data_start = bmapstart + bitmap_blocks (スーパーブロックには持たず、計算で求める)。
+//     nblocks = size - data_start。
+//
+// size はブロック 0 から数えた全ブロック数 (= total_blocks) で、boot も含む。
+//
+// 例: fs.img (2048 ブロック) を ninodes = 200 でフォーマットした場合
+//   inodestart = 2, inode_blocks = 25   → bmapstart  = 27
+//   bitmap_blocks = 1                   → data_start = 28
+//   nblocks = 2048 - 28 = 2020
+
+
+// inode の種類。
+// ディスク上の DiskInode::type にそのまま格納されるので、基底型を uint16_t に
+// 固定してレイアウトを保つ。固定基底型の enum は基底型の範囲すべてが有効な値
+// なので、壊れたディスクから読んだ未知の値を保持しても未定義動作にはならない
+// (その代わり switch には default が要る)。
+enum class InodeType : uint16_t
+{
+    kUnused    = 0,
+    kDirectory = 1,
+    kFile      = 2,
+};
+// ─── スーパーブロック (ブロック1) ────────────────────────────────
+struct SuperBlock
+{
+    uint32_t magic;
+    uint32_t size;       // 全ブロック数
+    uint32_t nblocks;    // データブロック数
+    uint32_t ninodes;    // inode 数
+    uint32_t inodestart; // inode 領域の開始ブロック
+    uint32_t bmapstart;  // ビットマップの開始ブロック
+};
+// ─── ディスク上の inode (64バイト) ───────────────────────────────
+struct [[gnu::packed]] DiskInode
+{
+    InodeType type;
+    uint16_t major;
+    uint16_t minor;
+    uint16_t nlink;
+    uint32_t size;
+    std::array<uint32_t, NDIRECT + 1> addrs; // 直接12 + 間接1
+};
+static_assert(sizeof(DiskInode) == 64, "DiskInode must be 64 bytes");
+
+constexpr int INODES_PER_BLOCK = FSBLOCK_SIZE / sizeof(DiskInode); // 8個/ブロック
+constexpr int BLOCKS_PER_BITMAP_BLOCK = FSBLOCK_SIZE * 8;                 // 4096ブロック/ビットマップ
+// ─── ディレクトリエントリ (16バイト) ─────────────────────────────
+struct [[gnu::packed]] DirectoryEntry
+{
+    uint16_t inum;
+    char name[DIRSIZ];
+};
+static_assert(sizeof(DirectoryEntry) == 16, "DirectoryEntry must be 16 bytes");
+
+
+class NullBlockStore final : public IBlockStore
+{
+  public:
+    BlockRef acquire(uint32_t) override
+    {
+        return BlockRef{};
+    }
+    bool write_back(uint32_t) override
+    {
+        return false;
+    }
+    void release(uint32_t) override { }
+};
+
+inline NullBlockStore null_block_store; // グローバルにアクセスできるようにする
+
+
+namespace FileSystem
+{
+
+// ファイルシステムの初期化を担うクラス。
+// コンストラクタが「スーパーブロックを読み、未フォーマットならフォーマットする」
+// 処理を行う。状態は fs.cpp のモジュール内 static が持ち、
+// superblock() / balloc() などはフリー関数としてそれを操作する
+// (BufferCache::Manager と同じ形)。
+class Manager final
+{
+public:
+    explicit Manager(uint32_t total_blocks, IBlockStore *block_store = nullptr, IConsole *console = nullptr);
+    // 初期化に成功したか。
+    // フォーマット済みだった場合も、新規にフォーマットした場合も true。
+    bool valid() const
+    {
+        return valid_;
+    }
+
+private:
+    bool valid_ = false;
+    
+
+};
+
+const SuperBlock &superblock();
+
+std::optional<uint32_t> allocate_block();
+bool free_block(uint32_t blockno);
+
+}// namespace FileSystem
+
+#endif // FILE_SYSTEM_HPP

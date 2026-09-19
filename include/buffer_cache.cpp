@@ -55,20 +55,33 @@ bool write_back(Buffer *buffer)
     return true;
 }
 
-// blockno に対応するバッファを確保する (xv6 の bget 相当)。
-// キャッシュに有ればそれを、無ければ LRU 側の未使用バッファを再利用する。
-// 戻り値は refcnt を 1 増やした状態。再利用した場合は valid=false で返るので、
-// 呼び出し側がデバイスから読み込む責任を持つ。
-Buffer *find_or_recycle(uint32_t blockno)
+// blockno が既にキャッシュに載っているかを調べるだけの関数。
+// refcnt は増やさず、バッファの再利用も行わない。載っていなければ nullptr。
+// 「掴む」意図が無い問い合わせ (write_back / release) はこちらを使う。
+Buffer *lookup(uint32_t blockno)
 {
-    // 1. 既にキャッシュに載っているか (MRU 側から探す)
+    // MRU 側から探す
     for (Buffer *b = head.next; b != &head; b = b->next)
     {
         if (b->valid && b->blockno == blockno)
         {
-            b->refcnt++;
             return b;
         }
+    }
+    return nullptr;
+}
+
+// blockno に対応するバッファを確保する (xv6 の bget 相当)。
+// キャッシュに有ればそれを、無ければ LRU 側の未使用バッファを再利用する。
+// 戻り値は refcnt を 1 増やした状態。再利用した場合は valid=false で返るので、
+// 呼び出し側がデバイスから読み込む責任を持つ。
+Buffer *find_cached(uint32_t blockno)
+{
+    // 1. 既にキャッシュに載っているか
+    if (Buffer *cached = lookup(blockno); cached != nullptr)
+    {
+        cached->refcnt++;
+        return cached;
     }
 
     // 2. 無ければ LRU 側から未使用 (refcnt == 0) のものを再利用する
@@ -129,7 +142,7 @@ Manager::Manager(const BlockDevice &block_device)
 
 Buffer *read(uint32_t blockno)
 {
-    Buffer *buffer = find_or_recycle(blockno);
+    Buffer *buffer = find_cached(blockno);
     if (buffer == nullptr)
     {
         return nullptr;
@@ -208,5 +221,26 @@ Statistics statistics()
 {
     return stats;
 }
+
+BlockRef BlockStore::acquire(uint32_t blockno)
+{
+    Buffer *buffer = BufferCache::read(blockno);
+    if (buffer == nullptr)
+    {
+        return BlockRef(blockno, this, nullptr);
+    }
+    return BlockRef(blockno, this, buffer->data.data());
+}
+bool BlockStore::write_back(uint32_t blockno)
+{
+    return BufferCache::write(lookup(blockno));
+}
+
+
+void BlockStore::release(uint32_t blockno)
+{
+    BufferCache::release(lookup(blockno));
+}
+
 
 } // namespace BufferCache
