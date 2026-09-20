@@ -16,6 +16,7 @@
 #include "usermode.hpp"
 #include "virtioblock.hpp"
 #include "buffer_cache.hpp"
+#include "file_system.hpp"
 
 // tests/ 以下は make tests (TESTS=1) のときだけコンパイル・リンクされる。
 // 通常ビルドではテストコードはカーネルに一切含まれない。
