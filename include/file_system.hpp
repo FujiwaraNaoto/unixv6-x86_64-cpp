@@ -151,7 +151,7 @@ private:
 const SuperBlock &superblock();
 
 std::optional<uint32_t> allocate_block();
-bool free_block(uint32_t blockno);
+void free_block(uint32_t blockno);
 
 }// namespace FileSystem
 

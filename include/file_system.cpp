@@ -183,5 +183,16 @@ std::optional<uint32_t> allocate_block(){
     return std::nullopt;
 }
 
+void free_block(uint32_t blockno)
+{
+    auto block = block_store->acquire(bitmap_block(blockno));
+    if (!block)
+    {
+        return;
+    }
+    uint32_t bit_index = blockno % BLOCKS_PER_BITMAP_BLOCK;
+    block.data()[bit_index / BITS_PER_BYTE] &= static_cast<uint8_t>(~(1u << (bit_index % BITS_PER_BYTE)));
+    block.write_back();
+}
 
 } // namespace FileSystem
