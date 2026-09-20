@@ -2,13 +2,6 @@
 
 namespace tests
 {
-namespace
-{
-
-// run_all() に nullptr が渡されたときの出力先 (何もしない)
-NullConsole null_console;
-
-} // namespace
 
 // 実行するテストの選択。
 // 追加・削除はここだけで済むよう、kernel_main からは run_all() のみを呼ぶ。
@@ -20,7 +13,8 @@ NullConsole null_console;
 //         - division_by_zero() : #DE ハンドラ次第で復帰しない
 void run_all(IConsole *console)
 {
-    IConsole *out = (console != nullptr) ? console : &null_console;
+    // nullptr が渡されたときは、出力を捨てる既定のコンソール (kernel_main が作る) に出す
+    IConsole *out = (console != nullptr) ? console : null_console;
 
     higher_half_check(out);
     pmm_alloc_free(out);

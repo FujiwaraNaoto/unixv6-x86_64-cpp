@@ -55,6 +55,10 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, uint32_t mb_addr
     serial::Serial serial_instance;
     serial::serial = &serial_instance;
 
+    // 出力を捨てる既定のコンソール。出力先を渡されなかったモジュールが使う。
+    NullConsole null_console_instance;
+    null_console = &null_console_instance;
+
     // 例外ハンドラは asm から呼ばれて引数を受け取れないので、出力先を登録しておく。
     // IDT の構築時に VGA へ差し替わるが、それまでの例外はシリアルに出る。
     exception::set_console(serial::serial);
