@@ -13,7 +13,7 @@ constexpr int NDIRECT           = 12;                              // 直接ブ�
 constexpr int NINDIRECT         = FSBLOCK_SIZE / sizeof(uint32_t); // 128
 constexpr int MAXFILE           = NDIRECT + NINDIRECT;             // 140ブロック
 constexpr int DIRSIZ            = 14;                              // ファイル名長 (V6と同じ)
-constexpr uint32_t ROOTINO      = 1;                               // ルートの inode 番号
+constexpr uint32_t ROOT_INODE      = 1;                               // ルートの inode 番号
 
 
 // block 0        1         2 ...            bmapstart ...      data_start ...

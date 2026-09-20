@@ -41,7 +41,7 @@ bool format(uint32_t total_blocks, IConsole *console)
     uint32_t data_start      = superblock_state.bmapstart + bitmap_blocks;
     superblock_state.nblocks = total_blocks - data_start;
 
-    for(uint32_t b=superblock_state.inodestart; b<data_start; ++b)
+    for(uint32_t b=superblock_state.inodestart; b<data_start; b++)
     {
         if(!zero_block(b))
         {
@@ -75,15 +75,15 @@ bool format(uint32_t total_blocks, IConsole *console)
         .size  = 0,
     };
 
-    if (!add_root_entry(root_inode, ROOTINO, "."))
+    if (!add_root_entry(root_inode, ROOT_INODE, "."))
     {
         return false;
     }
-    if (!add_root_entry(root_inode, ROOTINO, ".."))
+    if (!add_root_entry(root_inode, ROOT_INODE, ".."))
     {
         return false;
     }
-    if (!write_inode(ROOTINO, root_inode))
+    if (!write_inode(ROOT_INODE, root_inode))
     {
         return false;
     }
