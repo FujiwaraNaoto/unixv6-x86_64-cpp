@@ -100,7 +100,7 @@ namespace FileSystem
 
 Manager::Manager(uint32_t total_blocks, IBlockStore *block_store, IConsole *console)
 {
-    FileSystem::block_store = block_store ? block_store : &null_block_store;
+    FileSystem::block_store = block_store ? block_store : null_block_store;
     FileSystem::console     = console ? console : &null_console;
 
     if(internal::load_superblock())

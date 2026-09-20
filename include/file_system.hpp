@@ -113,7 +113,11 @@ class NullBlockStore final : public IBlockStore
     void release(uint32_t) override { }
 };
 
-inline NullBlockStore null_block_store; // グローバルにアクセスできるようにする
+// 実体は kernel_main が作り、このポインタに設定する。
+// グローバル変数として持つと .init_array の並び (= リンク順) で初期化されるため、
+// 他のグローバルとの初期化順序が「たまたま動いている」状態になりやすい。
+// main で明示的に構築することで、初期化順序の問題を避ける。
+inline NullBlockStore *null_block_store = nullptr;
 
 
 namespace FileSystem

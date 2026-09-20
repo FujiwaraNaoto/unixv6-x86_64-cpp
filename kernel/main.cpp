@@ -123,6 +123,11 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, uint32_t mb_addr
         vga::vga->puts("BufferCache initialization failed\n");
         asm volatile("hlt");
     }
+    // block_store を渡さずに Manager を作ったときの既定値。
+    // (グローバルに置くと初期化順序がリンク順任せになるので、ここで作る)
+    NullBlockStore null_block_store_instance;
+    null_block_store = &null_block_store_instance;
+
     BufferCache::BlockStore block_store(
         device
     );
