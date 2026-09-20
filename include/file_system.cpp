@@ -11,15 +11,9 @@ IBlockStore *block_store = nullptr;
 IConsole *console        = nullptr;
 } // namespace FileSystem
 
-namespace {
-    uint32_t bitmap_block(uint32_t blockno)
-    {
-        return blockno / BLOCKS_PER_BITMAP_BLOCK + FileSystem::superblock().bitmap_start;
-    }
-}
-
 namespace
 {
+using FileSystem::internal::bitmap_block;
 using FileSystem::internal::mark_block_used;
 using FileSystem::internal::write_inode;
 using FileSystem::internal::zero_block;
@@ -144,7 +138,7 @@ Manager::Manager(uint32_t total_blocks, IBlockStore *block_store, IConsole *cons
     }
 
     // if the magic number is not matched, the disk is not formatted yet. format it.
-    console->puts("[FS]   not formatted, creating filesystem...\n");
+    FileSystem::console->puts("[FS]   not formatted, creating filesystem...\n");
     
     if(!format(total_blocks, console))
     {
@@ -155,14 +149,13 @@ Manager::Manager(uint32_t total_blocks, IBlockStore *block_store, IConsole *cons
 }
 
 std::optional<uint32_t> allocate_block(){
+    const SuperBlock &superblock = FileSystem::superblock();
 
-    const SuperBlock &superblock = FileSystem::internal::mutable_superblock();
-
-    for(uint32_t base = 0; base < superblock.nblocks; base += BLOCKS_PER_BITMAP_BLOCK){
+    for(uint32_t base = 0; base < superblock.size; base += BLOCKS_PER_BITMAP_BLOCK){
         auto block = FileSystem::block_store->acquire(bitmap_block(base));
         if(!block) return std::nullopt;
         auto *bitmap = block.data();
-        for(uint32_t offset=0; offset<BLOCKS_PER_BITMAP_BLOCK && base+offset<superblock.nblocks; offset++){
+        for(uint32_t offset=0; offset<BLOCKS_PER_BITMAP_BLOCK && base+offset<superblock.size; offset++){
             uint32_t byte_index = offset / BITS_PER_BYTE;
             uint8_t bit_mask = 1 << (offset % BITS_PER_BYTE);
             if((bitmap[byte_index] & bit_mask) == 0){

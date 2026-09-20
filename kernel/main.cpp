@@ -1,4 +1,5 @@
 #include <cstdint>
+#include <optional>
 #include "vga.hpp"
 #include "serial.hpp"
 #include "exception.hpp"
@@ -115,6 +116,25 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, uint32_t mb_addr
     gdt::set_kernel_stack(reinterpret_cast<uint64_t>(kernel_stack + sizeof(kernel_stack)));
 
     process::ProcessManager process_manager(heap::heap_ptr);
+
+    // 仮想 → 物理の変換方法はカーネル側の関心事なので、ドライバには関数として渡す。
+    // (キャプチャなしラムダは関数ポインタへ暗黙変換される)
+    const auto resolve_physical = [](const void *p) -> std::optional<uint64_t>
+    {
+        if (vmm::vmm_ptr == nullptr)
+        {
+            return std::nullopt; // VMM 未初期化: 変換できない
+        }
+        // ドライバを vmm の型に依存させないよう、PhysicalAddress から中身を取り出して渡す。
+        return vmm::vmm_ptr->virtual_to_physical(PageVirtualAddress{reinterpret_cast<uint64_t>(p)}).address;
+    };
+
+    // ディスクに読み書きするので、BufferCache / FileSystem より先に初期化する。
+    if (!VirtIOBlock::initialize(resolve_physical))
+    {
+        vga::vga->puts("VirtIO block device initialization failed\n");
+        asm volatile("hlt");
+    }
 
     auto device = BufferCache::BlockDevice{
         .read_block  = &VirtIOBlock::read_block,

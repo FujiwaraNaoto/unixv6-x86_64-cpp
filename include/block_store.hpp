@@ -26,8 +26,34 @@ public:
     explicit BlockRef(uint32_t blockno, IBlockStore *store = nullptr, uint8_t *data = nullptr)
         : blockno_(blockno), store_(store), data_(data) { }
     
-    BlockRef(const BlockRef &) = delete;
+    BlockRef(const BlockRef &)            = delete;
     BlockRef &operator=(const BlockRef &) = delete;
+
+    // 所有権は 1 つだけ。ムーブ元は「何も持っていない」状態にする。
+    BlockRef(BlockRef &&other) noexcept
+        : blockno_(other.blockno_), store_(other.store_), data_(other.data_)
+    {
+        other.store_ = nullptr;
+        other.data_  = nullptr;
+    }
+    BlockRef &operator=(BlockRef &&other) noexcept
+    {
+        if (this != &other)
+        {
+            reset(); // 今持っているものを先に返す
+            blockno_     = other.blockno_;
+            store_       = other.store_;
+            data_        = other.data_;
+            other.store_ = nullptr;
+            other.data_  = nullptr;
+        }
+        return *this;
+    }
+
+    ~BlockRef()
+    {
+        reset();
+    }
     uint32_t blockno() const { return blockno_; }
     IBlockStore *store() const { return store_; }
     uint8_t *data() const { return data_; }
