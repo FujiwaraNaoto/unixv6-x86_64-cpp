@@ -68,6 +68,22 @@ extern "C"
         return static_cast<std::size_t>(p - s);
     }
 
+    // DirectoryEntry::name のような固定長バッファへのコピーで使う。
+    // count に満たない分は '\0' で埋める (strncpy の仕様)。
+    char *strncpy(char *dest, const char *src, std::size_t count)
+    {
+        std::size_t i = 0;
+        for (; i < count && src[i] != '\0'; i++)
+        {
+            dest[i] = src[i];
+        }
+        for (; i < count; i++)
+        {
+            dest[i] = '\0';
+        }
+        return dest;
+    }
+
     // 領域が重なる場合も正しく動くコピー。
     // dest が src より後ろにあるときだけ後方から写す。
     void *memmove(void *dest, const void *src, std::size_t count)

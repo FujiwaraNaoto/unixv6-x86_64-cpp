@@ -28,6 +28,15 @@ uint32_t bitmap_block(uint32_t blockno)
 
 // file_system.cpp / fs_mount.cpp / inode.cpp の間でのみ共有する。
 // 外部からは file_system.hpp の const アクセサだけを見せる。
+namespace FileSystem
+{
+// 読み取り専用の公開アクセサ。書き換えは internal::mutable_superblock() 経由で行う。
+const SuperBlock &superblock()
+{
+    return internal::mutable_superblock();
+}
+} // namespace FileSystem
+
 namespace FileSystem::internal
 {
 SuperBlock &mutable_superblock()
@@ -53,8 +62,8 @@ bool mark_block_used(uint32_t blockno)
     auto block = block_store->acquire(bitmap_block(blockno));
     if (!block) return false;
     uint32_t bit_index = blockno % BLOCKS_PER_BITMAP_BLOCK;
-    uint32_t byte_index = bit_index / 8;
-    uint8_t bit_mask = 1 << (bit_index % 8);
+    uint32_t byte_index = bit_index / BITS_PER_BYTE;
+    uint8_t bit_mask = 1 << (bit_index % BITS_PER_BYTE);
     block.data()[byte_index] |= bit_mask;
     return block.write_back();
 }

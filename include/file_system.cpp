@@ -11,6 +11,12 @@ IBlockStore *block_store = nullptr;
 IConsole *console        = nullptr;
 } // namespace FileSystem
 
+namespace {
+    uint32_t bitmap_block(uint32_t blockno)
+    {
+        return blockno / BLOCKS_PER_BITMAP_BLOCK + FileSystem::superblock().bitmap_start;
+    }
+}
 
 namespace
 {
@@ -20,7 +26,35 @@ using FileSystem::internal::zero_block;
 
 
     bool add_root_entry(DiskInode &root, uint32_t inum, const char* name){
-        return true;
+        int root_address = root.addrs[0];
+        if(root_address == 0){
+            auto block_number = FileSystem::allocate_block();
+            if(!block_number){
+                return false;
+            }
+            root_address = block_number.value();
+            root.addrs[0] = root_address;
+        }
+
+        auto block = FileSystem::block_store->acquire(root_address);
+        if(!block) return false;
+
+        auto *entries = reinterpret_cast<DirectoryEntry*>(block.data());
+        int capacity = FSBLOCK_SIZE / sizeof(DirectoryEntry);
+
+        for(int i=0; i<capacity; i++){
+            if(entries[i].inum !=0) continue;
+
+            entries[i].inum = inum;
+            std::strncpy(entries[i].name, name, DIRSIZ);
+            if(!block.write_back()){
+                return false;
+            }
+            root.size += sizeof(DirectoryEntry);
+            return true;
+        }
+
+        return false;
     }
 
 
@@ -119,5 +153,35 @@ Manager::Manager(uint32_t total_blocks, IBlockStore *block_store, IConsole *cons
     }
     valid_ = internal::load_superblock();
 }
+
+std::optional<uint32_t> allocate_block(){
+
+    const SuperBlock &superblock = FileSystem::internal::mutable_superblock();
+
+    for(uint32_t base = 0; base < superblock.nblocks; base += BLOCKS_PER_BITMAP_BLOCK){
+        auto block = FileSystem::block_store->acquire(bitmap_block(base));
+        if(!block) return std::nullopt;
+        auto *bitmap = block.data();
+        for(uint32_t offset=0; offset<BLOCKS_PER_BITMAP_BLOCK && base+offset<superblock.nblocks; offset++){
+            uint32_t byte_index = offset / BITS_PER_BYTE;
+            uint8_t bit_mask = 1 << (offset % BITS_PER_BYTE);
+            if((bitmap[byte_index] & bit_mask) == 0){
+                // mark this block as used
+                bitmap[byte_index] |= bit_mask;
+                if(!block.write_back()){
+                    return std::nullopt;
+                }
+                block.reset();
+                uint32_t block_number = base + offset;
+                if(!zero_block(block_number)){
+                    return std::nullopt;
+                }
+                return block_number;
+            }
+        }
+    }
+    return std::nullopt;
+}
+
 
 } // namespace FileSystem

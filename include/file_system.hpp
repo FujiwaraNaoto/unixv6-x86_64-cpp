@@ -89,7 +89,10 @@ struct [[gnu::packed]] DiskInode
 static_assert(sizeof(DiskInode) == 64, "DiskInode must be 64 bytes");
 
 constexpr int INODES_PER_BLOCK = FSBLOCK_SIZE / sizeof(DiskInode); // 8個/ブロック
-constexpr int BLOCKS_PER_BITMAP_BLOCK = FSBLOCK_SIZE * 8;                 // 4096ブロック/ビットマップ
+// ブロックビットマップは 1 ブロック = 1 ビットで管理するので、
+// バイト内のビット位置を求めるときに 1 バイトのビット数が要る。
+constexpr uint32_t BITS_PER_BYTE      = 8;
+constexpr int BLOCKS_PER_BITMAP_BLOCK = FSBLOCK_SIZE * BITS_PER_BYTE;     // 4096ブロック/ビットマップ
 // ─── ディレクトリエントリ (16バイト) ─────────────────────────────
 struct [[gnu::packed]] DirectoryEntry
 {
