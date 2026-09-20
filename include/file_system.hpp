@@ -16,7 +16,7 @@ constexpr int DIRSIZ            = 14;                              // ファイ�
 constexpr uint32_t ROOT_INODE      = 1;                               // ルートの inode 番号
 
 
-// block 0        1         2 ...            bmapstart ...      data_start ...
+// block 0        1         2 ...            bitmap_start ...      data_start ...
 // ┌────────┬──────────┬──────────────────┬───────────────┬──────────────────┐
 // │  boot  │  super   │  inode blocks    │  bitmap       │   data blocks    │
 // └────────┴──────────┴──────────────────┴───────────────┴──────────────────┘
@@ -31,26 +31,26 @@ constexpr uint32_t ROOT_INODE      = 1;                               // ルー�
 //   super        (block 1)
 //     SuperBlock を置く。magic でフォーマット済みかを判定でき、
 //     ここを読めば以下の各領域の位置が分かる。
-//   inode blocks (inodestart から inode_blocks 個)
+//   inode blocks (inode_start から inode_blocks 個)
 //     DiskInode を 1 ブロックに INODES_PER_BLOCK (8) 個ずつ並べる。
-//     inodestart は 2 固定、inode_blocks = ceil(ninodes / INODES_PER_BLOCK)。
-//     inode 番号 inum は、inodestart + inum / INODES_PER_BLOCK 番目のブロックの
+//     inode_start は 2 固定、inode_blocks = ceil(ninodes / INODES_PER_BLOCK)。
+//     inode 番号 inum は、inode_start + inum / INODES_PER_BLOCK 番目のブロックの
 //     inum % INODES_PER_BLOCK 番目に入っている。
-//   bitmap       (bmapstart から bitmap_blocks 個)
+//   bitmap       (bitmap_start から bitmap_blocks 個)
 //     ブロックの使用状況を 1 ブロック = 1 ビットで記録する (1 = 使用中)。
 //     データ領域だけでなく block 0 からの全ブロックが対象なので
 //     bitmap_blocks = ceil(size / BLOCKS_PER_BITMAP_BLOCK)。
 //     boot からビットマップ自身までのメタデータ領域は、format() で使用中にしておく。
-//     bmapstart = inodestart + inode_blocks。
+//     bitmap_start = inode_start + inode_blocks。
 //   data blocks  (data_start から nblocks 個)
 //     ファイルとディレクトリの中身。空きはビットマップで管理する。
-//     data_start = bmapstart + bitmap_blocks (スーパーブロックには持たず、計算で求める)。
+//     data_start = bitmap_start + bitmap_blocks (スーパーブロックには持たず、計算で求める)。
 //     nblocks = size - data_start。
 //
 // size はブロック 0 から数えた全ブロック数 (= total_blocks) で、boot も含む。
 //
 // 例: fs.img (2048 ブロック) を ninodes = 200 でフォーマットした場合
-//   inodestart = 2, inode_blocks = 25   → bmapstart  = 27
+//   inode_start = 2, inode_blocks = 25   → bitmap_start  = 27
 //   bitmap_blocks = 1                   → data_start = 28
 //   nblocks = 2048 - 28 = 2020
 
@@ -73,8 +73,8 @@ struct SuperBlock
     uint32_t size;       // 全ブロック数
     uint32_t nblocks;    // データブロック数
     uint32_t ninodes;    // inode 数
-    uint32_t inodestart; // inode 領域の開始ブロック
-    uint32_t bmapstart;  // ビットマップの開始ブロック
+    uint32_t inode_start; // inode 領域の開始ブロック
+    uint32_t bitmap_start;  // ビットマップの開始ブロック
 };
 // ─── ディスク上の inode (64バイト) ───────────────────────────────
 struct [[gnu::packed]] DiskInode

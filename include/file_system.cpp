@@ -34,14 +34,14 @@ bool format(uint32_t total_blocks, IConsole *console)
     superblock_state.magic      = FS_MAGIC;
     superblock_state.size       = total_blocks;
     superblock_state.ninodes    = NUM_INODES;
-    superblock_state.inodestart = 2; // 0=boot, 1=super
-    superblock_state.bmapstart  = superblock_state.inodestart + inode_blocks;
+    superblock_state.inode_start = 2; // 0=boot, 1=super
+    superblock_state.bitmap_start  = superblock_state.inode_start + inode_blocks;
 
 
-    uint32_t data_start      = superblock_state.bmapstart + bitmap_blocks;
+    uint32_t data_start      = superblock_state.bitmap_start + bitmap_blocks;
     superblock_state.nblocks = total_blocks - data_start;
 
-    for(uint32_t b=superblock_state.inodestart; b<data_start; b++)
+    for(uint32_t b=superblock_state.inode_start; b<data_start; b++)
     {
         if(!zero_block(b))
         {

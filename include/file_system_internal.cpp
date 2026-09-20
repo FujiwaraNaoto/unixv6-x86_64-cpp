@@ -15,12 +15,12 @@ SuperBlock superblock_state;
 
 uint32_t inode_block(uint32_t inum)
 {
-    return superblock_state.inodestart + inum / INODES_PER_BLOCK;
+    return superblock_state.inode_start + inum / INODES_PER_BLOCK;
 }
 
 uint32_t bitmap_block(uint32_t blockno)
 {
-    return superblock_state.bmapstart + blockno / BLOCKS_PER_BITMAP_BLOCK;
+    return superblock_state.bitmap_start + blockno / BLOCKS_PER_BITMAP_BLOCK;
 }
 
 
