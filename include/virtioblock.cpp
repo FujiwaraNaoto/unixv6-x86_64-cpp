@@ -9,32 +9,6 @@
 namespace
 {
 
-// ─── virtio legacy レジスタオフセット (I/O空間) ──────────────────
-constexpr uint16_t REG_DEVICE_FEATURES = 0x00;
-constexpr uint16_t REG_DRIVER_FEATURES = 0x04;
-constexpr uint16_t REG_QUEUE_ADDRESS   = 0x08;
-constexpr uint16_t REG_QUEUE_SIZE      = 0x0C;
-constexpr uint16_t REG_QUEUE_SELECT    = 0x0E;
-constexpr uint16_t REG_QUEUE_NOTIFY    = 0x10;
-constexpr uint16_t REG_DEVICE_STATUS   = 0x12;
-// legacy virtio ではデバイス固有 config がヘッダ (20バイト) の直後から始まる。
-// virtio-blk の先頭フィールドは capacity (512バイトセクタ数, u64)。
-constexpr uint16_t REG_CONFIG_CAPACITY = 0x14;
-
-// ─── ステータスビット ────────────────────────────────────────────
-// NOTE: FEATURES_OK (0x08) は virtio 1.0 以降のみ。legacy では使わない。
-constexpr uint8_t STATUS_ACKNOWLEDGE = 0x01;
-constexpr uint8_t STATUS_DRIVER      = 0x02;
-constexpr uint8_t STATUS_DRIVER_OK   = 0x04;
-
-// ─── Descriptor フラグ ───────────────────────────────────────────
-constexpr uint16_t DESC_F_NEXT  = 1;
-constexpr uint16_t DESC_F_WRITE = 2;
-
-// ─── virtio-blk リクエスト種別 ───────────────────────────────────
-constexpr uint32_t BLK_T_IN  = 0; // read
-constexpr uint32_t BLK_T_OUT = 1; // write
-
 // ─── PCI ID (virtio legacy block device) ─────────────────────────
 constexpr uint16_t VIRTIO_VENDOR_ID     = 0x1AF4;
 constexpr uint16_t VIRTIO_BLK_DEVICE_ID = 0x1001;
@@ -49,7 +23,7 @@ constexpr size_t VIRTIO_PAGE_SIZE = 4096;
 alignas(4096) uint8_t virtqueue_memory[16384];
 alignas(16) VirtIOBlockRequestHeader request_header;
 alignas(512) uint8_t data_buffer[SECTOR_SIZE];
-alignas(1) volatile uint8_t status_byte = 0;
+alignas(1) volatile VirtIOBlockStatus status_byte{};
 
 // ─── ドライバ内部状態 ────────────────────────────────────────────
 uint16_t io_base    = 0;
@@ -71,25 +45,31 @@ bool ready = false;
 // そのマッピングはブート後変化しない (プロセス切り替えでも PML4 の上位エントリは
 // 共有される) ため、初期化時に一度だけ解決して保持すればよい。
 // これにより read/write の実行経路からアドレス変換の依存が消える。
-uint64_t request_header_phys = 0;
-uint64_t data_buffer_phys    = 0;
-uint64_t status_byte_phys    = 0;
+PhysicalAddress request_header_phys;
+PhysicalAddress data_buffer_phys;
+PhysicalAddress status_byte_phys;
 
-uint16_t port(uint16_t offset)
+// デバイスが最後に処理し終えるはずの used->idx。
+// virtq_kick() で 1 進め、queue.used->idx がこれに追いつけば完了。
+uint16_t last_used_index = 0;
+
+// ─── レジスタアクセス ────────────────────────────────────────────
+uint16_t port(VirtIORegister reg)
 {
-    return static_cast<uint16_t>(io_base + offset);
+    return static_cast<uint16_t>(io_base + to_underlying(reg));
 }
 
-} // namespace
-
-namespace VirtIOBlock
+// デバイスステータスにビットを追加する (既に立っているビットは残す)
+void add_device_status(VirtIODeviceStatus bits)
 {
+    io::outb(port(VirtIORegister::DEVICE_STATUS), io::inb(port(VirtIORegister::DEVICE_STATUS)) | to_underlying(bits));
+}
 
-bool initialize(PhysicalAddressResolver resolve_physical)
+// ─── 初期化の各段階 ──────────────────────────────────────────────
+
+// PCI バスから legacy virtio-blk を探し、io_base を設定する
+bool find_device()
 {
-    if (resolve_physical == nullptr)
-        return false; // 物理アドレスが引けないので初期化できない
-
     auto found = PCI::pci_device_exists(VIRTIO_VENDOR_ID, VIRTIO_BLK_DEVICE_ID);
     if (!found)
         return false;
@@ -103,23 +83,45 @@ bool initialize(PhysicalAddressResolver resolve_physical)
         return false;
 
     PCI::enable_bus_master(dev); // DMA を行うので Bus Master を有効化
+    return true;
+}
 
+// リセットしてドライバが認識したことを伝え、feature を決める
+void reset_and_negotiate()
+{
     // ─── 1. リセット ───
-    io::outb(port(REG_DEVICE_STATUS), 0);
+    io::outb(port(VirtIORegister::DEVICE_STATUS), to_underlying(VirtIODeviceStatus::RESET));
 
     // ─── 2. ACKNOWLEDGE ───
-    io::outb(port(REG_DEVICE_STATUS), STATUS_ACKNOWLEDGE);
+    add_device_status(VirtIODeviceStatus::ACKNOWLEDGE);
 
     // ─── 3. DRIVER ───
-    io::outb(port(REG_DEVICE_STATUS), STATUS_ACKNOWLEDGE | STATUS_DRIVER);
+    add_device_status(VirtIODeviceStatus::DRIVER);
 
     // ─── 4. feature negotiation (最小構成: 何も使わない) ───
-    (void)io::in32b(port(REG_DEVICE_FEATURES)); // Device Features を読むだけ
-    io::out32b(port(REG_DRIVER_FEATURES), 0);   // Driver Features = 0
+    (void)io::in32b(port(VirtIORegister::DEVICE_FEATURES)); // Device Features を読むだけ
+    io::out32b(port(VirtIORegister::DRIVER_FEATURES), 0);   // Driver Features = 0
+}
 
-    // ─── 5. virtqueue セットアップ ───
-    io::out16b(port(REG_QUEUE_SELECT), 0);        // Queue Select = 0
-    queue_size = io::in16b(port(REG_QUEUE_SIZE)); // Queue Size
+// DMA バッファの物理アドレスを解決して保持する (以降は変換関数を使わない)
+bool resolve_dma_buffers(VirtIOBlock::PhysicalAddressResolver resolve_physical)
+{
+    const PhysicalAddress header_phys = resolve_physical(&request_header);
+    const PhysicalAddress buffer_phys = resolve_physical(data_buffer);
+    const PhysicalAddress status_phys = resolve_physical(const_cast<const VirtIOBlockStatus *>(&status_byte));
+    if (!header_phys || !buffer_phys || !status_phys)
+        return false;
+    request_header_phys = header_phys;
+    data_buffer_phys    = buffer_phys;
+    status_byte_phys    = status_phys;
+    return true;
+}
+
+// virtqueue 0 を組み立て、最後にその位置をデバイスに教える
+bool virtq_init(VirtIOBlock::PhysicalAddressResolver resolve_physical)
+{
+    io::out16b(port(VirtIORegister::QUEUE_SELECT), 0);        // Queue Select = 0
+    queue_size = io::in16b(port(VirtIORegister::QUEUE_SIZE)); // Queue Size
     if (queue_size == 0)
         return false;
 
@@ -137,10 +139,11 @@ bool initialize(PhysicalAddressResolver resolve_physical)
 
     // virtqueue 全体をゼロクリアする。
     // デバイスはリセット時に自分の used->idx を 0 に戻すので、こちら側の
-    // queue.avail->idx / queue.used->idx に前回の値が残っていると完了待ちが
-    // 永久に抜けなくなる。.bss は起動時にゼロだが initialize() の再実行に備える。
-    // (request_header は do_request() で全フィールド代入するのでクリア不要)
+    // queue.avail->idx / queue.used->idx / last_used_index に前回の値が残っていると
+    // 完了待ちが永久に抜けなくなる。.bss は起動時にゼロだが initialize() の再実行に備える。
+    // (request_header は setup_request() で全フィールド代入するのでクリア不要)
     std::memset(virtqueue_memory, 0, sizeof(virtqueue_memory));
+    last_used_index = 0;
 
     // ポインタを組み立てる
     queue.desc  = reinterpret_cast<VirtQueueDescriptor *>(virtqueue_memory);
@@ -149,89 +152,120 @@ bool initialize(PhysicalAddressResolver resolve_physical)
 
     // デバイスにはページ番号を 1 個しか渡せない = キュー全体が物理連続である前提。
     // 仮想連続でも物理連続とは限らないので確認しておく。
-    const std::optional<uint64_t> queue_phys = resolve_physical(virtqueue_memory);
+    const PhysicalAddress queue_phys = resolve_physical(virtqueue_memory);
     if (!queue_phys)
         return false;
     for (size_t off = VIRTIO_PAGE_SIZE; off < sizeof(virtqueue_memory); off += VIRTIO_PAGE_SIZE)
     {
-        const std::optional<uint64_t> page_phys = resolve_physical(virtqueue_memory + off);
-        if (!page_phys || *page_phys != *queue_phys + off)
+        const PhysicalAddress page_phys = resolve_physical(virtqueue_memory + off);
+        if (!page_phys || *page_phys.address != *queue_phys.address + off)
             return false;
     }
 
-    // DMA バッファの物理アドレスもここで解決しておく (以降は変換関数を使わない)
-    const std::optional<uint64_t> header_phys = resolve_physical(&request_header);
-    const std::optional<uint64_t> buffer_phys = resolve_physical(data_buffer);
-    const std::optional<uint64_t> status_phys = resolve_physical(const_cast<const uint8_t *>(&status_byte));
-    if (!header_phys || !buffer_phys || !status_phys)
-        return false;
-    request_header_phys = *header_phys;
-    data_buffer_phys    = *buffer_phys;
-    status_byte_phys    = *status_phys;
-
     // 全部解決できてからデバイスにキューの位置を教える
     // (途中で失敗して return する経路でデバイスに中途半端な設定を残さないため)
-    io::out32b(port(REG_QUEUE_ADDRESS), static_cast<uint32_t>(*queue_phys >> 12));
+    io::out32b(port(VirtIORegister::QUEUE_ADDRESS), static_cast<uint32_t>(*queue_phys.address >> 12));
+    return true;
+}
+
+// ─── リクエストの各段階 ──────────────────────────────────────────
+
+// リクエストヘッダと 3 つのディスクリプタ (ヘッダ → データ → ステータス) を書く
+void setup_request(VirtIOBlockRequestType type, uint64_t sector)
+{
+    request_header.type     = type;
+    request_header.reserved = 0;
+    request_header.sector   = sector;
+    status_byte             = VirtIOBlockStatus::PENDING;
+
+    // Descriptor 0: リクエストヘッダ (デバイスが読む)
+    queue.desc[0].addr  = *request_header_phys.address;
+    queue.desc[0].len   = sizeof(VirtIOBlockRequestHeader);
+    queue.desc[0].flags = VirtQueueDescriptorFlags::DESC_F_NEXT;
+    queue.desc[0].next  = 1;
+
+    // Descriptor 1: データバッファ
+    //   read  → デバイスが書く (DESC_F_WRITE)
+    //   write → デバイスが読む (フラグなし)
+    queue.desc[1].addr  = *data_buffer_phys.address;
+    queue.desc[1].len   = SECTOR_SIZE;
+    queue.desc[1].flags = VirtQueueDescriptorFlags::DESC_F_NEXT | (type == VirtIOBlockRequestType::VIRTIO_BLK_T_IN ? VirtQueueDescriptorFlags::DESC_F_WRITE : VirtQueueDescriptorFlags::NONE);
+    queue.desc[1].next  = 2;
+
+    // Descriptor 2: ステータス (デバイスが書く)
+    queue.desc[2].addr  = *status_byte_phys.address;
+    queue.desc[2].len   = 1;
+    queue.desc[2].flags = VirtQueueDescriptorFlags::DESC_F_WRITE;
+    queue.desc[2].next  = 0;
+}
+
+// desc_index から始まるチェーンを Available Ring に登録し、デバイスに通知する
+void virtq_kick(uint16_t desc_index)
+{
+    queue.avail->ring[queue.avail->idx % queue_size] = desc_index;
+    __sync_synchronize(); // メモリバリア
+    queue.avail->idx++;
+    __sync_synchronize();
+
+    io::out16b(port(VirtIORegister::QUEUE_NOTIFY), 0);
+    last_used_index++;
+}
+
+// デバイスがまだ処理中か (used->idx が last_used_index に追いついていないか)
+bool virtq_is_busy()
+{
+    // queue.used->idx は非 volatile なので、"memory" クロバーを挟まないと -O2 で
+    // ポーリングループの外に読み出しが巻き上げられて無限ループになる。
+    asm volatile("pause" ::: "memory");
+    return queue.used->idx != last_used_index;
+}
+
+} // namespace
+
+namespace VirtIOBlock
+{
+
+bool initialize(PhysicalAddressResolver resolve_physical)
+{
+    if (resolve_physical == nullptr)
+        return false; // 物理アドレスが引けないので初期化できない
+
+    if (!find_device())
+        return false;
+
+    reset_and_negotiate();
+
+    // ─── 5. virtqueue セットアップ ───
+    // DMA バッファを先に解決しておく。キューの位置をデバイスに教えるのは
+    // virtq_init() の最後なので、どちらで失敗してもデバイスに中途半端な設定は残らない。
+    if (!resolve_dma_buffers(resolve_physical))
+        return false;
+    if (!virtq_init(resolve_physical))
+        return false;
 
     // ─── 6. DRIVER_OK (最後) ───
-    io::outb(port(REG_DEVICE_STATUS), STATUS_ACKNOWLEDGE | STATUS_DRIVER | STATUS_DRIVER_OK);
+    add_device_status(VirtIODeviceStatus::DRIVER_OK);
 
     ready = true;
     return true;
 }
 
 // ─── I/O 共通処理 ────────────────────────────────────────────────
-static bool do_request(uint32_t type, uint64_t sector)
+static bool do_request(VirtIOBlockRequestType type, uint64_t sector)
 {
     if (!ready)
         return false;
-    request_header.type     = type;
-    request_header.reserved = 0;
-    request_header.sector   = sector;
-    status_byte             = 0xFF; // 未完了マーカー
 
-    // Descriptor 0: リクエストヘッダ (デバイスが読む)
-    queue.desc[0].addr  = request_header_phys;
-    queue.desc[0].len   = sizeof(VirtIOBlockRequestHeader);
-    queue.desc[0].flags = DESC_F_NEXT;
-    queue.desc[0].next  = 1;
+    setup_request(type, sector);
+    virtq_kick(0); // チェーン先頭のDescriptor番号
 
-    // Descriptor 1: データバッファ
-    //   read  → デバイスが書く (DESC_F_WRITE)
-    //   write → デバイスが読む (フラグなし)
-    queue.desc[1].addr  = data_buffer_phys;
-    queue.desc[1].len   = SECTOR_SIZE;
-    queue.desc[1].flags = static_cast<uint16_t>(DESC_F_NEXT | (type == BLK_T_IN ? DESC_F_WRITE : 0));
-    queue.desc[1].next  = 2;
-
-    // Descriptor 2: ステータス (デバイスが書く)
-    queue.desc[2].addr  = status_byte_phys;
-    queue.desc[2].len   = 1;
-    queue.desc[2].flags = DESC_F_WRITE;
-    queue.desc[2].next  = 0;
-
-    // Available Ring に登録
-    uint16_t last_used                               = queue.used->idx;
-    queue.avail->ring[queue.avail->idx % queue_size] = 0; // チェーン先頭のDescriptor番号
-    __sync_synchronize();                                 // メモリバリア
-    queue.avail->idx++;
-    __sync_synchronize();
-
-    // デバイスに通知
-    io::out16b(port(REG_QUEUE_NOTIFY), 0);
-
-    // 完了待ち (ポーリング)。
-    // queue.used->idx は非 volatile なので、"memory" クロバーを挟まないと -O2 で
-    // ループ外に読み出しが巻き上げられて無限ループになる。
-    while (true)
+    // 完了待ち (ポーリング)
+    while (virtq_is_busy())
     {
-        asm volatile("pause" ::: "memory");
-        if (queue.used->idx != last_used)
-            break;
     }
     __sync_synchronize();
 
-    return status_byte == 0;
+    return status_byte == VirtIOBlockStatus::OK;
 }
 
 
@@ -242,14 +276,14 @@ uint64_t capacity()
         return 0;
     }
     // 32bit ずつ 2 回に分けて読む (I/O 空間は最大 32bit 幅)
-    const uint64_t low  = io::in32b(port(REG_CONFIG_CAPACITY));
-    const uint64_t high = io::in32b(port(REG_CONFIG_CAPACITY + 4));
+    const uint64_t low  = io::in32b(port(VirtIORegister::CONFIG_CAPACITY_LOW));
+    const uint64_t high = io::in32b(port(VirtIORegister::CONFIG_CAPACITY_HIGH));
     return (high << 32) | low;
 }
 
 bool read_block(uint64_t sector, uint8_t *buf)
 {
-    if (!do_request(BLK_T_IN, sector))
+    if (!do_request(VirtIOBlockRequestType::VIRTIO_BLK_T_IN, sector))
         return false;
     std::memcpy(buf, data_buffer, SECTOR_SIZE);
     return true;
@@ -258,7 +292,7 @@ bool read_block(uint64_t sector, uint8_t *buf)
 bool write_block(uint64_t sector, const uint8_t *buf)
 {
     std::memcpy(data_buffer, buf, SECTOR_SIZE);
-    return do_request(BLK_T_OUT, sector);
+    return do_request(VirtIOBlockRequestType::VIRTIO_BLK_T_OUT, sector);
 }
 
 } // namespace VirtIOBlock
