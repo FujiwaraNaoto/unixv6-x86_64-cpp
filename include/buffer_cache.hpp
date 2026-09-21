@@ -106,13 +106,6 @@ void release(Buffer *buffer);
 // read() で取得した参照を、スコープを抜けるときに自動で release() する RAII ガード。
 // release() の呼び忘れはバッファを枯渇させる (acquire が nullptr を返すようになる)
 // ので、上位層では生の read()/release() ではなくこちらを使う。
-//
-//   if (auto block = BufferCache::acquire(blockno))
-//   {
-//       block->data[0] = 0xFF;
-//       block.mark_dirty();
-//   } // ここで自動的に release される
-//
 class BufferRef final
 {
   public:
@@ -141,7 +134,6 @@ class BufferRef final
         return *this;
     }
 
-    // 取得に成功したかどうか。if (auto b = acquire(n)) と書ける。
     explicit operator bool() const
     {
         return buffer_ != nullptr;
