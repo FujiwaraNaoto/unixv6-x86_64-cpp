@@ -38,6 +38,8 @@ void put_inode(Inode *ip);
 bool update_inode(Inode *ip);
 
 // 未使用の inode を 1 つ確保し、type を設定してその inum を返す。
+// nlink は 0 で作るので、ディレクトリに登録 (link_directory) してから put_inode() すること。
+// 登録せずに put_inode() すると、その時点で解放される。
 // 空きが無ければ nullopt。
 std::optional<uint32_t> allocate_inode(InodeType type);
 

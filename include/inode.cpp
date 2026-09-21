@@ -121,9 +121,11 @@ std::optional<uint32_t> allocate_inode(InodeType type)
             continue;
         }
 
+        // nlink は 0 で作る。ディレクトリに登録した時点で link_directory() が数える
+        // (名前の数と nlink が必ず一致するように)。
         DiskInode allocated{};
         allocated.type  = type;
-        allocated.nlink = 1;
+        allocated.nlink = 0;
         allocated.size  = 0;
         if (!write_disk_inode(inum, allocated))
         {

@@ -60,6 +60,9 @@ void virtio_block_read_write(IConsole *console);
 // inode: 確保 / 参照 / ブロック対応 (直接・間接) / 読み書き / 切り詰めを確認する。
 void inode_read_write(IConsole *console);
 
+// ディレクトリ: lookup / link / unlink とパス解決 (resolve_path / resolve_parent) を確認する。
+void directory_lookup_link(IConsole *console);
+
 // 有効化しているテストをまとめて実行する。
 // どのテストを走らせるかは tests.cpp 側で切り替える。
 void run_all(IConsole *console);
