@@ -10,7 +10,11 @@ namespace
 {
 
 // ─── PCI ID (virtio legacy block device) ─────────────────────────
+// see 2.1 PCI Discovery
 constexpr uint16_t VIRTIO_VENDOR_ID     = 0x1AF4;
+
+// https://docs.oasis-open.org/virtio/virtio/v1.3/csd01/virtio-v1.3-csd01.html#x1-1320002
+// Transitinal PCI Device ID (0x1000) は virtio 1.0 以降のデバイスで使われる。0x1001は block deviceを示す。
 constexpr uint16_t VIRTIO_BLK_DEVICE_ID = 0x1001;
 
 constexpr uint16_t SECTOR_SIZE = 512;
@@ -20,6 +24,9 @@ constexpr size_t VIRTIO_PAGE_SIZE = 4096;
 
 // ─── DMA 対象のメモリ ────────────────────────────────────────────
 // デバイスが直接読み書きするので、実体はここ (1翻訳単位) だけに置く。
+// staticな.bss変数にすると、includeした翻訳単位ごとに別実体ができてしまうので、
+// それをデバイスに渡すと、ドライバが読む変数とデバイスが読む変数が別物になってしまう。
+// そのため、匿名 namespace に置くことで、この翻訳単位内だけで有効な実体にする。
 alignas(4096) uint8_t virtqueue_memory[16384];
 alignas(16) VirtIOBlockRequestHeader request_header;
 alignas(512) uint8_t data_buffer[SECTOR_SIZE];
@@ -59,7 +66,7 @@ uint16_t port(VirtIORegister reg)
     return static_cast<uint16_t>(io_base + to_underlying(reg));
 }
 
-// デバイスステータスにビットを追加する (既に立っているビットは残す)
+// デバイスステータスにビットを追加する (既に立っているビットはそのまま)
 void add_device_status(VirtIODeviceStatus bits)
 {
     io::outb(port(VirtIORegister::DEVICE_STATUS), io::inb(port(VirtIORegister::DEVICE_STATUS)) | to_underlying(bits));
@@ -86,22 +93,6 @@ bool find_device()
     return true;
 }
 
-// リセットしてドライバが認識したことを伝え、feature を決める
-void reset_and_negotiate()
-{
-    // ─── 1. リセット ───
-    io::outb(port(VirtIORegister::DEVICE_STATUS), to_underlying(VirtIODeviceStatus::RESET));
-
-    // ─── 2. ACKNOWLEDGE ───
-    add_device_status(VirtIODeviceStatus::ACKNOWLEDGE);
-
-    // ─── 3. DRIVER ───
-    add_device_status(VirtIODeviceStatus::DRIVER);
-
-    // ─── 4. feature negotiation (最小構成: 何も使わない) ───
-    (void)io::in32b(port(VirtIORegister::DEVICE_FEATURES)); // Device Features を読むだけ
-    io::out32b(port(VirtIORegister::DRIVER_FEATURES), 0);   // Driver Features = 0
-}
 
 // DMA バッファの物理アドレスを解決して保持する (以降は変換関数を使わない)
 bool resolve_dma_buffers(VirtIOBlock::PhysicalAddressResolver resolve_physical)
@@ -117,6 +108,7 @@ bool resolve_dma_buffers(VirtIOBlock::PhysicalAddressResolver resolve_physical)
     return true;
 }
 
+// 2.3 Virtqueue Configuration
 // virtqueue 0 を組み立て、最後にその位置をデバイスに教える
 bool virtq_init(VirtIOBlock::PhysicalAddressResolver resolve_physical)
 {
@@ -178,9 +170,14 @@ void setup_request(VirtIOBlockRequestType type, uint64_t sector)
     request_header.sector   = sector;
     status_byte             = VirtIOBlockStatus::PENDING;
 
+    // 2.4.1.1 Placing Buffers into The Descriptor Table
+
     // Descriptor 0: リクエストヘッダ (デバイスが読む)
     queue.desc[0].addr  = *request_header_phys.address;
     queue.desc[0].len   = sizeof(VirtIOBlockRequestHeader);
+    // If there is a buffer element after this:
+    // i. Set d.next to the index of the next free descriptor element.
+    // ii. Set d.flags to indicate that there is a next descriptor (VIRTQ_DESC_F_NEXT).
     queue.desc[0].flags = VirtQueueDescriptorFlags::DESC_F_NEXT;
     queue.desc[0].next  = 1;
 
@@ -202,11 +199,17 @@ void setup_request(VirtIOBlockRequestType type, uint64_t sector)
 // desc_index から始まるチェーンを Available Ring に登録し、デバイスに通知する
 void virtq_kick(uint16_t desc_index)
 {
+    // 2.4.1 Supplying Buffers to the Device
+
     queue.avail->ring[queue.avail->idx % queue_size] = desc_index;
-    __sync_synchronize(); // メモリバリア
+    // 4. A memory barrier should be executed to ensure the device sees the updated descriptor table and available ring before the next step
+    __sync_synchronize();
+    // 5. The available idx field should be increased by the number of entries added to the available ring.
     queue.avail->idx++;
+    // 6. A memory barrier should be executed to ensure the device sees the updated available idx before the next step
     __sync_synchronize();
 
+    // 7. The device should be notified that new buffers are available by writing the queue's notify offset to the device's Queue Notify register.
     io::out16b(port(VirtIORegister::QUEUE_NOTIFY), 0);
     last_used_index++;
 }
@@ -233,9 +236,30 @@ bool initialize(PhysicalAddressResolver resolve_physical)
     if (!find_device())
         return false;
 
-    reset_and_negotiate();
+    // 2.2.1 Device Initialization Sequenceに従う
+
+    // ─── 1. リセット ─── 
+    // device status を 0 に書くとリセットされる。
+    // Reset the device. This is not required on initial start up
+    io::outb(port(VirtIORegister::DEVICE_STATUS), to_underlying(VirtIODeviceStatus::RESET));
+
+    // ─── 2. ACKNOWLEDGE ───
+    // The ACKNOWLEDGE status bit is set: we have noticed the device.
+    add_device_status(VirtIODeviceStatus::ACKNOWLEDGE);
+
+    // ─── 3. DRIVER ───
+    // The DRIVER status bit is set: we know how to drive the device.
+    add_device_status(VirtIODeviceStatus::DRIVER);
+
+    // ─── 4. feature negotiation (最小構成: 何も使わない) ───
+    // Device-specific setup, including reading the Device Feature Bits, discovery of virtqueues for the device, optional MSI-X setup, and reading and
+    // possibly writing the virtio configuration space.
+    (void)io::in32b(port(VirtIORegister::DEVICE_FEATURES)); // Device Features を読むだけ
+    io::out32b(port(VirtIORegister::DRIVER_FEATURES), 0);   // Driver Features = 0
+
 
     // ─── 5. virtqueue セットアップ ───
+    // The subset of Device Feature Bits understood by the driver is written to the device.
     // DMA バッファを先に解決しておく。キューの位置をデバイスに教えるのは
     // virtq_init() の最後なので、どちらで失敗してもデバイスに中途半端な設定は残らない。
     if (!resolve_dma_buffers(resolve_physical))
@@ -244,6 +268,7 @@ bool initialize(PhysicalAddressResolver resolve_physical)
         return false;
 
     // ─── 6. DRIVER_OK (最後) ───
+    // The DRIVER_OK status bit is set.
     add_device_status(VirtIODeviceStatus::DRIVER_OK);
 
     ready = true;
@@ -280,6 +305,11 @@ uint64_t capacity()
     const uint64_t high = io::in32b(port(VirtIORegister::CONFIG_CAPACITY_HIGH));
     return (high << 32) | low;
 }
+
+
+// 一度data_bufferに書き込んでからデバイスに渡すのは、物理アドレスがわかっている固定のバッファを経由する
+// (バウンスバッファ)ことで、virtqueueのディスクリプタに渡すアドレスが常に同じになるようにするため。
+
 
 bool read_block(uint64_t sector, uint8_t *buf)
 {

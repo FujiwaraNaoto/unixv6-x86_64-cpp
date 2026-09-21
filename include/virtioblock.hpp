@@ -5,6 +5,11 @@
 #include <type_traits>
 #include "address.hpp"
 
+/*
+Reference: https://ozlabs.org/~rusty/virtio-spec/virtio-0.9.5.pdf
+*/
+
+
 // ─── virtio legacy レジスタオフセット (I/O空間, BAR0 からの距離) ─────
 enum class VirtIORegister : uint16_t
 {
@@ -22,7 +27,7 @@ enum class VirtIORegister : uint16_t
     CONFIG_CAPACITY_HIGH = 0x18,
 };
 
-// ─── デバイスステータス ──────────────────────────────────────────
+// 2.2.2.1 Device Status
 // NOTE: FEATURES_OK (0x08) は virtio 1.0 以降のみ。legacy では使わない。
 enum class VirtIODeviceStatus : uint8_t
 {
