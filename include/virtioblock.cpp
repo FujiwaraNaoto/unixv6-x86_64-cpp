@@ -28,12 +28,18 @@ constexpr uint8_t STATUS_DRIVER      = 0x02;
 constexpr uint8_t STATUS_DRIVER_OK   = 0x04;
 
 // ─── Descriptor フラグ ───────────────────────────────────────────
-constexpr uint16_t DESC_F_NEXT  = 1;
-constexpr uint16_t DESC_F_WRITE = 2;
+enum class VirtQueueDescriptorFlags : uint16_t
+{
+    DESC_F_NEXT  = 1,
+    DESC_F_WRITE = 2,
+};
 
 // ─── virtio-blk リクエスト種別 ───────────────────────────────────
-constexpr uint32_t BLK_T_IN  = 0; // read
-constexpr uint32_t BLK_T_OUT = 1; // write
+enum class VirtIOBlockRequestType : uint32_t
+{
+    VIRTIO_BLK_T_IN  = 0, // read
+    VIRTIO_BLK_T_OUT = 1, // write
+};
 
 // ─── PCI ID (virtio legacy block device) ─────────────────────────
 constexpr uint16_t VIRTIO_VENDOR_ID     = 0x1AF4;
@@ -181,11 +187,11 @@ bool initialize(PhysicalAddressResolver resolve_physical)
 }
 
 // ─── I/O 共通処理 ────────────────────────────────────────────────
-static bool do_request(uint32_t type, uint64_t sector)
+static bool do_request(VirtIOBlockRequestType type, uint64_t sector)
 {
     if (!ready)
         return false;
-    request_header.type     = type;
+    request_header.type     = static_cast<uint32_t>(type);
     request_header.reserved = 0;
     request_header.sector   = sector;
     status_byte             = 0xFF; // 未完了マーカー
@@ -193,7 +199,7 @@ static bool do_request(uint32_t type, uint64_t sector)
     // Descriptor 0: リクエストヘッダ (デバイスが読む)
     queue.desc[0].addr  = request_header_phys;
     queue.desc[0].len   = sizeof(VirtIOBlockRequestHeader);
-    queue.desc[0].flags = DESC_F_NEXT;
+    queue.desc[0].flags = static_cast<uint16_t>(VirtQueueDescriptorFlags::DESC_F_NEXT);
     queue.desc[0].next  = 1;
 
     // Descriptor 1: データバッファ
@@ -201,13 +207,13 @@ static bool do_request(uint32_t type, uint64_t sector)
     //   write → デバイスが読む (フラグなし)
     queue.desc[1].addr  = data_buffer_phys;
     queue.desc[1].len   = SECTOR_SIZE;
-    queue.desc[1].flags = static_cast<uint16_t>(DESC_F_NEXT | (type == BLK_T_IN ? DESC_F_WRITE : 0));
+    queue.desc[1].flags = static_cast<uint16_t>(VirtQueueDescriptorFlags::DESC_F_NEXT) | (type == VirtIOBlockRequestType::VIRTIO_BLK_T_IN ? static_cast<uint16_t>(VirtQueueDescriptorFlags::DESC_F_WRITE) : static_cast<uint16_t>(0));
     queue.desc[1].next  = 2;
 
     // Descriptor 2: ステータス (デバイスが書く)
     queue.desc[2].addr  = status_byte_phys;
     queue.desc[2].len   = 1;
-    queue.desc[2].flags = DESC_F_WRITE;
+    queue.desc[2].flags = static_cast<uint16_t>(VirtQueueDescriptorFlags::DESC_F_WRITE);
     queue.desc[2].next  = 0;
 
     // Available Ring に登録
@@ -249,7 +255,7 @@ uint64_t capacity()
 
 bool read_block(uint64_t sector, uint8_t *buf)
 {
-    if (!do_request(BLK_T_IN, sector))
+    if (!do_request(VirtIOBlockRequestType::VIRTIO_BLK_T_IN, sector))
         return false;
     std::memcpy(buf, data_buffer, SECTOR_SIZE);
     return true;
@@ -258,7 +264,7 @@ bool read_block(uint64_t sector, uint8_t *buf)
 bool write_block(uint64_t sector, const uint8_t *buf)
 {
     std::memcpy(data_buffer, buf, SECTOR_SIZE);
-    return do_request(BLK_T_OUT, sector);
+    return do_request(VirtIOBlockRequestType::VIRTIO_BLK_T_OUT, sector);
 }
 
 } // namespace VirtIOBlock
