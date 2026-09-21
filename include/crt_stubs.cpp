@@ -68,6 +68,21 @@ extern "C"
         return static_cast<std::size_t>(p - s);
     }
 
+    // 先頭から比べて、最初に違うバイトの差を返す (同じなら 0)。
+    int memcmp(const void *lhs, const void *rhs, std::size_t count)
+    {
+        const auto *l = static_cast<const uint8_t *>(lhs);
+        const auto *r = static_cast<const uint8_t *>(rhs);
+        for (std::size_t i = 0; i < count; i++)
+        {
+            if (l[i] != r[i])
+            {
+                return static_cast<int>(l[i]) - static_cast<int>(r[i]);
+            }
+        }
+        return 0;
+    }
+
     // DirectoryEntry::name のような固定長バッファへのコピーで使う。
     // count に満たない分は '\0' で埋める (strncpy の仕様)。
     char *strncpy(char *dest, const char *src, std::size_t count)
