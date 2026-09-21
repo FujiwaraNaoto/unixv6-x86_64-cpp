@@ -1,4 +1,5 @@
 #include <cstdint>
+#include <optional>
 #include "vga.hpp"
 #include "serial.hpp"
 #include "exception.hpp"
@@ -16,6 +17,7 @@
 #include "usermode.hpp"
 #include "virtioblock.hpp"
 #include "buffer_cache.hpp"
+#include "file_system.hpp"
 
 // tests/ 以下は make tests (TESTS=1) のときだけコンパイル・リンクされる。
 // 通常ビルドではテストコードはカーネルに一切含まれない。
@@ -53,6 +55,10 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, uint32_t mb_addr
     // (kernel_main は戻らないので、ローカルに置いても寿命はカーネルと同じ)
     serial::Serial serial_instance;
     serial::serial = &serial_instance;
+
+    // 出力を捨てる既定のコンソール。出力先を渡されなかったモジュールが使う。
+    NullConsole null_console_instance;
+    null_console = &null_console_instance;
 
     // 例外ハンドラは asm から呼ばれて引数を受け取れないので、出力先を登録しておく。
     // IDT の構築時に VGA へ差し替わるが、それまでの例外はシリアルに出る。
@@ -111,15 +117,45 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, uint32_t mb_addr
 
     process::ProcessManager process_manager(heap::heap_ptr);
 
-    BufferCache::Manager buffer_cache(BufferCache::BlockDevice{
+    // 仮想 → 物理の変換方法はカーネル側の関心事なので、ドライバには関数として渡す。
+    // (キャプチャなしラムダは関数ポインタへ暗黙変換される)
+    const auto resolve_physical = [](const void *p) -> std::optional<uint64_t>
+    {
+        if (vmm::vmm_ptr == nullptr)
+        {
+            return std::nullopt; // VMM 未初期化: 変換できない
+        }
+        // ドライバを vmm の型に依存させないよう、PhysicalAddress から中身を取り出して渡す。
+        return vmm::vmm_ptr->virtual_to_physical(PageVirtualAddress{reinterpret_cast<uint64_t>(p)}).address;
+    };
+
+    // ディスクに読み書きするので、BufferCache / FileSystem より先に初期化する。
+    if (!VirtIOBlock::initialize(resolve_physical))
+    {
+        vga::vga->puts("VirtIO block device initialization failed\n");
+        asm volatile("hlt");
+    }
+
+    auto device = BufferCache::BlockDevice{
         .read_block  = &VirtIOBlock::read_block,
         .write_block = &VirtIOBlock::write_block,
-    });
+    };
+
+    BufferCache::Manager buffer_cache(device);
     if (not buffer_cache.valid())
     {
         vga::vga->puts("BufferCache initialization failed\n");
         asm volatile("hlt");
     }
+    // block_store を渡さずに Manager を作ったときの既定値。
+    // (グローバルに置くと初期化順序がリンク順任せになるので、ここで作る)
+    NullBlockStore null_block_store_instance;
+    null_block_store = &null_block_store_instance;
+
+    BufferCache::BlockStore block_store(
+        device
+    );
+    FileSystem::Manager fs_manager(VirtIOBlock::capacity(), &block_store, vga::vga);
 #ifdef ENABLE_TESTS
     // 各機能の動作確認 (どのテストを走らせるかは tests/tests.cpp で切り替える)
     tests::run_all(vga::vga);

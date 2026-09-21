@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <cstddef>
 #include <functional>
+#include "block_store.hpp"
 
 // ─── バッファキャッシュ層 ────────────────────────────────────────
 // 目的:
@@ -105,14 +106,6 @@ void release(Buffer *buffer);
 // read() で取得した参照を、スコープを抜けるときに自動で release() する RAII ガード。
 // release() の呼び忘れはバッファを枯渇させる (acquire が nullptr を返すようになる)
 // ので、上位層では生の read()/release() ではなくこちらを使う。
-//
-//   if (auto block = BufferCache::acquire(blockno))
-//   {
-//       block->data[0] = 0xFF;
-//       block.mark_dirty();
-//   } // ここで自動的に release される
-//
-// コピーすると解放が二重になるのでコピー禁止、受け渡し用にムーブのみ許可する。
 class BufferRef final
 {
   public:
@@ -141,7 +134,6 @@ class BufferRef final
         return *this;
     }
 
-    // 取得に成功したかどうか。if (auto b = acquire(n)) と書ける。
     explicit operator bool() const
     {
         return buffer_ != nullptr;
@@ -185,6 +177,21 @@ class BufferRef final
 
 // read() の RAII 版。失敗時は空の BufferRef (operator bool が false) を返す。
 BufferRef acquire(uint32_t blockno);
+
+
+class BlockStore final : public IBlockStore
+{
+  public:
+    explicit BlockStore(const BlockDevice &device) : device_(device) { }
+
+    BlockRef acquire(uint32_t blockno) override;
+    bool write_back(uint32_t blockno) override;
+    void release(uint32_t blockno) override;
+
+  private:
+    BlockDevice device_;
+};
+
 
 // キャッシュの効き具合を確認するための統計。
 struct Statistics
