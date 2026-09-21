@@ -81,21 +81,27 @@ PhysicalAddress request_header_phys;
 PhysicalAddress data_buffer_phys;
 PhysicalAddress status_byte_phys;
 
+// デバイスが最後に処理し終えるはずの used->idx。
+// virtq_kick() で 1 進め、queue.used->idx がこれに追いつけば完了。
+uint16_t last_used_index = 0;
+
+// ─── レジスタアクセス ────────────────────────────────────────────
 uint16_t port(uint16_t offset)
 {
     return static_cast<uint16_t>(io_base + offset);
 }
 
-} // namespace
-
-namespace VirtIOBlock
+// デバイスステータスにビットを追加する (既に立っているビットは残す)
+void add_device_status(uint8_t bits)
 {
+    io::outb(port(REG_DEVICE_STATUS), io::inb(port(REG_DEVICE_STATUS)) | bits);
+}
 
-bool initialize(PhysicalAddressResolver resolve_physical)
+// ─── 初期化の各段階 ──────────────────────────────────────────────
+
+// PCI バスから legacy virtio-blk を探し、io_base を設定する
+bool find_device()
 {
-    if (resolve_physical == nullptr)
-        return false; // 物理アドレスが引けないので初期化できない
-
     auto found = PCI::pci_device_exists(VIRTIO_VENDOR_ID, VIRTIO_BLK_DEVICE_ID);
     if (!found)
         return false;
@@ -109,21 +115,43 @@ bool initialize(PhysicalAddressResolver resolve_physical)
         return false;
 
     PCI::enable_bus_master(dev); // DMA を行うので Bus Master を有効化
+    return true;
+}
 
+// リセットしてドライバが認識したことを伝え、feature を決める
+void reset_and_negotiate()
+{
     // ─── 1. リセット ───
     io::outb(port(REG_DEVICE_STATUS), 0);
 
     // ─── 2. ACKNOWLEDGE ───
-    io::outb(port(REG_DEVICE_STATUS), STATUS_ACKNOWLEDGE);
+    add_device_status(STATUS_ACKNOWLEDGE);
 
     // ─── 3. DRIVER ───
-    io::outb(port(REG_DEVICE_STATUS), STATUS_ACKNOWLEDGE | STATUS_DRIVER);
+    add_device_status(STATUS_DRIVER);
 
     // ─── 4. feature negotiation (最小構成: 何も使わない) ───
     (void)io::in32b(port(REG_DEVICE_FEATURES)); // Device Features を読むだけ
     io::out32b(port(REG_DRIVER_FEATURES), 0);   // Driver Features = 0
+}
 
-    // ─── 5. virtqueue セットアップ ───
+// DMA バッファの物理アドレスを解決して保持する (以降は変換関数を使わない)
+bool resolve_dma_buffers(VirtIOBlock::PhysicalAddressResolver resolve_physical)
+{
+    const PhysicalAddress header_phys = resolve_physical(&request_header);
+    const PhysicalAddress buffer_phys = resolve_physical(data_buffer);
+    const PhysicalAddress status_phys = resolve_physical(const_cast<const uint8_t *>(&status_byte));
+    if (!header_phys || !buffer_phys || !status_phys)
+        return false;
+    request_header_phys = header_phys;
+    data_buffer_phys    = buffer_phys;
+    status_byte_phys    = status_phys;
+    return true;
+}
+
+// virtqueue 0 を組み立て、最後にその位置をデバイスに教える
+bool virtq_init(VirtIOBlock::PhysicalAddressResolver resolve_physical)
+{
     io::out16b(port(REG_QUEUE_SELECT), 0);        // Queue Select = 0
     queue_size = io::in16b(port(REG_QUEUE_SIZE)); // Queue Size
     if (queue_size == 0)
@@ -143,10 +171,11 @@ bool initialize(PhysicalAddressResolver resolve_physical)
 
     // virtqueue 全体をゼロクリアする。
     // デバイスはリセット時に自分の used->idx を 0 に戻すので、こちら側の
-    // queue.avail->idx / queue.used->idx に前回の値が残っていると完了待ちが
-    // 永久に抜けなくなる。.bss は起動時にゼロだが initialize() の再実行に備える。
-    // (request_header は do_request() で全フィールド代入するのでクリア不要)
+    // queue.avail->idx / queue.used->idx / last_used_index に前回の値が残っていると
+    // 完了待ちが永久に抜けなくなる。.bss は起動時にゼロだが initialize() の再実行に備える。
+    // (request_header は setup_request() で全フィールド代入するのでクリア不要)
     std::memset(virtqueue_memory, 0, sizeof(virtqueue_memory));
+    last_used_index = 0;
 
     // ポインタを組み立てる
     queue.desc  = reinterpret_cast<VirtQueueDescriptor *>(virtqueue_memory);
@@ -165,32 +194,17 @@ bool initialize(PhysicalAddressResolver resolve_physical)
             return false;
     }
 
-    // DMA バッファの物理アドレスもここで解決しておく (以降は変換関数を使わない)
-    const PhysicalAddress header_phys = resolve_physical(&request_header);
-    const PhysicalAddress buffer_phys = resolve_physical(data_buffer);
-    const PhysicalAddress status_phys = resolve_physical(const_cast<const uint8_t *>(&status_byte));
-    if (!header_phys || !buffer_phys || !status_phys)
-        return false;
-    request_header_phys = header_phys;
-    data_buffer_phys    = buffer_phys;
-    status_byte_phys    = status_phys;
-
     // 全部解決できてからデバイスにキューの位置を教える
     // (途中で失敗して return する経路でデバイスに中途半端な設定を残さないため)
     io::out32b(port(REG_QUEUE_ADDRESS), static_cast<uint32_t>(*queue_phys.address >> 12));
-
-    // ─── 6. DRIVER_OK (最後) ───
-    io::outb(port(REG_DEVICE_STATUS), STATUS_ACKNOWLEDGE | STATUS_DRIVER | STATUS_DRIVER_OK);
-
-    ready = true;
     return true;
 }
 
-// ─── I/O 共通処理 ────────────────────────────────────────────────
-static bool do_request(VirtIOBlockRequestType type, uint64_t sector)
+// ─── リクエストの各段階 ──────────────────────────────────────────
+
+// リクエストヘッダと 3 つのディスクリプタ (ヘッダ → データ → ステータス) を書く
+void setup_request(VirtIOBlockRequestType type, uint64_t sector)
 {
-    if (!ready)
-        return false;
     request_header.type     = static_cast<uint32_t>(type);
     request_header.reserved = 0;
     request_header.sector   = sector;
@@ -215,25 +229,71 @@ static bool do_request(VirtIOBlockRequestType type, uint64_t sector)
     queue.desc[2].len   = 1;
     queue.desc[2].flags = static_cast<uint16_t>(VirtQueueDescriptorFlags::DESC_F_WRITE);
     queue.desc[2].next  = 0;
+}
 
-    // Available Ring に登録
-    uint16_t last_used                               = queue.used->idx;
-    queue.avail->ring[queue.avail->idx % queue_size] = 0; // チェーン先頭のDescriptor番号
-    __sync_synchronize();                                 // メモリバリア
+// desc_index から始まるチェーンを Available Ring に登録し、デバイスに通知する
+void virtq_kick(uint16_t desc_index)
+{
+    queue.avail->ring[queue.avail->idx % queue_size] = desc_index;
+    __sync_synchronize(); // メモリバリア
     queue.avail->idx++;
     __sync_synchronize();
 
-    // デバイスに通知
     io::out16b(port(REG_QUEUE_NOTIFY), 0);
+    last_used_index++;
+}
 
-    // 完了待ち (ポーリング)。
+// デバイスがまだ処理中か (used->idx が last_used_index に追いついていないか)
+bool virtq_is_busy()
+{
     // queue.used->idx は非 volatile なので、"memory" クロバーを挟まないと -O2 で
-    // ループ外に読み出しが巻き上げられて無限ループになる。
-    while (true)
+    // ポーリングループの外に読み出しが巻き上げられて無限ループになる。
+    asm volatile("pause" ::: "memory");
+    return queue.used->idx != last_used_index;
+}
+
+} // namespace
+
+namespace VirtIOBlock
+{
+
+bool initialize(PhysicalAddressResolver resolve_physical)
+{
+    if (resolve_physical == nullptr)
+        return false; // 物理アドレスが引けないので初期化できない
+
+    if (!find_device())
+        return false;
+
+    reset_and_negotiate();
+
+    // ─── 5. virtqueue セットアップ ───
+    // DMA バッファを先に解決しておく。キューの位置をデバイスに教えるのは
+    // virtq_init() の最後なので、どちらで失敗してもデバイスに中途半端な設定は残らない。
+    if (!resolve_dma_buffers(resolve_physical))
+        return false;
+    if (!virtq_init(resolve_physical))
+        return false;
+
+    // ─── 6. DRIVER_OK (最後) ───
+    add_device_status(STATUS_DRIVER_OK);
+
+    ready = true;
+    return true;
+}
+
+// ─── I/O 共通処理 ────────────────────────────────────────────────
+static bool do_request(VirtIOBlockRequestType type, uint64_t sector)
+{
+    if (!ready)
+        return false;
+
+    setup_request(type, sector);
+    virtq_kick(0); // チェーン先頭のDescriptor番号
+
+    // 完了待ち (ポーリング)
+    while (virtq_is_busy())
     {
-        asm volatile("pause" ::: "memory");
-        if (queue.used->idx != last_used)
-            break;
     }
     __sync_synchronize();
 
