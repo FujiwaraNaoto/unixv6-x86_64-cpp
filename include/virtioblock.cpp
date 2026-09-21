@@ -77,9 +77,9 @@ bool ready = false;
 // そのマッピングはブート後変化しない (プロセス切り替えでも PML4 の上位エントリは
 // 共有される) ため、初期化時に一度だけ解決して保持すればよい。
 // これにより read/write の実行経路からアドレス変換の依存が消える。
-uint64_t request_header_phys = 0;
-uint64_t data_buffer_phys    = 0;
-uint64_t status_byte_phys    = 0;
+PhysicalAddress request_header_phys;
+PhysicalAddress data_buffer_phys;
+PhysicalAddress status_byte_phys;
 
 uint16_t port(uint16_t offset)
 {
@@ -155,29 +155,29 @@ bool initialize(PhysicalAddressResolver resolve_physical)
 
     // デバイスにはページ番号を 1 個しか渡せない = キュー全体が物理連続である前提。
     // 仮想連続でも物理連続とは限らないので確認しておく。
-    const std::optional<uint64_t> queue_phys = resolve_physical(virtqueue_memory);
+    const PhysicalAddress queue_phys = resolve_physical(virtqueue_memory);
     if (!queue_phys)
         return false;
     for (size_t off = VIRTIO_PAGE_SIZE; off < sizeof(virtqueue_memory); off += VIRTIO_PAGE_SIZE)
     {
-        const std::optional<uint64_t> page_phys = resolve_physical(virtqueue_memory + off);
-        if (!page_phys || *page_phys != *queue_phys + off)
+        const PhysicalAddress page_phys = resolve_physical(virtqueue_memory + off);
+        if (!page_phys || *page_phys.address != *queue_phys.address + off)
             return false;
     }
 
     // DMA バッファの物理アドレスもここで解決しておく (以降は変換関数を使わない)
-    const std::optional<uint64_t> header_phys = resolve_physical(&request_header);
-    const std::optional<uint64_t> buffer_phys = resolve_physical(data_buffer);
-    const std::optional<uint64_t> status_phys = resolve_physical(const_cast<const uint8_t *>(&status_byte));
+    const PhysicalAddress header_phys = resolve_physical(&request_header);
+    const PhysicalAddress buffer_phys = resolve_physical(data_buffer);
+    const PhysicalAddress status_phys = resolve_physical(const_cast<const uint8_t *>(&status_byte));
     if (!header_phys || !buffer_phys || !status_phys)
         return false;
-    request_header_phys = *header_phys;
-    data_buffer_phys    = *buffer_phys;
-    status_byte_phys    = *status_phys;
+    request_header_phys = header_phys;
+    data_buffer_phys    = buffer_phys;
+    status_byte_phys    = status_phys;
 
     // 全部解決できてからデバイスにキューの位置を教える
     // (途中で失敗して return する経路でデバイスに中途半端な設定を残さないため)
-    io::out32b(port(REG_QUEUE_ADDRESS), static_cast<uint32_t>(*queue_phys >> 12));
+    io::out32b(port(REG_QUEUE_ADDRESS), static_cast<uint32_t>(*queue_phys.address >> 12));
 
     // ─── 6. DRIVER_OK (最後) ───
     io::outb(port(REG_DEVICE_STATUS), STATUS_ACKNOWLEDGE | STATUS_DRIVER | STATUS_DRIVER_OK);
@@ -197,7 +197,7 @@ static bool do_request(VirtIOBlockRequestType type, uint64_t sector)
     status_byte             = 0xFF; // 未完了マーカー
 
     // Descriptor 0: リクエストヘッダ (デバイスが読む)
-    queue.desc[0].addr  = request_header_phys;
+    queue.desc[0].addr  = *request_header_phys.address;
     queue.desc[0].len   = sizeof(VirtIOBlockRequestHeader);
     queue.desc[0].flags = static_cast<uint16_t>(VirtQueueDescriptorFlags::DESC_F_NEXT);
     queue.desc[0].next  = 1;
@@ -205,13 +205,13 @@ static bool do_request(VirtIOBlockRequestType type, uint64_t sector)
     // Descriptor 1: データバッファ
     //   read  → デバイスが書く (DESC_F_WRITE)
     //   write → デバイスが読む (フラグなし)
-    queue.desc[1].addr  = data_buffer_phys;
+    queue.desc[1].addr  = *data_buffer_phys.address;
     queue.desc[1].len   = SECTOR_SIZE;
     queue.desc[1].flags = static_cast<uint16_t>(VirtQueueDescriptorFlags::DESC_F_NEXT) | (type == VirtIOBlockRequestType::VIRTIO_BLK_T_IN ? static_cast<uint16_t>(VirtQueueDescriptorFlags::DESC_F_WRITE) : static_cast<uint16_t>(0));
     queue.desc[1].next  = 2;
 
     // Descriptor 2: ステータス (デバイスが書く)
-    queue.desc[2].addr  = status_byte_phys;
+    queue.desc[2].addr  = *status_byte_phys.address;
     queue.desc[2].len   = 1;
     queue.desc[2].flags = static_cast<uint16_t>(VirtQueueDescriptorFlags::DESC_F_WRITE);
     queue.desc[2].next  = 0;
