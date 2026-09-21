@@ -57,6 +57,8 @@ void virtio_block_read(IConsole *console);
 // 最後のセクタを一時的に書き換え、終わったら元の中身に戻す。
 // デバイスを初期化済みの状態 (virtio_block_read() の後) で呼ぶこと。
 void virtio_block_read_write(IConsole *console);
+// inode: 確保 / 参照 / ブロック対応 (直接・間接) / 読み書き / 切り詰めを確認する。
+void inode_read_write(IConsole *console);
 
 // 有効化しているテストをまとめて実行する。
 // どのテストを走らせるかは tests.cpp 側で切り替える。

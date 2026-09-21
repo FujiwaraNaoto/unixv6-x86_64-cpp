@@ -27,6 +27,7 @@ void run_all(IConsole *console)
 
     virtio_block_read(out);
     virtio_block_read_write(out);
+    inode_read_write(out);
 }
 
 } // namespace tests
