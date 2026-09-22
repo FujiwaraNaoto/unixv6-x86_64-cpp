@@ -39,7 +39,7 @@ enum class VirtIODeviceStatus : uint8_t
 };
 
 // ─── Descriptor フラグ ───────────────────────────────────────────
-enum class VirtQueueDescriptorFlags : uint16_t
+enum class VRingDescriptorFlags : uint16_t
 {
     NONE         = 0,
     DESC_F_NEXT  = 1,
@@ -47,9 +47,9 @@ enum class VirtQueueDescriptorFlags : uint16_t
 };
 
 // フラグ同士を | で組み合わせられるようにする (呼び出し側で static_cast しなくて済む)
-constexpr VirtQueueDescriptorFlags operator|(VirtQueueDescriptorFlags a, VirtQueueDescriptorFlags b)
+constexpr VRingDescriptorFlags operator|(VRingDescriptorFlags a, VRingDescriptorFlags b)
 {
-    return static_cast<VirtQueueDescriptorFlags>(static_cast<uint16_t>(a) | static_cast<uint16_t>(b));
+    return static_cast<VRingDescriptorFlags>(static_cast<uint16_t>(a) | static_cast<uint16_t>(b));
 }
 
 // ─── virtio-blk リクエスト種別 ───────────────────────────────────
@@ -76,16 +76,16 @@ constexpr std::underlying_type_t<E> to_underlying(E e)
     return static_cast<std::underlying_type_t<E>>(e);
 }
 
-struct [[gnu::packed]] VirtQueueDescriptor
+struct [[gnu::packed]] VRingDescriptor
 {
     uint64_t addr;  // バッファの物理アドレス
     uint32_t len;   // バッファの長さ
-    VirtQueueDescriptorFlags flags; // フラグ (DESC_F_NEXT, DESC_F_WRITE)
+    VRingDescriptorFlags flags; // フラグ (DESC_F_NEXT, DESC_F_WRITE)
     uint16_t next; // 次のディスクリプタのインデックス (flags に NEXT が立っている場合のみ有効)
 };
 
 // vring_avail
-struct [[gnu::packed]] VirtQueueAvailable
+struct [[gnu::packed]] VRingAvailable
 {
     uint16_t flags;  // フラグ (VIRTQ_AVAIL_F_NO_INTERRUPT)
     uint16_t idx;    // 次に使用可能なディスクリプタのインデックス
@@ -98,18 +98,18 @@ struct [[gnu::packed]] VirtQueueAvailable
 };
 
 // vring_used_elem
-struct [[gnu::packed]] VirtQueueUsedElement
+struct [[gnu::packed]] VRingUsedElement
 {
     uint32_t id;  // 使用済みディスクリプタのインデックス
     uint32_t len; // 使用済みバッファの長さ
 };
 
 // vring_used
-struct [[gnu::packed]] VirtQueueUsed
+struct [[gnu::packed]] VRingUsed
 {
     uint16_t flags;              // フラグ (VIRTQ_USED_F_NO_NOTIFY)
     uint16_t idx;                // 次に使用済みのディスクリプタのインデックス
-    VirtQueueUsedElement ring[]; // 使用済みディスクリプタの配列
+    VRingUsedElement ring[]; // 使用済みディスクリプタの配列
     // この後ろ (ring[num] の位置) に avail_event の uint16_t が 1 個続く。
     // avail_event: デバイスが書き、ドライバが読む。avail の idx がこの値を超えるまで
     //              ドライバからの通知 (Queue Notify) を控えてもらう
@@ -122,12 +122,12 @@ struct [[gnu::packed]] VirtQueueUsed
 // スマートポインタにしてはいけない: new で作られていないメモリを delete する
 // ことになり、しかも 1 個のバッファを 3 つが「単独所有」する形になってしまう。
 // Appendix A の struct vring に相当。
-struct VirtQueueView
+struct VRing
 {
     uint16_t num              = 0;       // キューのサイズ (ディスクリプタの個数。2 のべき乗)
-    VirtQueueDescriptor *desc = nullptr; // Descriptor Table
-    VirtQueueAvailable *avail = nullptr; // Available Ring (ドライバが書き、デバイスが読む)
-    VirtQueueUsed *used       = nullptr; // Used Ring (デバイスが書き、ドライバが読む)
+    VRingDescriptor *desc = nullptr; // Descriptor Table
+    VRingAvailable *avail = nullptr; // Available Ring (ドライバが書き、デバイスが読む)
+    VRingUsed *used       = nullptr; // Used Ring (デバイスが書き、ドライバが読む)
 };
 
 // ─── virtqueue のレイアウト (Appendix A: virtio_ring.h) ──────────
@@ -151,18 +151,18 @@ struct VirtQueueView
 // Appendix A の vring_size() に相当。virtqueue 全体に必要なバイト数を返す。
 constexpr size_t vring_size(uint16_t num, size_t align)
 {
-    return ((sizeof(VirtQueueDescriptor) * num + sizeof(uint16_t) * (2 + num) + align - 1) & ~(align - 1))
-           + sizeof(uint16_t) * 3 + sizeof(VirtQueueUsedElement) * num;
+    return ((sizeof(VRingDescriptor) * num + sizeof(uint16_t) * (2 + num) + align - 1) & ~(align - 1))
+           + sizeof(uint16_t) * 3 + sizeof(VRingUsedElement) * num;
 }
 
 // Appendix A の vring_init() に相当。
 // p から始まるメモリに desc / avail / used を並べ、vr がそれぞれを指すようにする。
-inline void vring_init(VirtQueueView &vr, uint16_t num, uint8_t *p, uintptr_t align)
+inline void vring_init(VRing &vr, uint16_t num, uint8_t *p, uintptr_t align)
 {
     vr.num   = num;
-    vr.desc  = reinterpret_cast<VirtQueueDescriptor *>(p);
-    vr.avail = reinterpret_cast<VirtQueueAvailable *>(p + num * sizeof(VirtQueueDescriptor));
-    vr.used  = reinterpret_cast<VirtQueueUsed *>((reinterpret_cast<uintptr_t>(&vr.avail->ring[num]) + align - 1) & ~(align - 1));
+    vr.desc  = reinterpret_cast<VRingDescriptor *>(p);
+    vr.avail = reinterpret_cast<VRingAvailable *>(p + num * sizeof(VRingDescriptor));
+    vr.used  = reinterpret_cast<VRingUsed *>((reinterpret_cast<uintptr_t>(&vr.avail->ring[num]) + align - 1) & ~(align - 1));
 }
 
 struct [[gnu::packed]] VirtIOBlockRequestHeader

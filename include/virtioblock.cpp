@@ -34,8 +34,8 @@ alignas(1) volatile VirtIOBlockStatus status_byte{};
 
 // ─── ドライバ内部状態 ────────────────────────────────────────────
 uint16_t io_base = 0;
-// virtqueue_memory の中を指す view (型は virtioblock.hpp の VirtQueueView)
-VirtQueueView queue;
+// virtqueue_memory の中を指す view (型は virtioblock.hpp の VRing)
+VRing queue;
 bool ready = false;
 
 // DMA バッファの物理アドレス。対象はいずれもカーネル .bss 上の固定の変数で、
@@ -160,7 +160,7 @@ void setup_request(VirtIOBlockRequestType type, uint64_t sector)
     // If there is a buffer element after this:
     // i. Set d.next to the index of the next free descriptor element.
     // ii. Set d.flags to indicate that there is a next descriptor (VIRTQ_DESC_F_NEXT).
-    queue.desc[0].flags = VirtQueueDescriptorFlags::DESC_F_NEXT;
+    queue.desc[0].flags = VRingDescriptorFlags::DESC_F_NEXT;
     queue.desc[0].next  = 1;
 
     // Descriptor 1: データバッファ
@@ -168,13 +168,13 @@ void setup_request(VirtIOBlockRequestType type, uint64_t sector)
     //   write → デバイスが読む (フラグなし)
     queue.desc[1].addr  = *data_buffer_phys.address;
     queue.desc[1].len   = SECTOR_SIZE;
-    queue.desc[1].flags = VirtQueueDescriptorFlags::DESC_F_NEXT | (type == VirtIOBlockRequestType::VIRTIO_BLK_T_IN ? VirtQueueDescriptorFlags::DESC_F_WRITE : VirtQueueDescriptorFlags::NONE);
+    queue.desc[1].flags = VRingDescriptorFlags::DESC_F_NEXT | (type == VirtIOBlockRequestType::VIRTIO_BLK_T_IN ? VRingDescriptorFlags::DESC_F_WRITE : VRingDescriptorFlags::NONE);
     queue.desc[1].next  = 2;
 
     // Descriptor 2: ステータス (デバイスが書く)
     queue.desc[2].addr  = *status_byte_phys.address;
     queue.desc[2].len   = 1;
-    queue.desc[2].flags = VirtQueueDescriptorFlags::DESC_F_WRITE;
+    queue.desc[2].flags = VRingDescriptorFlags::DESC_F_WRITE;
     queue.desc[2].next  = 0;
 }
 
