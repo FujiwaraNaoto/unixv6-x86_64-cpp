@@ -83,26 +83,48 @@ struct [[gnu::packed]] VirtQueueDescriptor
     uint16_t next; // 次のディスクリプタのインデックス (flags に NEXT が立っている場合のみ有効)
 };
 
+// vring_avail
 struct [[gnu::packed]] VirtQueueAvailable
 {
     uint16_t flags;  // フラグ (VIRTQ_AVAIL_F_NO_INTERRUPT)
     uint16_t idx;    // 次に使用可能なディスクリプタのインデックス
     uint16_t ring[]; // 使用可能なディスクリプタのインデックスの配列
-                     // (この後ろに used_event の uint16_t が 1 個続く)
+    // この後ろ (ring[queue_size] の位置) に used_event の uint16_t が 1 個続く。
+    // 位置が実行時のキューサイズで決まるので、フィールドとしては書けない
+    // (大きさ未指定の配列 ring[] は構造体の最後にしか置けない)。
+    // used_event: ドライバが書き、デバイスが読む。used の idx がこの値を超えるまで
+    //             割り込みを控えてもらう (VIRTIO_RING_F_EVENT_IDX を使うときだけ有効)。
 };
 
+// vring_used_elem
 struct [[gnu::packed]] VirtQueueUsedElement
 {
     uint32_t id;  // 使用済みディスクリプタのインデックス
     uint32_t len; // 使用済みバッファの長さ
 };
 
+// vring_used
 struct [[gnu::packed]] VirtQueueUsed
 {
     uint16_t flags;              // フラグ (VIRTQ_USED_F_NO_NOTIFY)
     uint16_t idx;                // 次に使用済みのディスクリプタのインデックス
     VirtQueueUsedElement ring[]; // 使用済みディスクリプタの配列
-                                 // (この後ろに avail_event の uint16_t が 1 個続く)
+    // この後ろ (ring[queue_size] の位置) に avail_event の uint16_t が 1 個続く。
+    // avail_event: デバイスが書き、ドライバが読む。avail の idx がこの値を超えるまで
+    //              ドライバからの通知 (Queue Notify) を控えてもらう
+    //              (VIRTIO_RING_F_EVENT_IDX を使うときだけ有効)。
+};
+
+// virtqueue のメモリの中を指す非所有の view (3つで1組)。
+// 実体は virtioblock.cpp の静的配列 virtqueue_memory 1 個で、ここはその内部を
+// 指しているだけなので解放しない。
+// スマートポインタにしてはいけない: new で作られていないメモリを delete する
+// ことになり、しかも 1 個のバッファを 3 つが「単独所有」する形になってしまう。
+struct VirtQueueView
+{
+    VirtQueueDescriptor *desc = nullptr; // Descriptor Table
+    VirtQueueAvailable *avail = nullptr; // Available Ring (ドライバが書き、デバイスが読む)
+    VirtQueueUsed *used       = nullptr; // Used Ring (デバイスが書き、ドライバが読む)
 };
 
 struct [[gnu::packed]] VirtIOBlockRequestHeader

@@ -35,16 +35,7 @@ alignas(1) volatile VirtIOBlockStatus status_byte{};
 // ─── ドライバ内部状態 ────────────────────────────────────────────
 uint16_t io_base    = 0;
 uint16_t queue_size = 0;
-// virtqueue_memory の中を指す非所有の view (3つで1組)。
-// 実体は上の静的配列 1 個で、ここはその内部を指しているだけなので解放しない。
-// スマートポインタにしてはいけない: new で作られていないメモリを delete する
-// ことになり、しかも 1 個のバッファを 3 つが「単独所有」する形になってしまう。
-struct VirtQueueView
-{
-    VirtQueueDescriptor *desc = nullptr; // Descriptor Table
-    VirtQueueAvailable *avail = nullptr; // Available Ring (ドライバが書き、デバイスが読む)
-    VirtQueueUsed *used       = nullptr; // Used Ring (デバイスが書き、ドライバが読む)
-};
+// virtqueue_memory の中を指す view (型は virtioblock.hpp の VirtQueueView)
 VirtQueueView queue;
 bool ready = false;
 
@@ -137,7 +128,7 @@ bool virtq_init(VirtIOBlock::PhysicalAddressResolver resolve_physical)
     std::memset(virtqueue_memory, 0, sizeof(virtqueue_memory));
     last_used_index = 0;
 
-    // ポインタを組み立てる
+    // 1.1 Virtqueues
     queue.desc  = reinterpret_cast<VirtQueueDescriptor *>(virtqueue_memory);
     queue.avail = reinterpret_cast<VirtQueueAvailable *>(virtqueue_memory + descriptor_table_size);
     queue.used  = reinterpret_cast<VirtQueueUsed *>(virtqueue_memory + used_ring_offset);
@@ -238,7 +229,7 @@ bool initialize(PhysicalAddressResolver resolve_physical)
 
     // 2.2.1 Device Initialization Sequenceに従う
 
-    // ─── 1. リセット ─── 
+    // ─── 1. RESET ───
     // device status を 0 に書くとリセットされる。
     // Reset the device. This is not required on initial start up
     io::outb(port(VirtIORegister::DEVICE_STATUS), to_underlying(VirtIODeviceStatus::RESET));
@@ -267,7 +258,7 @@ bool initialize(PhysicalAddressResolver resolve_physical)
     if (!virtq_init(resolve_physical))
         return false;
 
-    // ─── 6. DRIVER_OK (最後) ───
+    // ─── 6. DRIVER_OK  ───
     // The DRIVER_OK status bit is set.
     add_device_status(VirtIODeviceStatus::DRIVER_OK);
 
@@ -309,8 +300,6 @@ uint64_t capacity()
 
 // 一度data_bufferに書き込んでからデバイスに渡すのは、物理アドレスがわかっている固定のバッファを経由する
 // (バウンスバッファ)ことで、virtqueueのディスクリプタに渡すアドレスが常に同じになるようにするため。
-
-
 bool read_block(uint64_t sector, uint8_t *buf)
 {
     if (!do_request(VirtIOBlockRequestType::VIRTIO_BLK_T_IN, sector))
