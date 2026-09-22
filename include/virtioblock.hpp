@@ -149,20 +149,20 @@ struct VRing
 //       ちょうど align の倍数にはならないので、切り上げの余白に収まる。
 
 // Appendix A の vring_size() に相当。virtqueue 全体に必要なバイト数を返す。
-constexpr size_t vring_size(uint16_t num, size_t align)
+constexpr size_t vring_size(uint16_t queue_size, size_t align)
 {
-    return ((sizeof(VRingDescriptor) * num + sizeof(uint16_t) * (2 + num) + align - 1) & ~(align - 1))
-           + sizeof(uint16_t) * 3 + sizeof(VRingUsedElement) * num;
+    return ((sizeof(VRingDescriptor) * queue_size + sizeof(uint16_t) * (2 + queue_size) + align - 1) & ~(align - 1))
+           + sizeof(uint16_t) * 3 + sizeof(VRingUsedElement) * queue_size;
 }
 
 // Appendix A の vring_init() に相当。
 // p から始まるメモリに desc / avail / used を並べ、vr がそれぞれを指すようにする。
-inline void vring_init(VRing &vr, uint16_t num, uint8_t *p, uintptr_t align)
+inline void vring_init(VRing &vr, uint16_t queue_size, uint8_t *p, uintptr_t align)
 {
-    vr.num   = num;
+    vr.num   = queue_size;
     vr.desc  = reinterpret_cast<VRingDescriptor *>(p);
-    vr.avail = reinterpret_cast<VRingAvailable *>(p + num * sizeof(VRingDescriptor));
-    vr.used  = reinterpret_cast<VRingUsed *>((reinterpret_cast<uintptr_t>(&vr.avail->ring[num]) + align - 1) & ~(align - 1));
+    vr.avail = reinterpret_cast<VRingAvailable *>(p + queue_size * sizeof(VRingDescriptor));
+    vr.used  = reinterpret_cast<VRingUsed *>((reinterpret_cast<uintptr_t>(&vr.avail->ring[queue_size]) + align - 1) & ~(align - 1));
 }
 
 struct [[gnu::packed]] VirtIOBlockRequestHeader
