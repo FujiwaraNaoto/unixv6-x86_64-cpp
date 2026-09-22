@@ -27,7 +27,6 @@ namespace vmm
 {
 
 // Intel SDM Volume 3A, Chapter 4 "Paging"
-// enum class なので、map_page() / map_page_in() に生の整数を渡すとコンパイルエラーになる。
 enum class PageFlag : uint64_t
 {
     None      = 0,
