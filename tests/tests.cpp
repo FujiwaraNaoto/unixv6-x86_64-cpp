@@ -26,6 +26,7 @@ void run_all(IConsole *console)
     fork_wait(out);
 
     virtio_block_read(out);
+    virtio_block_read_write(out);
 }
 
 } // namespace tests

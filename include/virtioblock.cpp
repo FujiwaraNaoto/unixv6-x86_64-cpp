@@ -10,7 +10,11 @@ namespace
 {
 
 // ─── PCI ID (virtio legacy block device) ─────────────────────────
+// see 2.1 PCI Discovery
 constexpr uint16_t VIRTIO_VENDOR_ID     = 0x1AF4;
+
+// https://docs.oasis-open.org/virtio/virtio/v1.3/csd01/virtio-v1.3-csd01.html#x1-1320002
+// Transitinal PCI Device ID (0x1000) は virtio 1.0 以降のデバイスで使われる。0x1001は block deviceを示す。
 constexpr uint16_t VIRTIO_BLK_DEVICE_ID = 0x1001;
 
 constexpr uint16_t SECTOR_SIZE = 512;
@@ -20,25 +24,18 @@ constexpr size_t VIRTIO_PAGE_SIZE = 4096;
 
 // ─── DMA 対象のメモリ ────────────────────────────────────────────
 // デバイスが直接読み書きするので、実体はここ (1翻訳単位) だけに置く。
+// staticな.bss変数にすると、includeした翻訳単位ごとに別実体ができてしまうので、
+// それをデバイスに渡すと、ドライバが読む変数とデバイスが読む変数が別物になってしまう。
+// そのため、匿名 namespace に置くことで、この翻訳単位内だけで有効な実体にする。
 alignas(4096) uint8_t virtqueue_memory[16384];
 alignas(16) VirtIOBlockRequestHeader request_header;
 alignas(512) uint8_t data_buffer[SECTOR_SIZE];
 alignas(1) volatile VirtIOBlockStatus status_byte{};
 
 // ─── ドライバ内部状態 ────────────────────────────────────────────
-uint16_t io_base    = 0;
-uint16_t queue_size = 0;
-// virtqueue_memory の中を指す非所有の view (3つで1組)。
-// 実体は上の静的配列 1 個で、ここはその内部を指しているだけなので解放しない。
-// スマートポインタにしてはいけない: new で作られていないメモリを delete する
-// ことになり、しかも 1 個のバッファを 3 つが「単独所有」する形になってしまう。
-struct VirtQueueView
-{
-    VirtQueueDescriptor *desc = nullptr; // Descriptor Table
-    VirtQueueAvailable *avail = nullptr; // Available Ring (ドライバが書き、デバイスが読む)
-    VirtQueueUsed *used       = nullptr; // Used Ring (デバイスが書き、ドライバが読む)
-};
-VirtQueueView queue;
+uint16_t io_base = 0;
+// virtqueue_memory の中を指す view (型は virtioblock.hpp の VRing)
+VRing queue;
 bool ready = false;
 
 // DMA バッファの物理アドレス。対象はいずれもカーネル .bss 上の固定の変数で、
@@ -59,7 +56,7 @@ uint16_t port(VirtIORegister reg)
     return static_cast<uint16_t>(io_base + to_underlying(reg));
 }
 
-// デバイスステータスにビットを追加する (既に立っているビットは残す)
+// デバイスステータスにビットを追加する (既に立っているビットはそのまま)
 void add_device_status(VirtIODeviceStatus bits)
 {
     io::outb(port(VirtIORegister::DEVICE_STATUS), io::inb(port(VirtIORegister::DEVICE_STATUS)) | to_underlying(bits));
@@ -86,22 +83,6 @@ bool find_device()
     return true;
 }
 
-// リセットしてドライバが認識したことを伝え、feature を決める
-void reset_and_negotiate()
-{
-    // ─── 1. リセット ───
-    io::outb(port(VirtIORegister::DEVICE_STATUS), to_underlying(VirtIODeviceStatus::RESET));
-
-    // ─── 2. ACKNOWLEDGE ───
-    add_device_status(VirtIODeviceStatus::ACKNOWLEDGE);
-
-    // ─── 3. DRIVER ───
-    add_device_status(VirtIODeviceStatus::DRIVER);
-
-    // ─── 4. feature negotiation (最小構成: 何も使わない) ───
-    (void)io::in32b(port(VirtIORegister::DEVICE_FEATURES)); // Device Features を読むだけ
-    io::out32b(port(VirtIORegister::DRIVER_FEATURES), 0);   // Driver Features = 0
-}
 
 // DMA バッファの物理アドレスを解決して保持する (以降は変換関数を使わない)
 bool resolve_dma_buffers(VirtIOBlock::PhysicalAddressResolver resolve_physical)
@@ -117,24 +98,19 @@ bool resolve_dma_buffers(VirtIOBlock::PhysicalAddressResolver resolve_physical)
     return true;
 }
 
+// 2.3 Virtqueue Configuration
 // virtqueue 0 を組み立て、最後にその位置をデバイスに教える
 bool virtq_init(VirtIOBlock::PhysicalAddressResolver resolve_physical)
 {
-    io::out16b(port(VirtIORegister::QUEUE_SELECT), 0);        // Queue Select = 0
-    queue_size = io::in16b(port(VirtIORegister::QUEUE_SIZE)); // Queue Size
+    io::out16b(port(VirtIORegister::QUEUE_SELECT), 0);                    // Queue Select = 0
+    const uint16_t queue_size = io::in16b(port(VirtIORegister::QUEUE_SIZE)); // Queue Size
     if (queue_size == 0)
         return false;
+    // 仕様上 Queue Size は常に 2 のべき乗。vring_size() / vring_init() もそれを前提にしている。
+    if ((queue_size & (queue_size - 1)) != 0)
+        return false;
 
-    // virtio spec 2.6 "Split Virtqueues" のレイアウト。
-    // avail / used には ring の後ろに used_event / avail_event の uint16_t が
-    // 1 個ずつ付く (EVENT_IDX を使わなくても場所は確保する)。
-    size_t descriptor_table_size = queue_size * sizeof(VirtQueueDescriptor);
-    size_t available_ring_size   = sizeof(VirtQueueAvailable) + (queue_size + 1) * sizeof(uint16_t);
-    size_t used_ring_offset      = (descriptor_table_size + available_ring_size + 4095) & ~4095UL;
-    size_t used_size             = sizeof(VirtQueueUsed) + queue_size * sizeof(VirtQueueUsedElement) + sizeof(uint16_t);
-    size_t total_size            = used_ring_offset + used_size;
-
-    if (total_size > sizeof(virtqueue_memory))
+    if (vring_size(queue_size, VIRTIO_PAGE_SIZE) > sizeof(virtqueue_memory))
         return false;
 
     // virtqueue 全体をゼロクリアする。
@@ -145,10 +121,8 @@ bool virtq_init(VirtIOBlock::PhysicalAddressResolver resolve_physical)
     std::memset(virtqueue_memory, 0, sizeof(virtqueue_memory));
     last_used_index = 0;
 
-    // ポインタを組み立てる
-    queue.desc  = reinterpret_cast<VirtQueueDescriptor *>(virtqueue_memory);
-    queue.avail = reinterpret_cast<VirtQueueAvailable *>(virtqueue_memory + descriptor_table_size);
-    queue.used  = reinterpret_cast<VirtQueueUsed *>(virtqueue_memory + used_ring_offset);
+    // 1.1 Virtqueues
+    vring_init(queue, queue_size, virtqueue_memory, VIRTIO_PAGE_SIZE);
 
     // デバイスにはページ番号を 1 個しか渡せない = キュー全体が物理連続である前提。
     // 仮想連続でも物理連続とは限らないので確認しておく。
@@ -178,10 +152,15 @@ void setup_request(VirtIOBlockRequestType type, uint64_t sector)
     request_header.sector   = sector;
     status_byte             = VirtIOBlockStatus::PENDING;
 
+    // 2.4.1.1 Placing Buffers into The Descriptor Table
+
     // Descriptor 0: リクエストヘッダ (デバイスが読む)
     queue.desc[0].addr  = *request_header_phys.address;
     queue.desc[0].len   = sizeof(VirtIOBlockRequestHeader);
-    queue.desc[0].flags = VirtQueueDescriptorFlags::DESC_F_NEXT;
+    // If there is a buffer element after this:
+    // i. Set d.next to the index of the next free descriptor element.
+    // ii. Set d.flags to indicate that there is a next descriptor (VIRTQ_DESC_F_NEXT).
+    queue.desc[0].flags = VRingDescriptorFlags::DESC_F_NEXT;
     queue.desc[0].next  = 1;
 
     // Descriptor 1: データバッファ
@@ -189,24 +168,30 @@ void setup_request(VirtIOBlockRequestType type, uint64_t sector)
     //   write → デバイスが読む (フラグなし)
     queue.desc[1].addr  = *data_buffer_phys.address;
     queue.desc[1].len   = SECTOR_SIZE;
-    queue.desc[1].flags = VirtQueueDescriptorFlags::DESC_F_NEXT | (type == VirtIOBlockRequestType::VIRTIO_BLK_T_IN ? VirtQueueDescriptorFlags::DESC_F_WRITE : VirtQueueDescriptorFlags::NONE);
+    queue.desc[1].flags = VRingDescriptorFlags::DESC_F_NEXT | (type == VirtIOBlockRequestType::BLK_T_IN ? VRingDescriptorFlags::DESC_F_WRITE : VRingDescriptorFlags::NONE);
     queue.desc[1].next  = 2;
 
     // Descriptor 2: ステータス (デバイスが書く)
     queue.desc[2].addr  = *status_byte_phys.address;
     queue.desc[2].len   = 1;
-    queue.desc[2].flags = VirtQueueDescriptorFlags::DESC_F_WRITE;
+    queue.desc[2].flags = VRingDescriptorFlags::DESC_F_WRITE;
     queue.desc[2].next  = 0;
 }
 
 // desc_index から始まるチェーンを Available Ring に登録し、デバイスに通知する
 void virtq_kick(uint16_t desc_index)
 {
-    queue.avail->ring[queue.avail->idx % queue_size] = desc_index;
-    __sync_synchronize(); // メモリバリア
+    // 2.4.1 Supplying Buffers to the Device
+
+    queue.avail->ring[queue.avail->idx % queue.num] = desc_index;
+    // 4. A memory barrier should be executed to ensure the device sees the updated descriptor table and available ring before the next step
+    __sync_synchronize();
+    // 5. The available idx field should be increased by the number of entries added to the available ring.
     queue.avail->idx++;
+    // 6. A memory barrier should be executed to ensure the device sees the updated available idx before the next step
     __sync_synchronize();
 
+    // 7. The device should be notified that new buffers are available by writing the queue's notify offset to the device's Queue Notify register.
     io::out16b(port(VirtIORegister::QUEUE_NOTIFY), 0);
     last_used_index++;
 }
@@ -233,9 +218,30 @@ bool initialize(PhysicalAddressResolver resolve_physical)
     if (!find_device())
         return false;
 
-    reset_and_negotiate();
+    // 2.2.1 Device Initialization Sequenceに従う
+
+    // ─── 1. RESET ───
+    // device status を 0 に書くとリセットされる。
+    // Reset the device. This is not required on initial start up
+    io::outb(port(VirtIORegister::DEVICE_STATUS), to_underlying(VirtIODeviceStatus::RESET));
+
+    // ─── 2. ACKNOWLEDGE ───
+    // The ACKNOWLEDGE status bit is set: we have noticed the device.
+    add_device_status(VirtIODeviceStatus::ACKNOWLEDGE);
+
+    // ─── 3. DRIVER ───
+    // The DRIVER status bit is set: we know how to drive the device.
+    add_device_status(VirtIODeviceStatus::DRIVER);
+
+    // ─── 4. feature negotiation (最小構成: 何も使わない) ───
+    // Device-specific setup, including reading the Device Feature Bits, discovery of virtqueues for the device, optional MSI-X setup, and reading and
+    // possibly writing the virtio configuration space.
+    (void)io::in32b(port(VirtIORegister::DEVICE_FEATURES)); // Device Features を読むだけ
+    io::out32b(port(VirtIORegister::DRIVER_FEATURES), 0);   // Driver Features = 0
+
 
     // ─── 5. virtqueue セットアップ ───
+    // The subset of Device Feature Bits understood by the driver is written to the device.
     // DMA バッファを先に解決しておく。キューの位置をデバイスに教えるのは
     // virtq_init() の最後なので、どちらで失敗してもデバイスに中途半端な設定は残らない。
     if (!resolve_dma_buffers(resolve_physical))
@@ -243,7 +249,8 @@ bool initialize(PhysicalAddressResolver resolve_physical)
     if (!virtq_init(resolve_physical))
         return false;
 
-    // ─── 6. DRIVER_OK (最後) ───
+    // ─── 6. DRIVER_OK  ───
+    // The DRIVER_OK status bit is set.
     add_device_status(VirtIODeviceStatus::DRIVER_OK);
 
     ready = true;
@@ -281,9 +288,12 @@ uint64_t capacity()
     return (high << 32) | low;
 }
 
+
+// 一度data_bufferに書き込んでからデバイスに渡すのは、物理アドレスがわかっている固定のバッファを経由する
+// (バウンスバッファ)ことで、virtqueueのディスクリプタに渡すアドレスが常に同じになるようにするため。
 bool read_block(uint64_t sector, uint8_t *buf)
 {
-    if (!do_request(VirtIOBlockRequestType::VIRTIO_BLK_T_IN, sector))
+    if (!do_request(VirtIOBlockRequestType::BLK_T_IN, sector))
         return false;
     std::memcpy(buf, data_buffer, SECTOR_SIZE);
     return true;
@@ -292,7 +302,7 @@ bool read_block(uint64_t sector, uint8_t *buf)
 bool write_block(uint64_t sector, const uint8_t *buf)
 {
     std::memcpy(data_buffer, buf, SECTOR_SIZE);
-    return do_request(VirtIOBlockRequestType::VIRTIO_BLK_T_OUT, sector);
+    return do_request(VirtIOBlockRequestType::BLK_T_OUT, sector);
 }
 
 } // namespace VirtIOBlock

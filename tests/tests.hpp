@@ -53,6 +53,11 @@ void fork_wait(IConsole *console);
 // VirtIO ブロックデバイス: 初期化してセクタ0を読み、hexdump で表示する。
 void virtio_block_read(IConsole *console);
 
+// VirtIO ブロックデバイス: 連続した読み込みと、書き込み → 読み戻しを確認する。
+// 最後のセクタを一時的に書き換え、終わったら元の中身に戻す。
+// デバイスを初期化済みの状態 (virtio_block_read() の後) で呼ぶこと。
+void virtio_block_read_write(IConsole *console);
+
 // 有効化しているテストをまとめて実行する。
 // どのテストを走らせるかは tests.cpp 側で切り替える。
 void run_all(IConsole *console);
