@@ -50,14 +50,14 @@ void virtio_block_read(IConsole *console)
 {
     // 仮想 → 物理の変換方法はカーネル側の関心事なので、ドライバには関数として渡す。
     // (キャプチャなしラムダは関数ポインタへ暗黙変換される)
-    const auto resolve_physical = [](const void *p) -> PhysicalAddress
+    const auto resolve_physical = [](const void *virtual_address) -> PhysicalAddress
     {
         if (vmm::vmm_ptr == nullptr)
         {
             return PhysicalAddress{}; // VMM 未初期化: 変換できない
         }
         // virtual_to_physical() 自体も未マップなら無効な PhysicalAddress を返すので、そのまま伝播させる。
-        return vmm::vmm_ptr->virtual_to_physical(PageVirtualAddress{reinterpret_cast<uint64_t>(p)});
+        return vmm::vmm_ptr->virtual_to_physical(PageVirtualAddress{reinterpret_cast<uint64_t>(virtual_address)});
     };
 
     if (!VirtIOBlock::initialize(resolve_physical))
