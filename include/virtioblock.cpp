@@ -168,7 +168,7 @@ void setup_request(VirtIOBlockRequestType type, uint64_t sector)
     //   write → デバイスが読む (フラグなし)
     queue.desc[1].addr  = *data_buffer_phys.address;
     queue.desc[1].len   = SECTOR_SIZE;
-    queue.desc[1].flags = VRingDescriptorFlags::DESC_F_NEXT | (type == VirtIOBlockRequestType::VIRTIO_BLK_T_IN ? VRingDescriptorFlags::DESC_F_WRITE : VRingDescriptorFlags::NONE);
+    queue.desc[1].flags = VRingDescriptorFlags::DESC_F_NEXT | (type == VirtIOBlockRequestType::BLK_T_IN ? VRingDescriptorFlags::DESC_F_WRITE : VRingDescriptorFlags::NONE);
     queue.desc[1].next  = 2;
 
     // Descriptor 2: ステータス (デバイスが書く)
@@ -293,7 +293,7 @@ uint64_t capacity()
 // (バウンスバッファ)ことで、virtqueueのディスクリプタに渡すアドレスが常に同じになるようにするため。
 bool read_block(uint64_t sector, uint8_t *buf)
 {
-    if (!do_request(VirtIOBlockRequestType::VIRTIO_BLK_T_IN, sector))
+    if (!do_request(VirtIOBlockRequestType::BLK_T_IN, sector))
         return false;
     std::memcpy(buf, data_buffer, SECTOR_SIZE);
     return true;
@@ -302,7 +302,7 @@ bool read_block(uint64_t sector, uint8_t *buf)
 bool write_block(uint64_t sector, const uint8_t *buf)
 {
     std::memcpy(data_buffer, buf, SECTOR_SIZE);
-    return do_request(VirtIOBlockRequestType::VIRTIO_BLK_T_OUT, sector);
+    return do_request(VirtIOBlockRequestType::BLK_T_OUT, sector);
 }
 
 } // namespace VirtIOBlock

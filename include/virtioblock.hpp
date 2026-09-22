@@ -55,8 +55,8 @@ constexpr VRingDescriptorFlags operator|(VRingDescriptorFlags a, VRingDescriptor
 // ─── virtio-blk リクエスト種別 ───────────────────────────────────
 enum class VirtIOBlockRequestType : uint32_t
 {
-    VIRTIO_BLK_T_IN  = 0, // read
-    VIRTIO_BLK_T_OUT = 1, // write
+    BLK_T_IN  = 0, // read
+    BLK_T_OUT = 1, // write
 };
 
 // ─── virtio-blk ステータスバイトの値 (デバイスが書く) ────────────
@@ -84,7 +84,6 @@ struct [[gnu::packed]] VRingDescriptor
     uint16_t next; // 次のディスクリプタのインデックス (flags に NEXT が立っている場合のみ有効)
 };
 
-// vring_avail
 struct [[gnu::packed]] VRingAvailable
 {
     uint16_t flags;  // フラグ (VIRTQ_AVAIL_F_NO_INTERRUPT)
@@ -97,14 +96,12 @@ struct [[gnu::packed]] VRingAvailable
     //             割り込みを控えてもらう (VIRTIO_RING_F_EVENT_IDX を使うときだけ有効)。
 };
 
-// vring_used_elem
 struct [[gnu::packed]] VRingUsedElement
 {
     uint32_t id;  // 使用済みディスクリプタのインデックス
     uint32_t len; // 使用済みバッファの長さ
 };
 
-// vring_used
 struct [[gnu::packed]] VRingUsed
 {
     uint16_t flags;              // フラグ (VIRTQ_USED_F_NO_NOTIFY)
@@ -167,7 +164,7 @@ inline void vring_init(VRing &vr, uint16_t queue_size, uint8_t *p, uintptr_t ali
 
 struct [[gnu::packed]] VirtIOBlockRequestHeader
 {
-    VirtIOBlockRequestType type; // リクエストの種類 (VIRTIO_BLK_T_IN=0(read), VIRTIO_BLK_T_OUT=1(write))
+    VirtIOBlockRequestType type; // リクエストの種類 (BLK_T_IN=0(read), BLK_T_OUT=1(write))
     uint32_t reserved; // 予約領域 (0で埋める)
     uint64_t sector;   // セクタ番号 (512バイト単位)
 };
