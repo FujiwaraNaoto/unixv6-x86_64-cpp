@@ -27,16 +27,43 @@ namespace vmm
 {
 
 // Intel SDM Volume 3A, Chapter 4 "Paging"
-namespace PageFlag
+// enum class なので、map_page() / map_page_in() に生の整数を渡すとコンパイルエラーになる。
+enum class PageFlag : uint64_t
 {
-constexpr uint64_t Present   = 1ULL << 0;
-constexpr uint64_t Writable  = 1ULL << 1; // R/Wbit
-constexpr uint64_t User      = 1ULL << 2; // リング3からアクセス可
-constexpr uint64_t Accessed  = 1ULL << 5;
-constexpr uint64_t Dirty     = 1ULL << 6;
-constexpr uint64_t HugePage  = 1ULL << 7;
-constexpr uint64_t NoExecute = 1ULL << 63;
-} // namespace PageFlag
+    None      = 0,
+    Present   = 1ULL << 0,
+    Writable  = 1ULL << 1, // R/Wbit
+    User      = 1ULL << 2, // リング3からアクセス可
+    Accessed  = 1ULL << 5,
+    Dirty     = 1ULL << 6,
+    HugePage  = 1ULL << 7,
+    NoExecute = 1ULL << 63,
+};
+
+// フラグ同士を組み合わせる / 一部を取り出す
+constexpr PageFlag operator|(PageFlag a, PageFlag b)
+{
+    return static_cast<PageFlag>(static_cast<uint64_t>(a) | static_cast<uint64_t>(b));
+}
+constexpr PageFlag operator&(PageFlag a, PageFlag b)
+{
+    return static_cast<PageFlag>(static_cast<uint64_t>(a) & static_cast<uint64_t>(b));
+}
+
+// ページテーブルのエントリ (生の uint64_t) にフラグを立てる / フラグが立っているかを調べる。
+// エントリは物理アドレスとフラグが混ざった値なので、ここだけは整数との演算を許す。
+constexpr uint64_t operator|(uint64_t entry, PageFlag flag)
+{
+    return entry | static_cast<uint64_t>(flag);
+}
+constexpr uint64_t operator&(uint64_t entry, PageFlag flag)
+{
+    return entry & static_cast<uint64_t>(flag);
+}
+constexpr uint64_t &operator|=(uint64_t &entry, PageFlag flag)
+{
+    return entry = entry | flag;
+}
 
 
 class VirtualMemoryManager final
@@ -47,7 +74,7 @@ class VirtualMemoryManager final
     // nullptr を渡した場合は何も出力しない。
     VirtualMemoryManager(pmm::PhysicalMemoryManager *pmm_ptr, IConsole *console);
     // physical_address が無効 (nullopt) なら何もせず false を返す。
-    bool map_page(PageVirtualAddress virtual_address, PhysicalAddress physical_address, uint64_t flags);
+    bool map_page(PageVirtualAddress virtual_address, PhysicalAddress physical_address, PageFlag flags);
     // map解除とTLBフラッシュ
     bool unmap_page(PageVirtualAddress virtual_address);
     // マップされていなければ nullopt を返す。
@@ -66,12 +93,12 @@ class VirtualMemoryManager final
     void switch_address_space(PhysicalAddress pml4_phys);
 
     // 指定PML4に対して、指定仮想アドレスを指定物理アドレスにマッピングする。(プロセスにアドレス空間構築用)
-    bool map_page_in(PhysicalAddress pml4_phys, PageVirtualAddress virtual_address, PhysicalAddress physical_address, uint64_t flags);
+    bool map_page_in(PhysicalAddress pml4_phys, PageVirtualAddress virtual_address, PhysicalAddress physical_address, PageFlag flags);
 
     void copy_user_pages(PhysicalAddress src_pml4_phys, PhysicalAddress dst_pml4_phys);
 
   private:
-    VirtualAddress get_or_create_table(VirtualAddress parent_table, uint64_t index, uint64_t flags);
+    VirtualAddress get_or_create_table(VirtualAddress parent_table, uint64_t index, PageFlag flags);
 
     PhysicalAddress pml4_phys_;
     pmm::PhysicalMemoryManager *pmm_ptr_ = nullptr;
