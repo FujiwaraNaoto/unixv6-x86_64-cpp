@@ -44,6 +44,30 @@ void hexdump(IConsole *console, const uint8_t *data, size_t size)
     }
 }
 
+// 1 セクタの大きさ (virtio-blk は 512 バイト単位で読み書きする)
+constexpr size_t SECTOR_BYTES = 512;
+
+// "[VIRTIO] <name>: OK" / "FAILED" を 1 行で表示する
+void report(IConsole *console, const char *name, bool ok)
+{
+    console->set_color(ok ? Color::LightGreen : Color::LightRed, Color::Black);
+    console->puts("[VIRTIO] ");
+    console->set_color(Color::LightGrey, Color::Black);
+    console->printf("%s: %s\n", name, ok ? "OK" : "FAILED");
+}
+
+// 2 つのセクタの中身が同じか。
+// std::array の == は memcmp を呼ぶが、カーネルには memcmp の実体が無いので自前で比べる。
+bool same_sector(const std::array<uint8_t, SECTOR_BYTES> &a, const std::array<uint8_t, SECTOR_BYTES> &b)
+{
+    for (size_t i = 0; i < SECTOR_BYTES; i++)
+    {
+        if (a[i] != b[i])
+            return false;
+    }
+    return true;
+}
+
 } // namespace
 
 void virtio_block_read(IConsole *console)
@@ -155,6 +179,67 @@ void virtio_block_read(IConsole *console)
             console->set_color(Color::LightGrey, Color::Black);
         }
     }
+}
+
+void virtio_block_read_write(IConsole *console)
+{
+    const uint64_t capacity = VirtIOBlock::capacity();
+    if (capacity == 0)
+    {
+        report(console, "read/write test (device not initialized)", false);
+        return;
+    }
+
+    // 1. 連続した読み込み
+    // Available Ring はキューのサイズ個で一周する (QEMU の既定では 256)。
+    // それより多く出して、ring の添字が折り返した後も完了を待てることを確かめる。
+    constexpr int READ_COUNT = 1024;
+    static std::array<uint8_t, SECTOR_BYTES> buffer;
+    bool reads_ok = true;
+    for (int i = 0; i < READ_COUNT; i++)
+    {
+        if (!VirtIOBlock::read_block(static_cast<uint64_t>(i % 8), buffer.data()))
+        {
+            reads_ok = false;
+            break;
+        }
+    }
+    report(console, "1024 sequential reads", reads_ok);
+
+    // 2. 書き込み → 読み戻し
+    // 書き換えるのは最後のセクタ。ファイルシステムは空きブロックを先頭から使うので、
+    // ここが使われるのはディスクがほぼ埋まったときだけ。
+    // BufferCache を通さずにドライバを直接呼ぶので、キャッシュの中身と食い違わないよう
+    // 最後に必ず元の中身へ戻す。
+    const uint64_t sector = capacity - 1;
+    static std::array<uint8_t, SECTOR_BYTES> original;
+    static std::array<uint8_t, SECTOR_BYTES> pattern;
+    static std::array<uint8_t, SECTOR_BYTES> readback;
+
+    if (!VirtIOBlock::read_block(sector, original.data()))
+    {
+        report(console, "read last sector", false);
+        return;
+    }
+
+    // 元の中身と必ず違う値にする (同じだと書き込めていなくても一致してしまう)
+    for (size_t i = 0; i < SECTOR_BYTES; i++)
+    {
+        pattern[i] = static_cast<uint8_t>(~original[i]);
+    }
+
+    readback.fill(0);
+    const bool write_ok = VirtIOBlock::write_block(sector, pattern.data())
+                          && VirtIOBlock::read_block(sector, readback.data())
+                          && same_sector(readback, pattern);
+    report(console, "write + read back", write_ok);
+
+    // 3. 元に戻す
+    readback.fill(0);
+    const bool restore_ok = VirtIOBlock::write_block(sector, original.data())
+                            && VirtIOBlock::read_block(sector, readback.data())
+                            && same_sector(readback, original);
+    report(console, "restore original", restore_ok);
 }
 
 } // namespace tests
