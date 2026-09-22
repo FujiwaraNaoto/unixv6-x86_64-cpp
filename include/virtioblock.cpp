@@ -33,8 +33,7 @@ alignas(512) uint8_t data_buffer[SECTOR_SIZE];
 alignas(1) volatile VirtIOBlockStatus status_byte{};
 
 // ─── ドライバ内部状態 ────────────────────────────────────────────
-uint16_t io_base    = 0;
-uint16_t queue_size = 0;
+uint16_t io_base = 0;
 // virtqueue_memory の中を指す view (型は virtioblock.hpp の VirtQueueView)
 VirtQueueView queue;
 bool ready = false;
@@ -103,21 +102,15 @@ bool resolve_dma_buffers(VirtIOBlock::PhysicalAddressResolver resolve_physical)
 // virtqueue 0 を組み立て、最後にその位置をデバイスに教える
 bool virtq_init(VirtIOBlock::PhysicalAddressResolver resolve_physical)
 {
-    io::out16b(port(VirtIORegister::QUEUE_SELECT), 0);        // Queue Select = 0
-    queue_size = io::in16b(port(VirtIORegister::QUEUE_SIZE)); // Queue Size
+    io::out16b(port(VirtIORegister::QUEUE_SELECT), 0);                    // Queue Select = 0
+    const uint16_t queue_size = io::in16b(port(VirtIORegister::QUEUE_SIZE)); // Queue Size
     if (queue_size == 0)
         return false;
+    // 仕様上 Queue Size は常に 2 のべき乗。vring_size() / vring_init() もそれを前提にしている。
+    if ((queue_size & (queue_size - 1)) != 0)
+        return false;
 
-    // virtio spec 2.6 "Split Virtqueues" のレイアウト。
-    // avail / used には ring の後ろに used_event / avail_event の uint16_t が
-    // 1 個ずつ付く (EVENT_IDX を使わなくても場所は確保する)。
-    size_t descriptor_table_size = queue_size * sizeof(VirtQueueDescriptor);
-    size_t available_ring_size   = sizeof(VirtQueueAvailable) + (queue_size + 1) * sizeof(uint16_t);
-    size_t used_ring_offset      = (descriptor_table_size + available_ring_size + 4095) & ~4095UL;
-    size_t used_size             = sizeof(VirtQueueUsed) + queue_size * sizeof(VirtQueueUsedElement) + sizeof(uint16_t);
-    size_t total_size            = used_ring_offset + used_size;
-
-    if (total_size > sizeof(virtqueue_memory))
+    if (vring_size(queue_size, VIRTIO_PAGE_SIZE) > sizeof(virtqueue_memory))
         return false;
 
     // virtqueue 全体をゼロクリアする。
@@ -129,9 +122,7 @@ bool virtq_init(VirtIOBlock::PhysicalAddressResolver resolve_physical)
     last_used_index = 0;
 
     // 1.1 Virtqueues
-    queue.desc  = reinterpret_cast<VirtQueueDescriptor *>(virtqueue_memory);
-    queue.avail = reinterpret_cast<VirtQueueAvailable *>(virtqueue_memory + descriptor_table_size);
-    queue.used  = reinterpret_cast<VirtQueueUsed *>(virtqueue_memory + used_ring_offset);
+    vring_init(queue, queue_size, virtqueue_memory, VIRTIO_PAGE_SIZE);
 
     // デバイスにはページ番号を 1 個しか渡せない = キュー全体が物理連続である前提。
     // 仮想連続でも物理連続とは限らないので確認しておく。
@@ -192,7 +183,7 @@ void virtq_kick(uint16_t desc_index)
 {
     // 2.4.1 Supplying Buffers to the Device
 
-    queue.avail->ring[queue.avail->idx % queue_size] = desc_index;
+    queue.avail->ring[queue.avail->idx % queue.num] = desc_index;
     // 4. A memory barrier should be executed to ensure the device sees the updated descriptor table and available ring before the next step
     __sync_synchronize();
     // 5. The available idx field should be increased by the number of entries added to the available ring.

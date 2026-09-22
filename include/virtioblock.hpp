@@ -1,5 +1,6 @@
 #ifndef VIRTIOBLOCK_HPP
 #define VIRTIOBLOCK_HPP
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <type_traits>
@@ -89,7 +90,7 @@ struct [[gnu::packed]] VirtQueueAvailable
     uint16_t flags;  // フラグ (VIRTQ_AVAIL_F_NO_INTERRUPT)
     uint16_t idx;    // 次に使用可能なディスクリプタのインデックス
     uint16_t ring[]; // 使用可能なディスクリプタのインデックスの配列
-    // この後ろ (ring[queue_size] の位置) に used_event の uint16_t が 1 個続く。
+    // この後ろ (ring[num] の位置) に used_event の uint16_t が 1 個続く。
     // 位置が実行時のキューサイズで決まるので、フィールドとしては書けない
     // (大きさ未指定の配列 ring[] は構造体の最後にしか置けない)。
     // used_event: ドライバが書き、デバイスが読む。used の idx がこの値を超えるまで
@@ -109,7 +110,7 @@ struct [[gnu::packed]] VirtQueueUsed
     uint16_t flags;              // フラグ (VIRTQ_USED_F_NO_NOTIFY)
     uint16_t idx;                // 次に使用済みのディスクリプタのインデックス
     VirtQueueUsedElement ring[]; // 使用済みディスクリプタの配列
-    // この後ろ (ring[queue_size] の位置) に avail_event の uint16_t が 1 個続く。
+    // この後ろ (ring[num] の位置) に avail_event の uint16_t が 1 個続く。
     // avail_event: デバイスが書き、ドライバが読む。avail の idx がこの値を超えるまで
     //              ドライバからの通知 (Queue Notify) を控えてもらう
     //              (VIRTIO_RING_F_EVENT_IDX を使うときだけ有効)。
@@ -120,12 +121,49 @@ struct [[gnu::packed]] VirtQueueUsed
 // 指しているだけなので解放しない。
 // スマートポインタにしてはいけない: new で作られていないメモリを delete する
 // ことになり、しかも 1 個のバッファを 3 つが「単独所有」する形になってしまう。
+// Appendix A の struct vring に相当。
 struct VirtQueueView
 {
+    uint16_t num              = 0;       // キューのサイズ (ディスクリプタの個数。2 のべき乗)
     VirtQueueDescriptor *desc = nullptr; // Descriptor Table
     VirtQueueAvailable *avail = nullptr; // Available Ring (ドライバが書き、デバイスが読む)
     VirtQueueUsed *used       = nullptr; // Used Ring (デバイスが書き、ドライバが読む)
 };
+
+// ─── virtqueue のレイアウト (Appendix A: virtio_ring.h) ──────────
+// メモリ上は次の順に並ぶ (num はキューのサイズ, align は virtio PCI では 4096)。
+//
+//   struct vring_desc desc[num];          // ディスクリプタ (16 バイト × num)
+//   __u16 avail_flags;                    // Available Ring
+//   __u16 avail_idx;
+//   __u16 available[num];
+//   __u16 used_event_idx;
+//   char pad[];                           // 次の align 境界まで詰め物
+//   __u16 used_flags;                     // Used Ring
+//   __u16 used_idx;
+//   struct vring_used_elem used[num];
+//   __u16 avail_event_idx;
+//
+// NOTE: 仕様どおり、avail 側の大きさには used_event の 2 バイトを数えていない。
+//       desc と avail の合計は 18 * num + 4 バイトで、num が 2 のべき乗なら
+//       ちょうど align の倍数にはならないので、切り上げの余白に収まる。
+
+// Appendix A の vring_size() に相当。virtqueue 全体に必要なバイト数を返す。
+constexpr size_t vring_size(uint16_t num, size_t align)
+{
+    return ((sizeof(VirtQueueDescriptor) * num + sizeof(uint16_t) * (2 + num) + align - 1) & ~(align - 1))
+           + sizeof(uint16_t) * 3 + sizeof(VirtQueueUsedElement) * num;
+}
+
+// Appendix A の vring_init() に相当。
+// p から始まるメモリに desc / avail / used を並べ、vr がそれぞれを指すようにする。
+inline void vring_init(VirtQueueView &vr, uint16_t num, uint8_t *p, uintptr_t align)
+{
+    vr.num   = num;
+    vr.desc  = reinterpret_cast<VirtQueueDescriptor *>(p);
+    vr.avail = reinterpret_cast<VirtQueueAvailable *>(p + num * sizeof(VirtQueueDescriptor));
+    vr.used  = reinterpret_cast<VirtQueueUsed *>((reinterpret_cast<uintptr_t>(&vr.avail->ring[num]) + align - 1) & ~(align - 1));
+}
 
 struct [[gnu::packed]] VirtIOBlockRequestHeader
 {
