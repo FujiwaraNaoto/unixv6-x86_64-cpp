@@ -1,5 +1,6 @@
 #include "file_system.hpp"
 #include "file_system_internal.hpp"
+#include "directory.hpp"
 #include <cstdint>
 #include <cstring>
 
@@ -15,41 +16,8 @@ namespace
 {
 using FileSystem::internal::bitmap_block;
 using FileSystem::internal::mark_block_used;
-using FileSystem::internal::write_inode;
+using FileSystem::internal::write_disk_inode;
 using FileSystem::internal::zero_block;
-
-
-    bool add_root_entry(DiskInode &root, uint32_t inum, const char* name){
-        int root_address = root.addrs[0];
-        if(root_address == 0){
-            auto block_number = FileSystem::allocate_block();
-            if(!block_number){
-                return false;
-            }
-            root_address = block_number.value();
-            root.addrs[0] = root_address;
-        }
-
-        auto block = FileSystem::block_store->acquire(root_address);
-        if(!block) return false;
-
-        auto *entries = reinterpret_cast<DirectoryEntry*>(block.data());
-        int capacity = FSBLOCK_SIZE / sizeof(DirectoryEntry);
-
-        for(int i=0; i<capacity; i++){
-            if(entries[i].inum !=0) continue;
-
-            entries[i].inum = inum;
-            std::strncpy(entries[i].name, name, DIRSIZ);
-            if(!block.write_back()){
-                return false;
-            }
-            root.size += sizeof(DirectoryEntry);
-            return true;
-        }
-
-        return false;
-    }
 
 
 bool format(uint32_t total_blocks, IConsole *console)
@@ -97,27 +65,23 @@ bool format(uint32_t total_blocks, IConsole *console)
 
     }
 
-    DiskInode root_inode{
-        .type  = InodeType::kDirectory,
-        .nlink = 1,
-        .size  = 0,
-    };
-
-    if (!add_root_entry(root_inode, ROOT_INODE, "."))
-    {
-        return false;
-    }
-    if (!add_root_entry(root_inode, ROOT_INODE, ".."))
-    {
-        return false;
-    }
-    if (!write_inode(ROOT_INODE, root_inode))
+    // ルートディレクトリ。まず空の inode を書き、"." と ".." は inode 層経由で追加する。
+    // nlink は link_directory() が数えるので 0 から始める (最終的に "." と ".." の 2)。
+    DiskInode root_inode{};
+    root_inode.type = InodeType::kDirectory;
+    if (!write_disk_inode(ROOT_INODE, root_inode))
     {
         return false;
     }
 
-
-    return true;
+    FileSystem::Inode *root = FileSystem::get_inode(ROOT_INODE);
+    if (root == nullptr)
+    {
+        return false;
+    }
+    const bool initialized = FileSystem::initialize_directory(root, ROOT_INODE); // ルートの親は自分自身
+    FileSystem::put_inode(root);
+    return initialized;
 }
 
 

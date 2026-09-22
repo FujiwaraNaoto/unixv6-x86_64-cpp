@@ -13,10 +13,6 @@ namespace
 SuperBlock superblock_state;
 
 
-uint32_t inode_block(uint32_t inum)
-{
-    return superblock_state.inode_start + inum / INODES_PER_BLOCK;
-}
 
 
 } // namespace
@@ -34,6 +30,11 @@ const SuperBlock &superblock()
 
 namespace FileSystem::internal
 {
+uint32_t inode_block(uint32_t inum)
+{
+    return superblock_state.inode_start + inum / INODES_PER_BLOCK;
+}
+
 uint32_t bitmap_block(uint32_t blockno)
 {
     return superblock_state.bitmap_start + blockno / BLOCKS_PER_BITMAP_BLOCK;
@@ -67,7 +68,7 @@ bool mark_block_used(uint32_t blockno)
     block.data()[byte_index] |= bit_mask;
     return block.write_back();
 }
-bool write_inode(uint32_t inum, const DiskInode &inode)
+bool write_disk_inode(uint32_t inum, const DiskInode &inode)
 {
     auto block = block_store->acquire(inode_block(inum));
     if (!block) return false;
@@ -76,7 +77,7 @@ bool write_inode(uint32_t inum, const DiskInode &inode)
     return block.write_back();
 }
 
-std::optional<DiskInode> read_inode(uint32_t inum)
+std::optional<DiskInode> read_disk_inode(uint32_t inum)
 {
     auto block = block_store->acquire(inode_block(inum));
     if (!block) return std::nullopt;
