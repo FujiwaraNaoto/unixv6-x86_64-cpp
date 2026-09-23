@@ -14,8 +14,8 @@ namespace
 {
 // 表 1 枚のエントリ数 (インデックスが 9bit なので 2^9)。
 // 8 バイト × 512 = 4096 バイトで、表 1 枚がちょうど 1 ページに収まる。
-// PDPT / PD / PT の各表も同じく 512 エントリで、1 ページに収まる。
-constexpr int ENTRIES_PER_TABLE = 512;
+// PDPT / PD / PT の各表も同じく 2^9 エントリで、1 ページに収まる。
+constexpr int ENTRIES_PER_TABLE = 1<<9;
 
 uint64_t pml4_index(PageVirtualAddress va)
 {
@@ -68,7 +68,7 @@ VirtualMemoryManager::VirtualMemoryManager(pmm::PhysicalMemoryManager *pmm_ptr, 
     }
 }
 
-bool VirtualMemoryManager::map_page(PageVirtualAddress virtual_address, PhysicalAddress physical_address, uint64_t flags)
+bool VirtualMemoryManager::map_page(PageVirtualAddress virtual_address, PhysicalAddress physical_address, PageFlag flags)
 {
     if (!physical_address)
     {
@@ -82,7 +82,7 @@ bool VirtualMemoryManager::map_page(PageVirtualAddress virtual_address, Physical
     // 中間テーブル(PDPT/PD/PT)にも User ビットを伝播させる必要がある。
     // 最終 PTE だけ User にしても、上位エントリのどれか一つでも User=0 なら
     // CPL=3 からのアクセスは拒否される (Intel SDM Vol.3A 4.6 "Access Rights")。
-    const uint64_t table_flags = PageFlag::Present | PageFlag::Writable | (flags & PageFlag::User);
+    const PageFlag table_flags = PageFlag::Present | PageFlag::Writable | (flags & PageFlag::User);
     VirtualAddress pdpt        = get_or_create_table(pml4, pml4_index(virtual_address), table_flags);
     if (!pdpt)
     {
@@ -167,7 +167,7 @@ void VirtualMemoryManager::flush_tlb()
 }
 
 
-VirtualAddress VirtualMemoryManager::get_or_create_table(VirtualAddress parent_table, uint64_t index, uint64_t flags)
+VirtualAddress VirtualMemoryManager::get_or_create_table(VirtualAddress parent_table, uint64_t index, PageFlag flags)
 {
     if (!(parent_table[index] & PageFlag::Present))
     {
@@ -238,7 +238,7 @@ void VirtualMemoryManager::switch_address_space(PhysicalAddress pml4_phys)
 bool VirtualMemoryManager::map_page_in(PhysicalAddress pml4_phys,
                                        PageVirtualAddress virtual_address,
                                        PhysicalAddress physical_address,
-                                       uint64_t flags)
+                                       PageFlag flags)
 {
     if (!physical_address)
     {
@@ -339,7 +339,8 @@ void VirtualMemoryManager::copy_user_pages(PhysicalAddress src_pml4_phys, Physic
                 std::memcpy(dist_page.ptr, src_page.ptr, PAGE_SIZE);
 
                 //子供のPML4に同じ仮想アドレスでマップ
-                uint64_t flags = e & 0xFFF;
+                // フラグは親のエントリの下位 12 ビットをそのまま引き継ぐ
+                const PageFlag flags = static_cast<PageFlag>(e & 0xFFF);
                 vmm::vmm_ptr->map_page_in(dst_pml4_phys, virtual_address, new_phys, flags);
             }
         }
