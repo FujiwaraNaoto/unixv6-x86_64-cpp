@@ -46,17 +46,47 @@ namespace
 //       G    D/B   L    AVL   limit[19:16]
 // 0x20(=0b0010 0000)はbit5でLbit(long mode)=1。このコードセグメントは64bitモードで実行されることを示す。D/Bビットは64bitモードでは無視される。
 
+struct [[gnu::packed]] Access
+{
+    uint8_t present : 1                     = 1; // P
+    uint8_t descriptor_privilege_level : 2  = 0; // DPL
+    uint8_t descriptor_type : 1             = 1; // S
+    uint8_t executable : 1                  = 0; // E
+    uint8_t direction_conforming : 1        = 0; // DC
+    uint8_t readable_writable : 1           = 1; // RW
+    uint8_t accessed : 1                    = 0; // A
+
+    operator uint8_t() const
+    {
+        return (present << 7) | (descriptor_privilege_level << 5) | (descriptor_type << 4) |
+               (executable << 3) | (direction_conforming << 2) | (readable_writable << 1) | accessed;
+    }
+};
+
+// 下位 4bit の limit[19:16] は set_entry で limit から埋めるので、ここでは上位 4bit だけを持つ
+struct [[gnu::packed]] Granularity
+{
+    uint8_t granularity : 1          = 0; // G
+    uint8_t default_operand_size : 1 = 0; // D/B
+    uint8_t long_mode : 1            = 0; // L
+    uint8_t available : 1            = 0; // AVL
+
+    operator uint8_t() const
+    {
+        return (granularity << 7) | (default_operand_size << 6) | (long_mode << 5) | (available << 4);
+    }
+};
 
 
 
-void set_entry(int index, uint8_t access, uint8_t granularity, uint32_t base = 0, uint32_t limit = 0)
+void set_entry(int index, Access access, Granularity granularity, uint32_t base = 0, uint32_t limit = 0)
 {
     gdt::GlobalDescriptorTableEntry *entry = &gdt_entries[index];
     entry->limit_low                       = limit & 0xFFFF;
     entry->base_low                        = base & 0xFFFF;
     entry->base_middle                     = (base >> 16) & 0xFF;
-    entry->access                          = access;
-    entry->granularity                     = ((limit >> 16) & 0x0F) | (granularity & 0xF0);
+    entry->access                          = static_cast<uint8_t>(access);
+    entry->granularity                     = ((limit >> 16) & 0x0F) | static_cast<uint8_t>(granularity);
     entry->base_high                       = (base >> 24) & 0xFF;
 }
 
@@ -85,11 +115,11 @@ void initialize_gdt()
     // エントリ位置はセレクタ定数から導く。こうしておけば gdt.hpp のセレクタを変えたとき
     // 「定数は変えたが GDT の並びは古いまま」というズレが起きない。
     // User Data(index3) が User Code(index4) より先に来ているのは sysret が要求する順序。
-    set_entry(0, 0x00, 0x00);                     // Null descriptor
-    set_entry(index_of(kKernelCode), 0x9A, 0x20); // Kernel code segment P,S,E,RW+L=1
-    set_entry(index_of(kKernelData), 0x92, 0x00); // Kernel data segment P,S,E,RW+L=0
-    set_entry(index_of(kUserData), 0xF2, 0x00);   // User data segment P,S,E,RW+L=0
-    set_entry(index_of(kUserCode), 0xFA, 0x20);   // User code segment P,S,E,RW+L=1
+    set_entry(0, Access{0,0,0,0,0,0,0}, Granularity{});                     // Null descriptor
+    set_entry(index_of(kKernelCode), Access{.descriptor_privilege_level = 0b00, .executable = 1}, Granularity{.long_mode = 1}); // Kernel code segment P,S,E,RW+L=1
+    set_entry(index_of(kKernelData), Access{.descriptor_privilege_level = 0b00, .executable = 0}, Granularity{.long_mode = 0}); // Kernel data segment P,S,E,RW+L=0
+    set_entry(index_of(kUserData), Access{.descriptor_privilege_level = 0b11, .executable = 0}, Granularity{.long_mode = 0});   // User data segment P,S,E,RW+L=0
+    set_entry(index_of(kUserCode), Access{.descriptor_privilege_level = 0b11, .executable = 1}, Granularity{.long_mode = 1});   // User code segment P,S,E,RW+L=1
 
 
     std::memset(&tss, 0, sizeof(TaskStateSegment));
