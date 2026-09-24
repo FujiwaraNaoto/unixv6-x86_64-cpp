@@ -19,6 +19,36 @@ static gdt::GlobalDescriptorTablePointer gdt_ptr;
 
 namespace
 {
+
+
+// access フィールドのビット構成
+// bit:  7    6-5    4    3    2     1    0
+//       P    DPL    S    E    DC    RW   A
+// P: Present (1=有効, 0=無効)/Data セグメントの場合:
+// DPL: Descriptor Privilege Level (0=Ring0, 3=Ring3)
+// S: Descriptor Type (1=Code/Data, 0=System/Data セグメントの場合:
+// E: Executable (1=Code, 0=Data)
+// DC: Direction/Conforming (Code セグメントの場合: 1=Conforming, Data セグメントの場合: 1=Down)
+// RW: Readable/Writable (Code セグメントの場合: 1=Readable, Data セグメントの場合: 1=Writable)
+// A: Accessed (CPU がアクセスしたときに自動で 1 になる)
+// ユーザとカーネルの場合は異なるのがDPLがuser(3)かkernel(0)かの違いだけで、他のビットは同じ。
+// データかコードセグメントかの違いはEビットとDCビットの違いで、コードセグメントはE=1,データセグメントはE=0
+//        P DPL S E DC RW A
+// 0x9A = 1 00  1 1 0  1  0  → P=1, DPL=0, S=1, E=1, RW=1 : カーネル コード
+// 0x92 = 1 00  1 0 0  1  0  → P=1, DPL=0, S=1, E=0, RW=1 : カーネル データ
+// 0xF2 = 1 11  1 0 0  1  0  → P=1, DPL=3, S=1, E=0, RW=1 : ユーザー データ
+// 0xFA = 1 11  1 1 0  1  0  → P=1, DPL=3, S=1, E=1, RW=1 : ユーザー コード
+
+
+
+// granularity フィールドのビット構成
+// bit:  7    6     5    4     3-0
+//       G    D/B   L    AVL   limit[19:16]
+// 0x20(=0b0010 0000)はbit5でLbit(long mode)=1。このコードセグメントは64bitモードで実行されることを示す。D/Bビットは64bitモードでは無視される。
+
+
+
+
 void set_entry(int index, uint8_t access, uint8_t granularity, uint32_t base = 0, uint32_t limit = 0)
 {
     gdt::GlobalDescriptorTableEntry *entry = &gdt_entries[index];
