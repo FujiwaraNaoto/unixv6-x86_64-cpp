@@ -9,10 +9,10 @@ struct PCIBarInfo
 {
     uint64_t base_address;
     uint64_t size;
-    uint8_t is_io_space : 1;
-    uint8_t is_64bit : 1;
+    uint8_t is_io_space     : 1;
+    uint8_t is_64bit        : 1;
     uint8_t is_prefetchable : 1;
-    uint8_t valid : 1;
+    uint8_t valid           : 1;
 };
 
 struct PCIDevice
