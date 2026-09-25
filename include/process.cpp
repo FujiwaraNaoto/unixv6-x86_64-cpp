@@ -122,6 +122,7 @@ Process *create_process(EntryPoint entry, const char *name)
     proc->state = ProcessState::Embryo;
     proc->entry = entry;
     proc->name  = name; // kstring が容量超過分を切り捨てて null 終端する
+    proc->trap_frame = nullptr; //リング3からsyscallで呼ばれた場合にtrap_frameが積まれるので、初期化しておく
 
     uint8_t *stack = static_cast<uint8_t *>(heap_ptr_->alloc(KERNEL_STACK_SIZE));
     if (stack == nullptr)
@@ -150,6 +151,7 @@ Process *create_process(EntryPoint entry, const char *name)
     proc->context->rbp  = 0;
     proc->context->rip  = reinterpret_cast<uint64_t>(trampoline);
     proc->sleep_channel = nullptr; // 初期状態では起きている
+    proc->trap_frame     = nullptr;
 
     proc->state = ProcessState::Runnable; // 構築完了。これでスケジューラが拾えるようになる
     return proc;
@@ -367,6 +369,7 @@ int fork()
     child->entry         = parent->entry;
     child->name          = parent->name;
     child->sleep_channel = nullptr;
+    child->trap_frame    = nullptr;
 
     // allocate a new page table for the child process
     uint8_t *child_stack = static_cast<uint8_t *>(heap_ptr_->alloc(KERNEL_STACK_SIZE));
@@ -385,6 +388,14 @@ int fork()
         child->state = ProcessState::Unused; // ページテーブル確保失敗
         return -1;
     }
+
+    if(parent->trap_frame)
+    {
+        // Copy the parent's trap frame to the child's trap frame
+        child->trap_frame = new TrapFrame(*parent->trap_frame);
+    }
+
+    // 以下はカーネルスレッドの fork で、リング3のユーザスタックはコピーしない。ユーザスタックをコピーする fork は、ユーザスレッドの fork で実装する。
 
     // copy the parent's kernel stack to the child's kernel stack
     // (make the child process's kernel stack identical to the parent's kernel stack)

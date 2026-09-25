@@ -5,6 +5,37 @@
 #include "kstring.hpp"
 #include "units.hpp"
 
+
+// syscall の入口 (syscall/syscall_entry.asm) がカーネルスタックに積む、
+// リング3のレジスタ一式。並びは push している順の逆 (rsp が指す側が r15)。
+// fork した子は、このフレームの rax だけを 0 に変えたコピーから復帰する。
+struct [[gnu::packed]] TrapFrame
+{
+    uint64_t r15;
+    uint64_t r14;
+    uint64_t r13;
+    uint64_t r12;
+    uint64_t r11; // syscall 命令が入れたユーザーの RFLAGS (sysret が使う)
+    uint64_t r10;
+    uint64_t r9;
+    uint64_t r8;
+    uint64_t rbp;
+    uint64_t rbx;
+    uint64_t rax;      // syscall 番号。戻るときは戻り値
+    uint64_t rcx;      // syscall 命令が入れたユーザーの RIP (sysret が使う)
+    uint64_t rdx;
+    uint64_t rsi;
+    uint64_t rdi;
+    uint64_t user_rsp; // syscall した時点のユーザーの RSP
+};
+
+// syscall_entry.asm がオフセットを直接書いているので、ずれたらここで気づけるようにする
+static_assert(sizeof(TrapFrame) == 128, "TrapFrame size must match syscall_entry.asm");
+static_assert(offsetof(TrapFrame, rax) == 80, "TF_RAX in syscall_entry.asm");
+static_assert(offsetof(TrapFrame, rdi) == 112, "TF_RDI in syscall_entry.asm");
+static_assert(offsetof(TrapFrame, user_rsp) == 120, "TF_USER_RSP in syscall_entry.asm");
+
+
 struct [[gnu::packed]] ProcessContext
 {
     uint64_t r15;
@@ -64,6 +95,7 @@ struct Process
     void *sleep_channel; // プロセスが sleep している場合のチャネル (待機理由) 0=起きている
     Process *parent;     // 親プロセスへのポインタ (fork などで使う)
     int exit_status;     // プロセスの終了ステータス (exit() で設定される)
+    TrapFrame *trap_frame; // syscall/syscall_entry.asm が積む、リング3のレジスタ一式．カーネルスレッドからの場合は nullptr
 };
 
 namespace process
