@@ -21,17 +21,18 @@ class IBlockStore
 
 class BlockRef final
 {
-public:
+  public:
     BlockRef() = default;
     explicit BlockRef(uint32_t blockno, IBlockStore *store = nullptr, uint8_t *data = nullptr)
-        : blockno_(blockno), store_(store), data_(data) { }
-    
+        : blockno_(blockno), store_(store), data_(data)
+    {
+    }
+
     BlockRef(const BlockRef &)            = delete;
     BlockRef &operator=(const BlockRef &) = delete;
 
     // 所有権は 1 つだけ。ムーブ元は「何も持っていない」状態にする。
-    BlockRef(BlockRef &&other) noexcept
-        : blockno_(other.blockno_), store_(other.store_), data_(other.data_)
+    BlockRef(BlockRef &&other) noexcept : blockno_(other.blockno_), store_(other.store_), data_(other.data_)
     {
         other.store_ = nullptr;
         other.data_  = nullptr;
@@ -54,20 +55,36 @@ public:
     {
         reset();
     }
-    uint32_t blockno() const { return blockno_; }
-    IBlockStore *store() const { return store_; }
-    uint8_t *data() const { return data_; }
+    uint32_t blockno() const
+    {
+        return blockno_;
+    }
+    IBlockStore *store() const
+    {
+        return store_;
+    }
+    uint8_t *data() const
+    {
+        return data_;
+    }
 
-    bool operator!() const { return data_ == nullptr; }
+    bool operator!() const
+    {
+        return data_ == nullptr;
+    }
 
     // 本体は IBlockStore の定義より後ろに置く (ここではまだ前方宣言しか見えないため)
-    bool write_back(){
-        if (store_ == nullptr) return false;
-        if (data_ == nullptr) return false;
+    bool write_back()
+    {
+        if (store_ == nullptr)
+            return false;
+        if (data_ == nullptr)
+            return false;
         return store_->write_back(blockno_);
     }
 
-    void reset(){
+    void reset()
+    {
         if (store_ != nullptr and data_ != nullptr)
         {
             store_->release(blockno_);
@@ -76,10 +93,10 @@ public:
         }
     }
 
-private:
-    uint32_t blockno_ = 0;
+  private:
+    uint32_t blockno_   = 0;
     IBlockStore *store_ = nullptr;
-    uint8_t *data_ = nullptr;
+    uint8_t *data_      = nullptr;
 };
 
 #endif // BLOCK_STORE_HPP

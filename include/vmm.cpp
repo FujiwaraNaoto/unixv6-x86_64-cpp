@@ -15,7 +15,7 @@ namespace
 // 表 1 枚のエントリ数 (インデックスが 9bit なので 2^9)。
 // 8 バイト × 512 = 4096 バイトで、表 1 枚がちょうど 1 ページに収まる。
 // PDPT / PD / PT の各表も同じく 2^9 エントリで、1 ページに収まる。
-constexpr int ENTRIES_PER_TABLE = 1<<9;
+constexpr int ENTRIES_PER_TABLE = 1 << 9;
 
 uint64_t pml4_index(PageVirtualAddress va)
 {
@@ -64,11 +64,15 @@ VirtualMemoryManager::VirtualMemoryManager(pmm::PhysicalMemoryManager *pmm_ptr, 
     pml4_phys_     = PhysicalAddress{read_cr3()}; // CR3の値を読み込む
     if (console != nullptr)
     {
-        console->printf("PML4 physical address: 0x%016lx, direct map at 0x%016lx\n", *pml4_phys_.address, DIRECT_MAP_BASE);
+        console->printf("PML4 physical address: 0x%016lx, direct map at 0x%016lx\n",
+                        *pml4_phys_.address,
+                        DIRECT_MAP_BASE);
     }
 }
 
-bool VirtualMemoryManager::map_page(PageVirtualAddress virtual_address, PhysicalAddress physical_address, PageFlag flags)
+bool VirtualMemoryManager::map_page(PageVirtualAddress virtual_address,
+                                    PhysicalAddress physical_address,
+                                    PageFlag flags)
 {
     if (!physical_address)
     {
@@ -158,7 +162,8 @@ PhysicalAddress VirtualMemoryManager::virtual_to_physical(PageVirtualAddress vir
     {
         return PhysicalAddress{}; // PTエントリが存在しない場合は物理アドレスを返せない
     }
-    return PhysicalAddress{*entry_to_phys(pt[pt_index(virtual_address)]).address | (virtual_address.address & ~PAGE_MASK)};
+    return PhysicalAddress{*entry_to_phys(pt[pt_index(virtual_address)]).address |
+                           (virtual_address.address & ~PAGE_MASK)};
 }
 
 void VirtualMemoryManager::flush_tlb()
@@ -203,7 +208,7 @@ PhysicalAddress VirtualMemoryManager::create_address_space()
     {
         return PhysicalAddress{}; // メモリ不足
     }
-    VirtualAddress new_pml4 = physical_to_virtual(new_pml4_phys);
+    VirtualAddress new_pml4     = physical_to_virtual(new_pml4_phys);
     VirtualAddress current_pml4 = physical_to_virtual(pml4_phys_);
 
     std::memset(new_pml4.ptr, 0, PAGE_SIZE); // 新しいPML4をゼロクリア (表 1 枚 = 1 ページ)
@@ -252,8 +257,8 @@ bool VirtualMemoryManager::map_page_in(PhysicalAddress pml4_phys,
     }
 
     VirtualAddress pdpt = get_or_create_table(original_pml4,
-                                     pml4_index(virtual_address),
-                                     PageFlag::Present | PageFlag::Writable | PageFlag::User);
+                                              pml4_index(virtual_address),
+                                              PageFlag::Present | PageFlag::Writable | PageFlag::User);
 
     if (!pdpt)
     {
@@ -327,7 +332,8 @@ void VirtualMemoryManager::copy_user_pages(PhysicalAddress src_pml4_phys, Physic
                 const PageVirtualAddress virtual_address{shift(i, 30) | shift(j, 21) |
                                                          shift(k, 12)}; // PDPTのインデックスを仮想アドレスに変換
 
-                const PhysicalAddress new_phys = pmm::pmm_ptr->allocate(); // 新しい物理ページを割り当てて内容をコピーする
+                // 新しい物理ページを割り当てて内容をコピーする
+                const PhysicalAddress new_phys = pmm::pmm_ptr->allocate();
                 if (!new_phys)
                 {
                     return; // メモリ不足

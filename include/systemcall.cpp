@@ -126,7 +126,8 @@ void init(IConsole *console)
     syscall_console->set_color(Color::LightGreen, Color::Black);
     syscall_console->puts("[SYS]  ");
     syscall_console->set_color(Color::LightGrey, Color::Black);
-    syscall_console->printf("syscall enabled  LSTAR=0x%x\n", static_cast<unsigned>(reinterpret_cast<uint64_t>(syscall_entry)));
+    syscall_console->printf("syscall enabled  LSTAR=0x%x\n",
+                            static_cast<unsigned>(reinterpret_cast<uint64_t>(syscall_entry)));
 }
 
 } // namespace SystemCall

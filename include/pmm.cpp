@@ -8,7 +8,7 @@ PhysicalMemoryManager::PhysicalMemoryManager(Multiboot2MemoryMapTag *memory_map,
                                              uint32_t multiboot_address)
 {
     // initialize bitmap (all pages used)
-    for(auto &b : bitmap_)
+    for (auto &b : bitmap_)
     {
         b = 0xFF;
     }
@@ -52,8 +52,8 @@ PhysicalMemoryManager::PhysicalMemoryManager(Multiboot2MemoryMapTag *memory_map,
         for (uint64_t addr = start; addr < end; addr += PAGE_SIZE)
         {
             if (addr < kernel_end)
-                continue; // カーネル領域はスキップ
-            free(PhysicalAddress{addr});// release the page to the free list
+                continue;                // カーネル領域はスキップ
+            free(PhysicalAddress{addr}); // release the page to the free list
         }
     }
 

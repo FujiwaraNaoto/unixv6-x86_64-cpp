@@ -23,7 +23,7 @@ struct PhysicalMemoryManagerState
     }
 };
 
-static constexpr uint32_t MAX_PAGES   = 65536;// 65536 * 4KB = 256MB
+static constexpr uint32_t MAX_PAGES   = 65536; // 65536 * 4KB = 256MB
 static constexpr uint32_t BITMAP_SIZE = MAX_PAGES / 8;
 
 // 物理メモリの状態を表示する。

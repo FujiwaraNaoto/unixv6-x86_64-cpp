@@ -26,7 +26,7 @@ void set_console(IConsole *console)
 }
 
 // isr.asmも参照
-constexpr int NUM_EXCEPTIONS                          = 22;
+constexpr int NUM_EXCEPTIONS                                       = 22;
 static std::array<const char *, NUM_EXCEPTIONS> exception_messages = {
     "Division By Zero",
     "Debug",

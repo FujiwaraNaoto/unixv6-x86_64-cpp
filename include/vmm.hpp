@@ -92,7 +92,10 @@ class VirtualMemoryManager final
     void switch_address_space(PhysicalAddress pml4_phys);
 
     // 指定PML4に対して、指定仮想アドレスを指定物理アドレスにマッピングする。(プロセスにアドレス空間構築用)
-    bool map_page_in(PhysicalAddress pml4_phys, PageVirtualAddress virtual_address, PhysicalAddress physical_address, PageFlag flags);
+    bool map_page_in(PhysicalAddress pml4_phys,
+                     PageVirtualAddress virtual_address,
+                     PhysicalAddress physical_address,
+                     PageFlag flags);
 
     void copy_user_pages(PhysicalAddress src_pml4_phys, PhysicalAddress dst_pml4_phys);
 

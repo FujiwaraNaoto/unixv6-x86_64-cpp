@@ -62,9 +62,9 @@ enum class VirtIOBlockRequestType : uint32_t
 // ─── virtio-blk ステータスバイトの値 (デバイスが書く) ────────────
 enum class VirtIOBlockStatus : uint8_t
 {
-    OK      = 0, // VIRTIO_BLK_S_OK
-    IOERR   = 1, // VIRTIO_BLK_S_IOERR
-    UNSUPP  = 2, // VIRTIO_BLK_S_UNSUPP
+    OK      = 0,    // VIRTIO_BLK_S_OK
+    IOERR   = 1,    // VIRTIO_BLK_S_IOERR
+    UNSUPP  = 2,    // VIRTIO_BLK_S_UNSUPP
     PENDING = 0xFF, // 仕様外。ドライバが「未完了」の印として先に書いておく値
 };
 
@@ -78,8 +78,8 @@ constexpr std::underlying_type_t<E> to_underlying(E e)
 
 struct [[gnu::packed]] VRingDescriptor
 {
-    uint64_t addr;  // バッファの物理アドレス
-    uint32_t len;   // バッファの長さ
+    uint64_t addr;              // バッファの物理アドレス
+    uint32_t len;               // バッファの長さ
     VRingDescriptorFlags flags; // フラグ (DESC_F_NEXT, DESC_F_WRITE)
     uint16_t next; // 次のディスクリプタのインデックス (flags に NEXT が立っている場合のみ有効)
 };
@@ -104,8 +104,8 @@ struct [[gnu::packed]] VRingUsedElement
 
 struct [[gnu::packed]] VRingUsed
 {
-    uint16_t flags;              // フラグ (VIRTQ_USED_F_NO_NOTIFY)
-    uint16_t idx;                // 次に使用済みのディスクリプタのインデックス
+    uint16_t flags;          // フラグ (VIRTQ_USED_F_NO_NOTIFY)
+    uint16_t idx;            // 次に使用済みのディスクリプタのインデックス
     VRingUsedElement ring[]; // 使用済みディスクリプタの配列
     // この後ろ (ring[num] の位置) に avail_event の uint16_t が 1 個続く。
     // avail_event: デバイスが書き、ドライバが読む。avail の idx がこの値を超えるまで
@@ -121,7 +121,7 @@ struct [[gnu::packed]] VRingUsed
 // Appendix A の struct vring に相当。
 struct VRing
 {
-    uint16_t num              = 0;       // キューのサイズ (ディスクリプタの個数。2 のべき乗)
+    uint16_t num          = 0;       // キューのサイズ (ディスクリプタの個数。2 のべき乗)
     VRingDescriptor *desc = nullptr; // Descriptor Table
     VRingAvailable *avail = nullptr; // Available Ring (ドライバが書き、デバイスが読む)
     VRingUsed *used       = nullptr; // Used Ring (デバイスが書き、ドライバが読む)
@@ -148,8 +148,8 @@ struct VRing
 // Appendix A の vring_size() に相当。virtqueue 全体に必要なバイト数を返す。
 constexpr size_t vring_size(uint16_t queue_size, size_t align)
 {
-    return ((sizeof(VRingDescriptor) * queue_size + sizeof(uint16_t) * (2 + queue_size) + align - 1) & ~(align - 1))
-           + sizeof(uint16_t) * 3 + sizeof(VRingUsedElement) * queue_size;
+    return ((sizeof(VRingDescriptor) * queue_size + sizeof(uint16_t) * (2 + queue_size) + align - 1) & ~(align - 1)) +
+           sizeof(uint16_t) * 3 + sizeof(VRingUsedElement) * queue_size;
 }
 
 // Appendix A の vring_init() に相当。
@@ -159,14 +159,15 @@ inline void vring_init(VRing &vr, uint16_t queue_size, uint8_t *p, uintptr_t ali
     vr.num   = queue_size;
     vr.desc  = reinterpret_cast<VRingDescriptor *>(p);
     vr.avail = reinterpret_cast<VRingAvailable *>(p + queue_size * sizeof(VRingDescriptor));
-    vr.used  = reinterpret_cast<VRingUsed *>((reinterpret_cast<uintptr_t>(&vr.avail->ring[queue_size]) + align - 1) & ~(align - 1));
+    vr.used  = reinterpret_cast<VRingUsed *>((reinterpret_cast<uintptr_t>(&vr.avail->ring[queue_size]) + align - 1) &
+                                            ~(align - 1));
 }
 
 struct [[gnu::packed]] VirtIOBlockRequestHeader
 {
     VirtIOBlockRequestType type; // リクエストの種類 (BLK_T_IN=0(read), BLK_T_OUT=1(write))
-    uint32_t reserved; // 予約領域 (0で埋める)
-    uint64_t sector;   // セクタ番号 (512バイト単位)
+    uint32_t reserved;           // 予約領域 (0で埋める)
+    uint64_t sector;             // セクタ番号 (512バイト単位)
 };
 
 // NOTE: DMA 対象のバッファ (リクエストヘッダ / データ / ステータス) の実体は

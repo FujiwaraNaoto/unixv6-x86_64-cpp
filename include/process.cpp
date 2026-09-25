@@ -100,7 +100,6 @@ static void schedule(Process *prev_proc)
         current_proc_ = nullptr;
         switch_context(&prev_proc->context, scheduler_context_);
     }
-
 }
 
 Process *create_process(EntryPoint entry, const char *name)

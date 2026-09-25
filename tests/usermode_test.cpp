@@ -66,7 +66,7 @@ void usermode_ring3(IConsole *console)
 {
     // ユーザープログラムのコードページを User 許可で貼り直す
     const PageVirtualAddress code_page{reinterpret_cast<uint64_t>(&user_program) & PAGE_MASK};
-    const auto code_phys     = vmm::vmm_ptr->virtual_to_physical(code_page);
+    const auto code_phys = vmm::vmm_ptr->virtual_to_physical(code_page);
     if (!code_phys)
     {
         console->set_color(Color::LightRed, Color::Black);

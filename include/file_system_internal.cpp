@@ -46,32 +46,36 @@ SuperBlock &mutable_superblock()
 bool load_superblock()
 {
     auto block = block_store->acquire(1); // superblock
-    if (!block) return false;
+    if (!block)
+        return false;
     superblock_state = *reinterpret_cast<const SuperBlock *>(block.data());
     return superblock_state.magic == FS_MAGIC;
 }
 bool zero_block(uint32_t blockno)
 {
     auto block = block_store->acquire(blockno);
-    if (!block) return false;
+    if (!block)
+        return false;
     std::memset(block.data(), 0, FSBLOCK_SIZE);
     return block.write_back();
 }
 bool mark_block_used(uint32_t blockno)
 {
     auto block = block_store->acquire(bitmap_block(blockno));
-    if (!block) return false;
-    uint32_t bit_index = blockno % BLOCKS_PER_BITMAP_BLOCK;
+    if (!block)
+        return false;
+    uint32_t bit_index  = blockno % BLOCKS_PER_BITMAP_BLOCK;
     uint32_t byte_index = bit_index / BITS_PER_BYTE;
-    uint8_t bit_mask = 1 << (bit_index % BITS_PER_BYTE);
+    uint8_t bit_mask    = 1 << (bit_index % BITS_PER_BYTE);
     block.data()[byte_index] |= bit_mask;
     return block.write_back();
 }
 bool write_inode(uint32_t inum, const DiskInode &inode)
 {
     auto block = block_store->acquire(inode_block(inum));
-    if (!block) return false;
-    auto* entries = reinterpret_cast<DiskInode*>(block.data());
+    if (!block)
+        return false;
+    auto *entries                    = reinterpret_cast<DiskInode *>(block.data());
     entries[inum % INODES_PER_BLOCK] = inode;
     return block.write_back();
 }
@@ -79,11 +83,11 @@ bool write_inode(uint32_t inum, const DiskInode &inode)
 std::optional<DiskInode> read_inode(uint32_t inum)
 {
     auto block = block_store->acquire(inode_block(inum));
-    if (!block) return std::nullopt;
-    auto* entries = reinterpret_cast<DiskInode*>(block.data());
+    if (!block)
+        return std::nullopt;
+    auto *entries = reinterpret_cast<DiskInode *>(block.data());
     return entries[inum % INODES_PER_BLOCK];
 }
 
 
 } // namespace FileSystem::internal
-
