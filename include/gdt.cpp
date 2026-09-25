@@ -70,6 +70,45 @@ struct Granularity
 };
 
 
+// システムディスクリプタ (TSS など) の種類。S=0 のとき access の下位 4bit がこの値になる。
+// (Intel SDM Vol.3A Table 3-2)
+// 64bit モードで TSS を表すのは 9 と 11 だけ。32bit モードで 32-bit TSS だった値が、
+// そのまま 64-bit TSS になっている。16-bit TSS を表していた 1 と 3 は予約済みになり、
+// 0 は「16 バイトディスクリプタの上位 8 バイト」を表す値に変わった。
+enum class SystemDescriptorType : uint8_t
+{
+    AvailableTss = 0x9, // まだ使われていない TSS (access は 0x89)
+    BusyTss      = 0xB, // ltr でロードされると CPU が自動でこちらに書き換える (access は 0x8B)。
+                        // 既に Busy の TSS を ltr すると #GP になるので、初期値は Available にする
+};
+
+// システムディスクリプタ用の access バイト。
+// Code/Data 用の Access とはビットの意味が違い、S=0 (システム) のとき
+// 下位 4bit は E/DC/RW/A ではなく Type になる。
+//
+// NOTE: 64bit モードのシステムディスクリプタは 16 バイトあり、GDT の 2 エントリ分を占める。
+//       2 エントリ目にベースアドレスの上位 32bit が入る (TaskStateSegmentDescriptor::base_upper)。
+//       Code/Data 用の set_entry() で書くと上位 8 バイトを書き忘れるので、set_tss_entry() を使う。
+struct SystemAccess
+{
+    // access フィールドのビット構成
+    // bit:  7    6-5    4    3-0
+    //       P    DPL    S    Type
+    // 0x89 = 1 00  0 1001 → P=1, DPL=0, S=0, Type=9 : 使用前の TSS
+    uint8_t present : 1                    = 1; // P: Present
+    uint8_t descriptor_privilege_level : 2 = 0; // DPL: 慣例的に 0。本来はハードウェアタスクスイッチを
+                                                //      低い特権レベルから使わせないためのものだが、64bit モードには
+                                                //      その仕組みが無く、ltr も CPL=0 でしか実行できないので実質効かない
+    uint8_t descriptor_type : 1            = 0; // S: システムディスクリプタは 0 固定
+    SystemDescriptorType type              = SystemDescriptorType::AvailableTss;
+
+    operator uint8_t() const
+    {
+        return (present << 7) | (descriptor_privilege_level << 5) | (descriptor_type << 4) |
+               (static_cast<uint8_t>(type) & 0x0F);
+    }
+};
+
 
 void set_entry(int index, Access access, Granularity granularity, uint32_t base = 0, uint32_t limit = 0)
 {
@@ -88,8 +127,10 @@ void set_tss_entry(int index, uint64_t base, uint32_t limit)
     entry->limit_low   = limit & 0xFFFF;
     entry->base_low    = base & 0xFFFF;
     entry->base_middle = (base >> 16) & 0xFF;
-    entry->access      = 0x89; // Present, DPL=0, Type=9 (Available 32-bit TSS)
-    entry->granularity = ((limit >> 16) & 0x0F);
+    entry->access      = static_cast<uint8_t>(SystemAccess{.type = SystemDescriptorType::AvailableTss});
+    // TSS では G / D/B / L / AVL はどれも 0 にする (L=1 と D/B=1 はコードセグメント用で、
+    // ここでは予約扱い)。Granularity の既定値がすべて 0 なので、そのまま使う。
+    entry->granularity = ((limit >> 16) & 0x0F) | static_cast<uint8_t>(Granularity{});
     entry->base_high   = (base >> 24) & 0xFF;
     entry->base_upper  = (base >> 32) & 0xFFFFFFFF;
     entry->reserved    = 0;
