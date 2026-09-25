@@ -282,17 +282,17 @@ bool VirtualMemoryManager::map_page_in(PhysicalAddress pml4_phys,
     return true;
 }
 
-void VirtualMemoryManager::copy_user_pages(PhysicalAddress src_pml4_phys, PhysicalAddress dst_pml4_phys)
+bool VirtualMemoryManager::copy_user_pages(PhysicalAddress src_pml4_phys, PhysicalAddress dst_pml4_phys)
 {
     VirtualAddress src = physical_to_virtual(src_pml4_phys);
     if (!src)
     {
-        return; // PML4が存在しない場合はコピーできない
+        return false; // PML4が存在しない場合はコピーできない
     }
 
     if (!(src[0] & PageFlag::Present))
     {
-        return; // PML4エントリが存在しない場合はコピーできない
+        return false; // PML4エントリが存在しない場合はコピーできない
     }
 
     VirtualAddress src_pdpt = physical_to_virtual(entry_to_phys(src[0]));
@@ -336,7 +336,7 @@ void VirtualMemoryManager::copy_user_pages(PhysicalAddress src_pml4_phys, Physic
                 const PhysicalAddress new_phys = pmm::pmm_ptr->allocate();
                 if (!new_phys)
                 {
-                    return; // メモリ不足
+                    return false; // メモリ不足
                 }
 
                 VirtualAddress dist_page = physical_to_virtual(new_phys);
@@ -351,6 +351,7 @@ void VirtualMemoryManager::copy_user_pages(PhysicalAddress src_pml4_phys, Physic
             }
         }
     }
+    return true;
 }
 
 

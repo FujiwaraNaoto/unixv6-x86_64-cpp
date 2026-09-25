@@ -98,7 +98,7 @@ class VirtualMemoryManager final
                      PhysicalAddress physical_address,
                      PageFlag flags);
 
-    void copy_user_pages(PhysicalAddress src_pml4_phys, PhysicalAddress dst_pml4_phys);
+    bool copy_user_pages(PhysicalAddress src_pml4_phys, PhysicalAddress dst_pml4_phys);
 
   private:
     VirtualAddress get_or_create_table(VirtualAddress parent_table, uint64_t index, PageFlag flags);
