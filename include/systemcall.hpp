@@ -7,6 +7,7 @@ namespace SyscallNo
 {
 constexpr int kRead  = 0;
 constexpr int kWrite = 1;
+constexpr int kFork  = 57;
 constexpr int kExit  = 60;
 } // namespace SyscallNo
 

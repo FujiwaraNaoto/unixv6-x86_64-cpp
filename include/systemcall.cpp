@@ -2,6 +2,8 @@
 #include "serial.hpp"
 #include "keyboard.hpp"
 #include "gdt.hpp"
+#include "console.hpp"
+#include "process.hpp"
 
 extern "C" void syscall_entry();
 extern "C" uint64_t rdmsr(uint32_t msr);
@@ -66,6 +68,11 @@ static long sys_exit(uint64_t code)
     return 0;
 }
 
+static long sys_fork()
+{
+    return static_cast<long>(process::fork());
+}
+
 namespace SystemCall
 {
 
@@ -77,6 +84,8 @@ extern "C" long syscall_dispatch(uint64_t num, uint64_t a1, uint64_t a2, uint64_
             return sys_read(a1, a2, a3);
         case SyscallNo::kWrite:
             return sys_write(a1, a2, a3);
+        case SyscallNo::kFork:
+            return sys_fork();
         case SyscallNo::kExit:
             return sys_exit(a1);
         default:
