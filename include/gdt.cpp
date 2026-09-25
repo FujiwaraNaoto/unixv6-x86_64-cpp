@@ -19,13 +19,11 @@ static gdt::GlobalDescriptorTablePointer gdt_ptr;
 
 namespace
 {
-
-
 struct Access
 {
-    uint8_t present : 1                     = 1; // P: Present (1=有効, 0=無効)/Data セグメントの場合
+    uint8_t present : 1                     = 1; // P: Present (1=有効, 0=無効)
     uint8_t descriptor_privilege_level : 2  = 0; // DPL: Descriptor Privilege Level (0=Ring0, 3=Ring3)
-    uint8_t descriptor_type : 1             = 1; // S: Descriptor Type (1=Code/Data, 0=System/Data セグメントの場合
+    uint8_t descriptor_type : 1             = 1; // S: Descriptor Type (1=Code/Data, 0=System (TSS, LDT, ゲートなど))
     uint8_t executable : 1                  = 0; // E: Executable (1=Code, 0=Data)
     uint8_t direction_conforming : 1        = 0; // DC: Direction/Conforming (Code セグメントの場合: 1=Conforming, Data セグメントの場合: 1=Down)
     uint8_t readable_writable : 1           = 1; // RW: Readable/Writable (Code セグメントの場合: 1=Readable, Data セグメントの場合: 1=Writable)
@@ -37,12 +35,15 @@ struct Access
     operator uint8_t() const
     {
     // ユーザとカーネルの場合は異なるのがDPLがuser(3)かkernel(0)かの違いだけで、他のビットは同じ。
-    // データかコードセグメントかの違いはEビットとDCビットの違いで、コードセグメントはE=1,データセグメントはE=0
+    // データかコードセグメントかの違いは E ビットだけ(コード: E=1, データ: E=0)
+    // DC と RW は E の値によって意味が変わる
     //        P DPL S E DC RW A
     // 0x9A = 1 00  1 1 0  1  0  → P=1, DPL=0, S=1, E=1, RW=1 : カーネル コード
     // 0x92 = 1 00  1 0 0  1  0  → P=1, DPL=0, S=1, E=0, RW=1 : カーネル データ
     // 0xF2 = 1 11  1 0 0  1  0  → P=1, DPL=3, S=1, E=0, RW=1 : ユーザー データ
     // 0xFA = 1 11  1 1 0  1  0  → P=1, DPL=3, S=1, E=1, RW=1 : ユーザー コード
+
+    // NOTE: デフォルト値が P=1, DPL=0, S=1, E=0, RW=1 なので、カーネル データ セグメントの値と同じ。
         return (present << 7) | (descriptor_privilege_level << 5) | (descriptor_type << 4) |
                (executable << 3) | (direction_conforming << 2) | (readable_writable << 1) | accessed;
     }
@@ -54,12 +55,13 @@ struct Granularity
     // granularity フィールドのビット構成
     // bit:  7    6     5    4     3-0
     //       G    D/B   L    AVL   limit[19:16]
-    // 0x20(=0b0010 0000)はbit5でLbit(long mode)=1。このコードセグメントは64bitモードで実行されることを示す。D/Bビットは64bitモードでは無視される。
+    // 0x20(=0b0010 0000)はbit5でLbit(long mode)=1。このコードセグメントは64bitモードで実行されることを示す。
+    // L=1の時D/Bビットは必ず0にすること(L=1 & D=1は予約済みの組み合わせ)
 
-    uint8_t granularity : 1          = 0; // G
-    uint8_t default_operand_size : 1 = 0; // D/B
-    uint8_t long_mode : 1            = 0; // L
-    uint8_t available : 1            = 0; // AVL
+    uint8_t granularity : 1          = 0; // G : 1=4KiB単位, 0=バイト単位
+    uint8_t default_operand_size : 1 = 0; // D/B : 1=32bit, 0=16bit
+    uint8_t long_mode : 1            = 0; // L : 1=64bitコード, 0=互換モード(D/Bで16/32bitが決まる)。コードセグメントのみ有効
+    uint8_t available : 1            = 0; // AVL : Available for system software use
 
     operator uint8_t() const
     {
