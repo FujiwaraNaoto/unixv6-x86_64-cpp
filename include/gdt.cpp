@@ -21,51 +21,41 @@ namespace
 {
 
 
-// access フィールドのビット構成
-// bit:  7    6-5    4    3    2     1    0
-//       P    DPL    S    E    DC    RW   A
-// P: Present (1=有効, 0=無効)/Data セグメントの場合:
-// DPL: Descriptor Privilege Level (0=Ring0, 3=Ring3)
-// S: Descriptor Type (1=Code/Data, 0=System/Data セグメントの場合:
-// E: Executable (1=Code, 0=Data)
-// DC: Direction/Conforming (Code セグメントの場合: 1=Conforming, Data セグメントの場合: 1=Down)
-// RW: Readable/Writable (Code セグメントの場合: 1=Readable, Data セグメントの場合: 1=Writable)
-// A: Accessed (CPU がアクセスしたときに自動で 1 になる)
-// ユーザとカーネルの場合は異なるのがDPLがuser(3)かkernel(0)かの違いだけで、他のビットは同じ。
-// データかコードセグメントかの違いはEビットとDCビットの違いで、コードセグメントはE=1,データセグメントはE=0
-//        P DPL S E DC RW A
-// 0x9A = 1 00  1 1 0  1  0  → P=1, DPL=0, S=1, E=1, RW=1 : カーネル コード
-// 0x92 = 1 00  1 0 0  1  0  → P=1, DPL=0, S=1, E=0, RW=1 : カーネル データ
-// 0xF2 = 1 11  1 0 0  1  0  → P=1, DPL=3, S=1, E=0, RW=1 : ユーザー データ
-// 0xFA = 1 11  1 1 0  1  0  → P=1, DPL=3, S=1, E=1, RW=1 : ユーザー コード
-
-
-
-// granularity フィールドのビット構成
-// bit:  7    6     5    4     3-0
-//       G    D/B   L    AVL   limit[19:16]
-// 0x20(=0b0010 0000)はbit5でLbit(long mode)=1。このコードセグメントは64bitモードで実行されることを示す。D/Bビットは64bitモードでは無視される。
-
-struct [[gnu::packed]] Access
+struct Access
 {
-    uint8_t present : 1                     = 1; // P
-    uint8_t descriptor_privilege_level : 2  = 0; // DPL
-    uint8_t descriptor_type : 1             = 1; // S
-    uint8_t executable : 1                  = 0; // E
-    uint8_t direction_conforming : 1        = 0; // DC
-    uint8_t readable_writable : 1           = 1; // RW
-    uint8_t accessed : 1                    = 0; // A
+    uint8_t present : 1                     = 1; // P: Present (1=有効, 0=無効)/Data セグメントの場合
+    uint8_t descriptor_privilege_level : 2  = 0; // DPL: Descriptor Privilege Level (0=Ring0, 3=Ring3)
+    uint8_t descriptor_type : 1             = 1; // S: Descriptor Type (1=Code/Data, 0=System/Data セグメントの場合
+    uint8_t executable : 1                  = 0; // E: Executable (1=Code, 0=Data)
+    uint8_t direction_conforming : 1        = 0; // DC: Direction/Conforming (Code セグメントの場合: 1=Conforming, Data セグメントの場合: 1=Down)
+    uint8_t readable_writable : 1           = 1; // RW: Readable/Writable (Code セグメントの場合: 1=Readable, Data セグメントの場合: 1=Writable)
+    uint8_t accessed : 1                    = 0; // A: Accessed (CPU がアクセスしたときに自動で 1 になる)
 
+    // access フィールドのビット構成
+    // bit:  7    6-5    4    3    2     1    0
+    //       P    DPL    S    E    DC    RW   A
     operator uint8_t() const
     {
+    // ユーザとカーネルの場合は異なるのがDPLがuser(3)かkernel(0)かの違いだけで、他のビットは同じ。
+    // データかコードセグメントかの違いはEビットとDCビットの違いで、コードセグメントはE=1,データセグメントはE=0
+    //        P DPL S E DC RW A
+    // 0x9A = 1 00  1 1 0  1  0  → P=1, DPL=0, S=1, E=1, RW=1 : カーネル コード
+    // 0x92 = 1 00  1 0 0  1  0  → P=1, DPL=0, S=1, E=0, RW=1 : カーネル データ
+    // 0xF2 = 1 11  1 0 0  1  0  → P=1, DPL=3, S=1, E=0, RW=1 : ユーザー データ
+    // 0xFA = 1 11  1 1 0  1  0  → P=1, DPL=3, S=1, E=1, RW=1 : ユーザー コード
         return (present << 7) | (descriptor_privilege_level << 5) | (descriptor_type << 4) |
                (executable << 3) | (direction_conforming << 2) | (readable_writable << 1) | accessed;
     }
 };
 
 // 下位 4bit の limit[19:16] は set_entry で limit から埋めるので、ここでは上位 4bit だけを持つ
-struct [[gnu::packed]] Granularity
+struct Granularity
 {
+    // granularity フィールドのビット構成
+    // bit:  7    6     5    4     3-0
+    //       G    D/B   L    AVL   limit[19:16]
+    // 0x20(=0b0010 0000)はbit5でLbit(long mode)=1。このコードセグメントは64bitモードで実行されることを示す。D/Bビットは64bitモードでは無視される。
+
     uint8_t granularity : 1          = 0; // G
     uint8_t default_operand_size : 1 = 0; // D/B
     uint8_t long_mode : 1            = 0; // L
