@@ -229,16 +229,14 @@ void virtio_block_read_write(IConsole *console)
     }
 
     readback.fill(0);
-    const bool write_ok = VirtIOBlock::write_block(sector, pattern.data())
-                          && VirtIOBlock::read_block(sector, readback.data())
-                          && same_sector(readback, pattern);
+    const bool write_ok = VirtIOBlock::write_block(sector, pattern.data()) &&
+                          VirtIOBlock::read_block(sector, readback.data()) && same_sector(readback, pattern);
     report(console, "write + read back", write_ok);
 
     // 3. 元に戻す
     readback.fill(0);
-    const bool restore_ok = VirtIOBlock::write_block(sector, original.data())
-                            && VirtIOBlock::read_block(sector, readback.data())
-                            && same_sector(readback, original);
+    const bool restore_ok = VirtIOBlock::write_block(sector, original.data()) &&
+                            VirtIOBlock::read_block(sector, readback.data()) && same_sector(readback, original);
     report(console, "restore original", restore_ok);
 }
 

@@ -7,13 +7,14 @@
 #include "block_store.hpp"
 
 
-constexpr uint32_t FS_MAGIC     = 0x10203040;//xv6 の 0x10203040 と同じ値にしておく。リトルエンディアンとビックエンディアンの両方で同じ値にならないように
+// xv6 の 0x10203040と同じ値にしておく。リトルエンディアンとビックエンディアンの両方で同じ値にならないように
+constexpr uint32_t FS_MAGIC     = 0x10203040;
 constexpr uint32_t FSBLOCK_SIZE = 512;
 constexpr int NDIRECT           = 12;                              // 直接ブロック数
 constexpr int NINDIRECT         = FSBLOCK_SIZE / sizeof(uint32_t); // 128
 constexpr int MAXFILE           = NDIRECT + NINDIRECT;             // 140ブロック
 constexpr int DIRSIZ            = 14;                              // ファイル名長 (V6と同じ)
-constexpr uint32_t ROOT_INODE      = 1;                               // ルートの inode 番号
+constexpr uint32_t ROOT_INODE   = 1;                               // ルートの inode 番号
 
 
 // block 0        1         2 ...            bitmap_start ...      data_start ...
@@ -70,11 +71,11 @@ enum class InodeType : uint16_t
 struct SuperBlock
 {
     uint32_t magic;
-    uint32_t size;       // 全ブロック数
-    uint32_t nblocks;    // データブロック数
-    uint32_t ninodes;    // inode 数
-    uint32_t inode_start; // inode 領域の開始ブロック
-    uint32_t bitmap_start;  // ビットマップの開始ブロック
+    uint32_t size;         // 全ブロック数
+    uint32_t nblocks;      // データブロック数
+    uint32_t ninodes;      // inode 数
+    uint32_t inode_start;  // inode 領域の開始ブロック
+    uint32_t bitmap_start; // ビットマップの開始ブロック
 };
 // ─── ディスク上の inode (64バイト) ───────────────────────────────
 struct [[gnu::packed]] DiskInode
@@ -92,7 +93,7 @@ constexpr int INODES_PER_BLOCK = FSBLOCK_SIZE / sizeof(DiskInode); // 8個/ブ�
 // ブロックビットマップは 1 ブロック = 1 ビットで管理するので、
 // バイト内のビット位置を求めるときに 1 バイトのビット数が要る。
 constexpr uint32_t BITS_PER_BYTE      = 8;
-constexpr int BLOCKS_PER_BITMAP_BLOCK = FSBLOCK_SIZE * BITS_PER_BYTE;     // 4096ブロック/ビットマップ
+constexpr int BLOCKS_PER_BITMAP_BLOCK = FSBLOCK_SIZE * BITS_PER_BYTE; // 4096ブロック/ビットマップ
 // ─── ディレクトリエントリ (16バイト) ─────────────────────────────
 struct [[gnu::packed]] DirectoryEntry
 {
@@ -133,7 +134,7 @@ namespace FileSystem
 // (BufferCache::Manager と同じ形)。
 class Manager final
 {
-public:
+  public:
     explicit Manager(uint32_t total_blocks, IBlockStore *block_store = nullptr, IConsole *console = nullptr);
     // 初期化に成功したか。
     // フォーマット済みだった場合も、新規にフォーマットした場合も true。
@@ -142,10 +143,8 @@ public:
         return valid_;
     }
 
-private:
+  private:
     bool valid_ = false;
-    
-
 };
 
 const SuperBlock &superblock();
@@ -153,6 +152,6 @@ const SuperBlock &superblock();
 std::optional<uint32_t> allocate_block();
 void free_block(uint32_t blockno);
 
-}// namespace FileSystem
+} // namespace FileSystem
 
 #endif // FILE_SYSTEM_HPP

@@ -9,6 +9,7 @@ UseTab: Never
 ContinuationIndentWidth: 4
 PointerAlignment: Right        # TYPE *ptr 形式
 AlignConsecutiveAssignments: true
+AlignConsecutiveBitFields: AcrossEmptyLinesAndComments  # ビットフィールドの : と幅を縦に揃える
 AlignConsecutiveDeclarations: false
 AlignConsecutiveMacros: true
 SpaceBeforeParens: ControlStatements

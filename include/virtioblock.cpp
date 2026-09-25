@@ -11,7 +11,7 @@ namespace
 
 // ─── PCI ID (virtio legacy block device) ─────────────────────────
 // see 2.1 PCI Discovery
-constexpr uint16_t VIRTIO_VENDOR_ID     = 0x1AF4;
+constexpr uint16_t VIRTIO_VENDOR_ID = 0x1AF4;
 
 // https://docs.oasis-open.org/virtio/virtio/v1.3/csd01/virtio-v1.3-csd01.html#x1-1320002
 // Transitinal PCI Device ID (0x1000) は virtio 1.0 以降のデバイスで使われる。0x1001は block deviceを示す。
@@ -102,7 +102,7 @@ bool resolve_dma_buffers(VirtIOBlock::PhysicalAddressResolver resolve_physical)
 // virtqueue 0 を組み立て、最後にその位置をデバイスに教える
 bool virtq_init(VirtIOBlock::PhysicalAddressResolver resolve_physical)
 {
-    io::out16b(port(VirtIORegister::QUEUE_SELECT), 0);                    // Queue Select = 0
+    io::out16b(port(VirtIORegister::QUEUE_SELECT), 0);                       // Queue Select = 0
     const uint16_t queue_size = io::in16b(port(VirtIORegister::QUEUE_SIZE)); // Queue Size
     if (queue_size == 0)
         return false;
@@ -155,8 +155,8 @@ void setup_request(VirtIOBlockRequestType type, uint64_t sector)
     // 2.4.1.1 Placing Buffers into The Descriptor Table
 
     // Descriptor 0: リクエストヘッダ (デバイスが読む)
-    queue.desc[0].addr  = *request_header_phys.address;
-    queue.desc[0].len   = sizeof(VirtIOBlockRequestHeader);
+    queue.desc[0].addr = *request_header_phys.address;
+    queue.desc[0].len  = sizeof(VirtIOBlockRequestHeader);
     // If there is a buffer element after this:
     // i. Set d.next to the index of the next free descriptor element.
     // ii. Set d.flags to indicate that there is a next descriptor (VIRTQ_DESC_F_NEXT).
@@ -168,8 +168,10 @@ void setup_request(VirtIOBlockRequestType type, uint64_t sector)
     //   write → デバイスが読む (フラグなし)
     queue.desc[1].addr  = *data_buffer_phys.address;
     queue.desc[1].len   = SECTOR_SIZE;
-    queue.desc[1].flags = VRingDescriptorFlags::DESC_F_NEXT | (type == VirtIOBlockRequestType::BLK_T_IN ? VRingDescriptorFlags::DESC_F_WRITE : VRingDescriptorFlags::NONE);
-    queue.desc[1].next  = 2;
+    queue.desc[1].flags = VRingDescriptorFlags::DESC_F_NEXT |
+                          (type == VirtIOBlockRequestType::BLK_T_IN ? VRingDescriptorFlags::DESC_F_WRITE
+                                                                    : VRingDescriptorFlags::NONE);
+    queue.desc[1].next = 2;
 
     // Descriptor 2: ステータス (デバイスが書く)
     queue.desc[2].addr  = *status_byte_phys.address;
@@ -184,14 +186,16 @@ void virtq_kick(uint16_t desc_index)
     // 2.4.1 Supplying Buffers to the Device
 
     queue.avail->ring[queue.avail->idx % queue.num] = desc_index;
-    // 4. A memory barrier should be executed to ensure the device sees the updated descriptor table and available ring before the next step
+    // 4. A memory barrier should be executed to ensure the device sees the updated descriptor table and available ring
+    // before the next step
     __sync_synchronize();
     // 5. The available idx field should be increased by the number of entries added to the available ring.
     queue.avail->idx++;
     // 6. A memory barrier should be executed to ensure the device sees the updated available idx before the next step
     __sync_synchronize();
 
-    // 7. The device should be notified that new buffers are available by writing the queue's notify offset to the device's Queue Notify register.
+    // 7. The device should be notified that new buffers are available by writing the queue's notify offset to the
+    // device's Queue Notify register.
     io::out16b(port(VirtIORegister::QUEUE_NOTIFY), 0);
     last_used_index++;
 }
@@ -234,8 +238,8 @@ bool initialize(PhysicalAddressResolver resolve_physical)
     add_device_status(VirtIODeviceStatus::DRIVER);
 
     // ─── 4. feature negotiation (最小構成: 何も使わない) ───
-    // Device-specific setup, including reading the Device Feature Bits, discovery of virtqueues for the device, optional MSI-X setup, and reading and
-    // possibly writing the virtio configuration space.
+    // Device-specific setup, including reading the Device Feature Bits, discovery of virtqueues for the device,
+    // optional MSI-X setup, and reading and possibly writing the virtio configuration space.
     (void)io::in32b(port(VirtIORegister::DEVICE_FEATURES)); // Device Features を読むだけ
     io::out32b(port(VirtIORegister::DRIVER_FEATURES), 0);   // Driver Features = 0
 

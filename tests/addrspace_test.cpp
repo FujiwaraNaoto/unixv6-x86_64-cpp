@@ -15,8 +15,8 @@ namespace
 // このテストは従来どおり PML4 スロット1 (512GiB〜) を使う。
 // (スレッドは何も出力しないので、出力先の受け渡しは要らない)
 constexpr PageVirtualAddress kAddrTestVirt{0x8000000000}; // PML4 index 1
-volatile uint64_t test_result_a  = 0;
-volatile uint64_t test_result_b  = 0;
+volatile uint64_t test_result_a = 0;
+volatile uint64_t test_result_b = 0;
 
 void addrspace_thread_a()
 {

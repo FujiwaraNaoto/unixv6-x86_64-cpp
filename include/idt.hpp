@@ -29,12 +29,12 @@ union [[gnu::packed]] InterruptDescriptorAttribute
     uint16_t data;
     struct [[gnu::packed]]
     {
-        uint16_t interrupt_stack_table : 3; // IST (Interrupt Stack Table) インデックス
-        uint16_t reserved0 : 5;
-        DescriptorType type : 4; // タイプ (例: 0
-        uint16_t : 1;
+        uint16_t interrupt_stack_table      : 3; // IST (Interrupt Stack Table) インデックス
+        uint16_t reserved0                  : 5;
+        DescriptorType type                 : 4; // タイプ (例: 0
+        uint16_t                            : 1;
         uint16_t descriptor_privilege_level : 2; // DPL (Descriptor Privilege Level)
-        uint16_t present : 1;                    // P (Present) ビット
+        uint16_t present                    : 1; // P (Present) ビット
     } bits;
 };
 

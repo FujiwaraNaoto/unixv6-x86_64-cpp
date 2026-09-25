@@ -29,29 +29,33 @@ enum class PrivilegeLevel : uint8_t
 
 struct Access
 {
-    uint8_t present : 1                     = 1; // P: Present (1=有効, 0=無効)
+    uint8_t present                           : 1 = 1;                     // P: Present (1=有効, 0=無効)
     PrivilegeLevel descriptor_privilege_level : 2 = PrivilegeLevel::Ring0; // DPL: このセグメントを使える特権レベル
-    uint8_t descriptor_type : 1             = 1; // S: Descriptor Type (1=Code/Data, 0=System (TSS, LDT, ゲートなど))
-    uint8_t executable : 1                  = 0; // E: Executable (1=Code, 0=Data)
-    uint8_t direction_conforming : 1        = 0; // DC: Direction/Conforming (Code セグメントの場合: 1=Conforming, Data セグメントの場合: 1=Down)
-    uint8_t readable_writable : 1           = 1; // RW: Readable/Writable (Code セグメントの場合: 1=Readable, Data セグメントの場合: 1=Writable)
-    uint8_t accessed : 1                    = 0; // A: Accessed (CPU がアクセスしたときに自動で 1 になる)
+    uint8_t descriptor_type                   : 1 = 1;                     // S: 1=Code/Data, 0=System (TSS など)
+    uint8_t executable                        : 1 = 0;                     // E: 1=Code, 0=Data
+    uint8_t direction_conforming              : 1 = 0;                     // DC: 意味は E で変わる (下の表)
+    uint8_t readable_writable                 : 1 = 1;                     // RW: 意味は E で変わる (下の表)
+    uint8_t accessed                          : 1 = 0;                     // A: CPU が触ると自動で 1 になる
 
     // access フィールドのビット構成
     // bit:  7    6-5    4    3    2     1    0
     //       P    DPL    S    E    DC    RW   A
+    //
+    // DC と RW は E (Code か Data か) で意味が変わる:
+    //   DC : Code なら 1=Conforming、Data なら 1=下方伸長 (スタック用)
+    //   RW : Code なら 1=読み取り可、Data なら 1=書き込み可
     operator uint8_t() const
     {
-    // ユーザとカーネルの場合は異なるのがDPLがuser(3)かkernel(0)かの違いだけで、他のビットは同じ。
-    // データかコードセグメントかの違いは E ビットだけ(コード: E=1, データ: E=0)
-    // DC と RW は E の値によって意味が変わる
-    //        P DPL S E DC RW A
-    // 0x9A = 1 00  1 1 0  1  0  → P=1, DPL=0, S=1, E=1, RW=1 : カーネル コード
-    // 0x92 = 1 00  1 0 0  1  0  → P=1, DPL=0, S=1, E=0, RW=1 : カーネル データ
-    // 0xF2 = 1 11  1 0 0  1  0  → P=1, DPL=3, S=1, E=0, RW=1 : ユーザー データ
-    // 0xFA = 1 11  1 1 0  1  0  → P=1, DPL=3, S=1, E=1, RW=1 : ユーザー コード
+        // ユーザとカーネルの場合は異なるのがDPLがuser(3)かkernel(0)かの違いだけで、他のビットは同じ。
+        // データかコードセグメントかの違いは E ビットだけ(コード: E=1, データ: E=0)
+        // DC と RW は E の値によって意味が変わる
+        //        P DPL S E DC RW A
+        // 0x9A = 1 00  1 1 0  1  0  → P=1, DPL=0, S=1, E=1, RW=1 : カーネル コード
+        // 0x92 = 1 00  1 0 0  1  0  → P=1, DPL=0, S=1, E=0, RW=1 : カーネル データ
+        // 0xF2 = 1 11  1 0 0  1  0  → P=1, DPL=3, S=1, E=0, RW=1 : ユーザー データ
+        // 0xFA = 1 11  1 1 0  1  0  → P=1, DPL=3, S=1, E=1, RW=1 : ユーザー コード
 
-    // NOTE: デフォルト値が P=1, DPL=0, S=1, E=0, RW=1 なので、カーネル データ セグメントの値と同じ。
+        // NOTE: デフォルト値が P=1, DPL=0, S=1, E=0, RW=1 なので、カーネル データ セグメントの値と同じ。
         return (present << 7) | (static_cast<uint8_t>(descriptor_privilege_level) << 5) | (descriptor_type << 4) |
                (executable << 3) | (direction_conforming << 2) | (readable_writable << 1) | accessed;
     }
@@ -64,12 +68,13 @@ struct Granularity
     // bit:  7    6     5    4     3-0
     //       G    D/B   L    AVL   limit[19:16]
     // 0x20(=0b0010 0000)はbit5でLbit(long mode)=1。このコードセグメントは64bitモードで実行されることを示す。
-    // L=1の時D/Bビットは必ず0にすること(L=1 & D=1は予約済みの組み合わせ)
+    // L=1の時D/Bビットは必ず0にすること(L=1 & D=1は予約済みの組み合わせ)。
+    // L はコードセグメントでのみ意味を持ち、L=0 なら互換モード (16/32bit は D/B で決まる)。
 
-    uint8_t granularity : 1          = 0; // G : 1=4KiB単位, 0=バイト単位
+    uint8_t granularity          : 1 = 0; // G : 1=4KiB単位, 0=バイト単位
     uint8_t default_operand_size : 1 = 0; // D/B : 1=32bit, 0=16bit
-    uint8_t long_mode : 1            = 0; // L : 1=64bitコード, 0=互換モード(D/Bで16/32bitが決まる)。コードセグメントのみ有効
-    uint8_t available : 1            = 0; // AVL : Available for system software use
+    uint8_t long_mode            : 1 = 0; // L : 1=64bitコード, 0=互換モード
+    uint8_t available            : 1 = 0; // AVL : Available for system software use
 
     operator uint8_t() const
     {
@@ -103,18 +108,18 @@ struct SystemAccess
     // bit:  7    6-5    4    3-0
     //       P    DPL    S    Type
     // 0x89 = 1 00  0 1001 → P=1, DPL=0, S=0, Type=9 : 使用前の TSS
-    uint8_t present : 1                    = 1; // P: Present
-    PrivilegeLevel descriptor_privilege_level : 2 = PrivilegeLevel::Ring0;
-                                                // DPL: 慣例的に Ring0。本来はハードウェアタスクスイッチを
-                                                //      低い特権レベルから使わせないためのものだが、64bit モードには
-                                                //      その仕組みが無く、ltr も CPL=0 でしか実行できないので実質効かない
-    uint8_t descriptor_type : 1            = 0; // S: システムディスクリプタは 0 固定
-    SystemDescriptorType type              = SystemDescriptorType::AvailableTss;
+    // DPL は慣例的に Ring0 にする。本来はハードウェアタスクスイッチを低い特権レベルから
+    // 使わせないためのものだが、64bit モードにはその仕組みが無く、ltr も CPL=0 でしか
+    // 実行できないので実質効かない。
+    uint8_t present                           : 1 = 1;                                  // P: Present
+    PrivilegeLevel descriptor_privilege_level : 2 = PrivilegeLevel::Ring0;              // DPL
+    uint8_t descriptor_type                   : 1 = 0;                                  // S: システムは 0 固定
+    SystemDescriptorType type                     = SystemDescriptorType::AvailableTss; // Type: 下位 4bit
 
     operator uint8_t() const
     {
-        return (present << 7) | (static_cast<uint8_t>(descriptor_privilege_level) << 5) |
-               (descriptor_type << 4) | (static_cast<uint8_t>(type) & 0x0F);
+        return (present << 7) | (static_cast<uint8_t>(descriptor_privilege_level) << 5) | (descriptor_type << 4) |
+               (static_cast<uint8_t>(type) & 0x0F);
     }
 };
 
@@ -158,10 +163,18 @@ void initialize_gdt()
     // 「定数は変えたが GDT の並びは古いまま」というズレが起きない。
     // User Data(index3) が User Code(index4) より先に来ているのは sysret が要求する順序。
     set_entry(0, Access{.present = 0, .descriptor_type = 0, .readable_writable = 0}, Granularity{}); // Null descriptor
-    set_entry(index_of(kKernelCode), Access{.descriptor_privilege_level = PrivilegeLevel::Ring0, .executable = 1}, Granularity{.long_mode = 1}); // Kernel code segment P,S,E,RW+L=1
-    set_entry(index_of(kKernelData), Access{.descriptor_privilege_level = PrivilegeLevel::Ring0, .executable = 0}, Granularity{.long_mode = 0}); // Kernel data segment P,S,E,RW+L=0
-    set_entry(index_of(kUserData), Access{.descriptor_privilege_level = PrivilegeLevel::Ring3, .executable = 0}, Granularity{.long_mode = 0});   // User data segment P,S,E,RW+L=0
-    set_entry(index_of(kUserCode), Access{.descriptor_privilege_level = PrivilegeLevel::Ring3, .executable = 1}, Granularity{.long_mode = 1});   // User code segment P,S,E,RW+L=1
+    set_entry(index_of(kKernelCode),
+              Access{.descriptor_privilege_level = PrivilegeLevel::Ring0, .executable = 1},
+              Granularity{.long_mode = 1}); // Kernel code segment P,S,E,RW+L=1
+    set_entry(index_of(kKernelData),
+              Access{.descriptor_privilege_level = PrivilegeLevel::Ring0, .executable = 0},
+              Granularity{.long_mode = 0}); // Kernel data segment P,S,E,RW+L=0
+    set_entry(index_of(kUserData),
+              Access{.descriptor_privilege_level = PrivilegeLevel::Ring3, .executable = 0},
+              Granularity{.long_mode = 0}); // User data segment P,S,E,RW+L=0
+    set_entry(index_of(kUserCode),
+              Access{.descriptor_privilege_level = PrivilegeLevel::Ring3, .executable = 1},
+              Granularity{.long_mode = 1}); // User code segment P,S,E,RW+L=1
 
 
     std::memset(&tss, 0, sizeof(TaskStateSegment));
