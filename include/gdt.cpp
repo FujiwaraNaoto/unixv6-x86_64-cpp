@@ -19,10 +19,18 @@ static gdt::GlobalDescriptorTablePointer gdt_ptr;
 
 namespace
 {
+// 特権レベル (DPL / RPL / CPL に共通)。0 が最も強く、3 がユーザー。
+// x86 には Ring1 / Ring2 (0b01 / 0b10) もあるが、このカーネルでは使わない。
+enum class PrivilegeLevel : uint8_t
+{
+    Ring0 = 0b00, // カーネル
+    Ring3 = 0b11, // ユーザー
+};
+
 struct Access
 {
     uint8_t present : 1                     = 1; // P: Present (1=有効, 0=無効)
-    uint8_t descriptor_privilege_level : 2  = 0; // DPL: Descriptor Privilege Level (0=Ring0, 3=Ring3)
+    PrivilegeLevel descriptor_privilege_level : 2 = PrivilegeLevel::Ring0; // DPL: このセグメントを使える特権レベル
     uint8_t descriptor_type : 1             = 1; // S: Descriptor Type (1=Code/Data, 0=System (TSS, LDT, ゲートなど))
     uint8_t executable : 1                  = 0; // E: Executable (1=Code, 0=Data)
     uint8_t direction_conforming : 1        = 0; // DC: Direction/Conforming (Code セグメントの場合: 1=Conforming, Data セグメントの場合: 1=Down)
@@ -44,7 +52,7 @@ struct Access
     // 0xFA = 1 11  1 1 0  1  0  → P=1, DPL=3, S=1, E=1, RW=1 : ユーザー コード
 
     // NOTE: デフォルト値が P=1, DPL=0, S=1, E=0, RW=1 なので、カーネル データ セグメントの値と同じ。
-        return (present << 7) | (descriptor_privilege_level << 5) | (descriptor_type << 4) |
+        return (present << 7) | (static_cast<uint8_t>(descriptor_privilege_level) << 5) | (descriptor_type << 4) |
                (executable << 3) | (direction_conforming << 2) | (readable_writable << 1) | accessed;
     }
 };
@@ -96,7 +104,8 @@ struct SystemAccess
     //       P    DPL    S    Type
     // 0x89 = 1 00  0 1001 → P=1, DPL=0, S=0, Type=9 : 使用前の TSS
     uint8_t present : 1                    = 1; // P: Present
-    uint8_t descriptor_privilege_level : 2 = 0; // DPL: 慣例的に 0。本来はハードウェアタスクスイッチを
+    PrivilegeLevel descriptor_privilege_level : 2 = PrivilegeLevel::Ring0;
+                                                // DPL: 慣例的に Ring0。本来はハードウェアタスクスイッチを
                                                 //      低い特権レベルから使わせないためのものだが、64bit モードには
                                                 //      その仕組みが無く、ltr も CPL=0 でしか実行できないので実質効かない
     uint8_t descriptor_type : 1            = 0; // S: システムディスクリプタは 0 固定
@@ -104,8 +113,8 @@ struct SystemAccess
 
     operator uint8_t() const
     {
-        return (present << 7) | (descriptor_privilege_level << 5) | (descriptor_type << 4) |
-               (static_cast<uint8_t>(type) & 0x0F);
+        return (present << 7) | (static_cast<uint8_t>(descriptor_privilege_level) << 5) |
+               (descriptor_type << 4) | (static_cast<uint8_t>(type) & 0x0F);
     }
 };
 
@@ -148,11 +157,11 @@ void initialize_gdt()
     // エントリ位置はセレクタ定数から導く。こうしておけば gdt.hpp のセレクタを変えたとき
     // 「定数は変えたが GDT の並びは古いまま」というズレが起きない。
     // User Data(index3) が User Code(index4) より先に来ているのは sysret が要求する順序。
-    set_entry(0, Access{0,0,0,0,0,0,0}, Granularity{});                     // Null descriptor
-    set_entry(index_of(kKernelCode), Access{.descriptor_privilege_level = 0b00, .executable = 1}, Granularity{.long_mode = 1}); // Kernel code segment P,S,E,RW+L=1
-    set_entry(index_of(kKernelData), Access{.descriptor_privilege_level = 0b00, .executable = 0}, Granularity{.long_mode = 0}); // Kernel data segment P,S,E,RW+L=0
-    set_entry(index_of(kUserData), Access{.descriptor_privilege_level = 0b11, .executable = 0}, Granularity{.long_mode = 0});   // User data segment P,S,E,RW+L=0
-    set_entry(index_of(kUserCode), Access{.descriptor_privilege_level = 0b11, .executable = 1}, Granularity{.long_mode = 1});   // User code segment P,S,E,RW+L=1
+    set_entry(0, Access{.present = 0, .descriptor_type = 0, .readable_writable = 0}, Granularity{}); // Null descriptor
+    set_entry(index_of(kKernelCode), Access{.descriptor_privilege_level = PrivilegeLevel::Ring0, .executable = 1}, Granularity{.long_mode = 1}); // Kernel code segment P,S,E,RW+L=1
+    set_entry(index_of(kKernelData), Access{.descriptor_privilege_level = PrivilegeLevel::Ring0, .executable = 0}, Granularity{.long_mode = 0}); // Kernel data segment P,S,E,RW+L=0
+    set_entry(index_of(kUserData), Access{.descriptor_privilege_level = PrivilegeLevel::Ring3, .executable = 0}, Granularity{.long_mode = 0});   // User data segment P,S,E,RW+L=0
+    set_entry(index_of(kUserCode), Access{.descriptor_privilege_level = PrivilegeLevel::Ring3, .executable = 1}, Granularity{.long_mode = 1});   // User code segment P,S,E,RW+L=1
 
 
     std::memset(&tss, 0, sizeof(TaskStateSegment));
