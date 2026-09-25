@@ -56,7 +56,11 @@ static long sys_exit(uint64_t code)
     syscall_console->set_color(Color::Yellow, Color::Black);
     syscall_console->printf("\n[SYS]  exit(%u) called\n", (unsigned)code);
     syscall_console->set_color(Color::LightGrey, Color::Black);
-    // フェーズ6ではプロセス連携をせず、ここで停止
+    
+    if(process::current_process()!=nullptr)
+    {
+        process::exit(static_cast<int>(code));
+    }
     while (1)
         asm volatile("hlt");
     return 0;
