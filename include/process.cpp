@@ -155,6 +155,12 @@ Process *create_process(EntryPoint entry, const char *name)
     return proc;
 }
 
+Process *current_process()
+{
+    return current_proc_;
+}
+
+
 // Switch to the next process in the “Runnable” state using round-robin scheduling
 void yield()
 {
