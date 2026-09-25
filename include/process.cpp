@@ -343,7 +343,37 @@ namespace
 {
 int fork_user(Process *parent, Process *child, uint8_t *child_stack)
 {
-    // todo
+    if (!vmm::vmm_ptr->copy_user_pages(parent->pml4, child->pml4))
+    {
+        // copy_user_pages() が複製済みのユーザーページを解放してから戻ってくる
+        pmm::pmm_ptr->free(child->pml4);
+        heap_ptr_->free(child_stack);
+        child->state = ProcessState::Unused;
+        return -1;
+    }
+
+    // 子のカーネルスタックの一番上に、親の TrapFrame の複製を置く
+    uint8_t *stack_top  = child_stack + KERNEL_STACK_SIZE;
+    TrapFrame *child_tf = reinterpret_cast<TrapFrame *>(stack_top) - 1;
+    *child_tf           = *parent->trapframe;
+    child_tf->rax       = 0; // child returns 0 from fork()
+    child->trapframe    = child_tf;
+
+    // その下に、スケジューラが switch_context で読むコンテキストを置く。
+    // switch_context は 6 本 pop して ret するので、fork_return に着地した時点の
+    // rsp はちょうど TrapFrame の先頭になる。
+    ProcessContext *context = reinterpret_cast<ProcessContext *>(child_tf) - 1;
+    context->r15            = 0;
+    context->r14            = 0;
+    context->r13            = 0;
+    context->r12            = 0;
+    context->rbx            = 0;
+    context->rbp            = 0;
+    context->rip            = reinterpret_cast<uint64_t>(fork_return);
+    child->context          = context;
+
+    child->state = ProcessState::Runnable;
+    return child->pid; // return the child's pid to the parent process
 }
 
 // カーネルスレッドの fork で、リング3のユーザスタックはコピーしない
