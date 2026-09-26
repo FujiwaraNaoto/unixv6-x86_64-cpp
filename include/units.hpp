@@ -1,4 +1,5 @@
-#pragma once
+#ifndef UNITS_HPP
+#define UNITS_HPP
 #include <cstdint>
 
 // IEC 80000-13 の 2 進接頭辞リテラル。1KiB = 1024 B。
@@ -24,3 +25,5 @@ constexpr uint64_t operator""_GiB(unsigned long long n)
 {
     return n * 1024ULL * 1024ULL * 1024ULL;
 }
+
+#endif // UNITS_HPP
