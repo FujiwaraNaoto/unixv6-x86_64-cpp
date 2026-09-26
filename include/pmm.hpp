@@ -6,11 +6,12 @@
 #include "multiboot2.hpp"
 #include "console.hpp"
 #include "address.hpp"
+#include "units.hpp"
 
 namespace pmm
 {
-constexpr uint64_t PAGE_SIZE  = 0x1000; // 4KB
-constexpr uint32_t PAGE_SHIFT = 12;     // 2^12 = 4096
+constexpr uint64_t PAGE_SIZE  = 4_KiB; // 4KB
+constexpr uint32_t PAGE_SHIFT = 12;    // 2^12 = 4096
 struct PhysicalMemoryManagerState
 {
     uint64_t total_pages;
