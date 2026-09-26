@@ -140,27 +140,30 @@ namespace pic
 // pic_init
 void InitializePIC(uint8_t offset1, uint8_t offset2)
 {
-    uint8_t m1 = io::inb(PIC1_DATA); /* マスク保存 */
+    // see https://wiki.osdev.org/8259_PIC
+    // reserve 2 bytes for master and slave PIC mask
+    uint8_t m1 = io::inb(PIC1_DATA);
     uint8_t m2 = io::inb(PIC2_DATA);
 
     io::outb(PIC1_COMMAND, Icw1::Initialize | Icw1::Icw4Needed);
-    io::io_wait(); /* ICW1: 初期化開始 + この後 ICW4 も送る */
+    io::io_wait();
     io::outb(PIC2_COMMAND, Icw1::Initialize | Icw1::Icw4Needed);
     io::io_wait();
     io::outb(PIC1_DATA, offset1);
-    io::io_wait(); /* ICW2: ベクタオフセット */
+    io::io_wait();
     io::outb(PIC2_DATA, offset2);
     io::io_wait();
     io::outb(PIC1_DATA, MASTER_CASCADE_MASK);
-    io::io_wait(); /* ICW3: IRQ2 にスレーブが繋がっている */
+    io::io_wait();
     io::outb(PIC2_DATA, SLAVE_CASCADE_ID);
     io::io_wait();
     io::outb(PIC1_DATA, Icw4::Mode8086);
-    io::io_wait(); /* ICW4: 8086 モード (EOI は手動) */
+    io::io_wait();
     io::outb(PIC2_DATA, Icw4::Mode8086);
     io::io_wait();
 
-    io::outb(PIC1_DATA, m1); /* マスク復元 */
+    // restore saved masks.
+    io::outb(PIC1_DATA, m1);
     io::outb(PIC2_DATA, m2);
 }
 
@@ -202,7 +205,7 @@ void unmask_irq(uint8_t irq)
 
 void send_eoi(uint8_t irq)
 {
-    // 指定されたIRQに対してEOIを送信するコードをここに記述
+    // see reference: https://wiki.osdev.org/8259_PIC
     if (irq >= 8)
     {
         io::outb(PIC2_COMMAND, PIC_EOI);
