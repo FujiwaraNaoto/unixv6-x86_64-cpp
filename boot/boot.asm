@@ -17,6 +17,22 @@ MB2_ARCH     equ 0           ; i386/x86
 MB2_HDRLEN   equ (mb2_end - mb2_start)
 MB2_CHECKSUM equ -(MB2_MAGIC + MB2_ARCH + MB2_HDRLEN) & 0xFFFFFFFF
 
+
+; --- Paging/ Long Mode 関連ビット ---
+
+PAGE_PRESENT  equ (1 << 0)  ; ページが存在する
+PAGE_WRITABLE equ (1 << 1)  ; 書き込み可能
+PAGE_USER     equ (1 << 2)  ; ユーザーモード
+
+CR4_PAE      equ (1 << 5)  ; Physical Address Extension
+CR0_PAGING   equ (1 << 31) ; ページング有効化
+CR0_PROTECT  equ (1 << 0)  ; 保護モード有効
+
+IA32_EFER_MSR equ 0xC0000080
+EFER_LME      equ (1 << 8)  ; Long Mode Enable
+
+
+
 section .multiboot2
 ALIGN 8
 mb2_start:
@@ -172,20 +188,20 @@ setup_paging:
 
 ; ─── Long Mode 有効化 ─────────────────────────────────────────────
 enable_long_mode:
-    ; PAE 有効化
+    ; PAE(= Physical Address Extension) を有効化
     mov eax, cr4
-    or  eax, (1 << 5)
+    or  eax, CR4_PAE
     mov cr4, eax
 
-    ; EFER.LME セット
-    mov ecx, 0xC0000080
+    ; EFER.LME(= Long Mode Enable) セット
+    mov ecx, IA32_EFER_MSR
     rdmsr
-    or  eax, (1 << 8)
+    or  eax, EFER_LME
     wrmsr
 
-    ; ページングと保護モード有効化
+    ; ページングと保護モード有効化. CR0に PG(=Paging bit31) + PE(=Protection Enable bit0) をセットする
     mov eax, cr0
-    or  eax, (1 << 31) | (1 << 0)
+    or  eax, CR0_PAGING | CR0_PROTECT
     mov cr0, eax
     ret
 
