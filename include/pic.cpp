@@ -123,7 +123,6 @@ struct PitCommand
     }
 };
 
-// これまで直接書いていた値と同じであることを、ビルド時に確かめる
 static_assert(to_byte(Icw1::Initialize | Icw1::Icw4Needed) == 0x11, "ICW1");
 static_assert(MASTER_CASCADE_MASK == 0x04, "ICW3 (master)");
 static_assert(SLAVE_CASCADE_ID == 0x02, "ICW3 (slave)");
