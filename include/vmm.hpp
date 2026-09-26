@@ -4,8 +4,9 @@
 #include "pmm.hpp"
 #include "console.hpp"
 #include "address.hpp"
+#include "units.hpp"
 
-constexpr uint64_t PAGE_SIZE = 4096;
+constexpr uint64_t PAGE_SIZE = 4_KiB;
 constexpr uint64_t PAGE_MASK = ~(PAGE_SIZE - 1);
 
 // direct map: 物理メモリ全体を高位にマップした領域のベース

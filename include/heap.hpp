@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include "units.hpp"
 #include <cstddef>
 
 // Heap はポインタとして持つだけなので、ヘッダは読み込まず前方宣言で済ませる。
@@ -27,7 +28,7 @@ namespace heap
 // PML4[511] は create_address_space() が全アドレス空間へコピーするため、
 // ヒープはどのプロセスのアドレス空間からも同じ仮想アドレスで見える。
 constexpr uint64_t KERNEL_HEAP_BASE = 0xFFFFFFFF90000000ULL;
-constexpr uint64_t KERNEL_HEAP_SIZE = 16ULL * 1024 * 1024; // 16MiB (実ページは sbrk で遅延割り当て)
+constexpr uint64_t KERNEL_HEAP_SIZE = 16_MiB; // 実ページは sbrk で遅延割り当て
 constexpr uint64_t KERNEL_HEAP_END =
     KERNEL_HEAP_BASE +
     KERNEL_HEAP_SIZE; // 低いアドレス(KERNEL_HEAP_BASE)から高いアドレス(KERNEL_HEAP_END)までがヒープ領域

@@ -3,6 +3,7 @@
 #include <cstddef>
 #include "address.hpp"
 #include "kstring.hpp"
+#include "units.hpp"
 
 struct [[gnu::packed]] ProcessContext
 {
@@ -32,7 +33,7 @@ class Heap;
 }
 
 constexpr size_t MAX_PROCESSES     = 64;
-constexpr size_t KERNEL_STACK_SIZE = 0x4000; // 16KB
+constexpr size_t KERNEL_STACK_SIZE = 16_KiB;
 
 // プロセスのエントリポイント (引数なし・戻り値なしの関数)。
 //
