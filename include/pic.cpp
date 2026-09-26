@@ -66,7 +66,6 @@ void InitializePIT(uint32_t hz)
 
 void mask_irq(uint8_t irq)
 {
-    // 指定されたIRQをマスクするコードをここに記述
     uint16_t port = (irq < 8) ? PIC1_DATA : PIC2_DATA;
     if (irq >= 8)
         irq -= 8;
@@ -75,7 +74,6 @@ void mask_irq(uint8_t irq)
 
 void unmask_irq(uint8_t irq)
 {
-    // 指定されたIRQのマスクを解除するコードをここに記述
     uint16_t port = (irq < 8) ? PIC1_DATA : PIC2_DATA;
     if (irq >= 8)
         irq -= 8;
