@@ -143,9 +143,9 @@ void InitializePIC(uint8_t offset1, uint8_t offset2)
     uint8_t m1 = io::inb(PIC1_DATA); /* マスク保存 */
     uint8_t m2 = io::inb(PIC2_DATA);
 
-    io::outb(PIC1_COMMAND, to_byte(Icw1::Initialize | Icw1::Icw4Needed));
+    io::outb(PIC1_COMMAND, Icw1::Initialize | Icw1::Icw4Needed);
     io::io_wait(); /* ICW1: 初期化開始 + この後 ICW4 も送る */
-    io::outb(PIC2_COMMAND, to_byte(Icw1::Initialize | Icw1::Icw4Needed));
+    io::outb(PIC2_COMMAND, Icw1::Initialize | Icw1::Icw4Needed);
     io::io_wait();
     io::outb(PIC1_DATA, offset1);
     io::io_wait(); /* ICW2: ベクタオフセット */
@@ -155,9 +155,9 @@ void InitializePIC(uint8_t offset1, uint8_t offset2)
     io::io_wait(); /* ICW3: IRQ2 にスレーブが繋がっている */
     io::outb(PIC2_DATA, SLAVE_CASCADE_ID);
     io::io_wait();
-    io::outb(PIC1_DATA, to_byte(Icw4::Mode8086));
+    io::outb(PIC1_DATA, Icw4::Mode8086);
     io::io_wait(); /* ICW4: 8086 モード (EOI は手動) */
-    io::outb(PIC2_DATA, to_byte(Icw4::Mode8086));
+    io::outb(PIC2_DATA, Icw4::Mode8086);
     io::io_wait();
 
     io::outb(PIC1_DATA, m1); /* マスク復元 */
