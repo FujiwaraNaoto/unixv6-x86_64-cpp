@@ -17,18 +17,22 @@ section .text
 extern syscall_dispatch
 GLOBAL syscall_entry
 syscall_entry:
-    ; ユーザーが使うかもしれない RCX(戻りRIP) と R11(RFLAGS) を退避
-    ; syscallは命令の次の命令アドレス(戻りRIP)をRCXに、ユーザーのRFLAGSをR11に積むので、これを退避しておく
-    push rcx
-    push r11
-
     ; caller-saved レジスタを退避 (dispatch が壊す可能性)
     push rdi
     push rsi
     push rdx
-    push r10
+    push rcx ; ユーザのrip 
+    push rax ; syscall番号
+    push rbx
+    push rbp
     push r8
     push r9
+    push r10
+    push r11 ; ユーザのRFLAGS
+    push r12
+    push r13
+    push r14
+    push r15
 
     ; System V ABI呼び出し規約に並べ替える. syscall_dispatch()は普通のC関数であるためSystem V ABIに従う必要がある
     ; syscall_dispatch(num, a1, a2, a3, a4, a5)
@@ -50,18 +54,24 @@ syscall_entry:
     call syscall_dispatch
     ; 戻り値は RAX に入っている (そのまま使う)
 
-; fork した子はここに着地する (RAX=0 を設定済みで来る)
+; fork した子はここに着地する (自分の TrapFrame に rsp を合わせた状態で来る)
+; NOTE: process.hppのTrapFrameと順番を同じにすること
 GLOBAL syscall_return_path
 syscall_return_path:
-    ; レジスタ復元
+    pop r15
+    pop r14
+    pop r13
+    pop r12
+    pop r11     ; ユーザーのRFLAGS(sysretで復帰)
+    pop r10
     pop r9
     pop r8
-    pop r10
+    pop rbp
+    pop rbx
+    pop rax     ; return address (ユーザーのRIP, sysretで復帰)
+    pop rcx     ; ユーザーのRIP(sysretがRCX->RIPにする)
     pop rdx
     pop rsi
     pop rdi
-
-    ; フェーズ7: リング3セグメントがGDTに揃ったので sysret が使える
-    pop r11
-    pop rcx
-    o64 sysret        ; RCX->RIP, R11->RFLAGS, リング3へ復帰
+    mov rsp, [rsp]      ; rspを元に戻す
+    o64 sysret          ; RCX->RIP, R11->RFLAGS, リング3へ復帰
