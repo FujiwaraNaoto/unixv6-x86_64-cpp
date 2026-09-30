@@ -54,6 +54,14 @@ syscall_entry:
     call syscall_dispatch
     ; 戻り値は RAX に入っている (そのまま使う)
 
+
+; fork した子がスケジューラから最初に選ばれたときの着地点。
+; switch_context は 6 本 pop して ret するので、ここに来た時点で rsp は
+; 子の TrapFrame の先頭を指している (fork() がそう置いている)。
+GLOBAL fork_return
+fork_return:
+    jmp syscall_return_path
+
 ; fork した子はここに着地する (自分の TrapFrame に rsp を合わせた状態で来る)
 ; NOTE: process.hppのTrapFrameと順番を同じにすること
 GLOBAL syscall_return_path

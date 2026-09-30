@@ -16,6 +16,9 @@ namespace
 // 保存し、呼び出し元(fork)の rsp を返す setjmp 風ヘルパ (syscall/fork_ret.asm)。
 extern "C" uint64_t fork_capture(ProcessContext *out);
 
+// fork した子が、スケジューラから最初に選ばれたときの着地点で子の TrapFrame を読み出して sysret し、リング3へ戻る。
+extern "C" void fork_return();
+
 } // namespace
 
 
@@ -355,9 +358,9 @@ int fork_user(Process *parent, Process *child, uint8_t *child_stack)
     // 子のカーネルスタックの一番上に、親の TrapFrame の複製を置く
     uint8_t *stack_top  = child_stack + KERNEL_STACK_SIZE;
     TrapFrame *child_tf = reinterpret_cast<TrapFrame *>(stack_top) - 1;
-    *child_tf           = *parent->trapframe;
+    *child_tf           = *parent->trap_frame;
     child_tf->rax       = 0; // child returns 0 from fork()
-    child->trapframe    = child_tf;
+    child->trap_frame    = child_tf;
 
     // その下に、スケジューラが switch_context で読むコンテキストを置く。
     // switch_context は 6 本 pop して ret するので、fork_return に着地した時点の
