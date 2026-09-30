@@ -13,11 +13,23 @@
 ;
 
 BITS 64
+
+section .bss
+saved_user_rsp: resq 1
+
+
 section .text
 extern syscall_dispatch
+extern set_current_trapframe
+extern syscall_kernel_rsp ; 現在プロセスのカーネルスタックの先頭を指す変数
+extern handle_syscall
+
 GLOBAL syscall_entry
 syscall_entry:
     ; caller-saved レジスタを退避 (dispatch が壊す可能性)
+    mov [rel saved_user_rsp], rsp ; syscall_entry でのユーザスタックを保存
+    mov rsp, [rel syscall_kernel_rsp] ; カーネルスタックに切り替え
+    push qword [rel saved_user_rsp] ; syscall_entry でのユーザスタックを退避
     push rdi
     push rsi
     push rdx
@@ -34,25 +46,9 @@ syscall_entry:
     push r14
     push r15
 
-    ; System V ABI呼び出し規約に並べ替える. syscall_dispatch()は普通のC関数であるためSystem V ABIに従う必要がある
-    ; syscall_dispatch(num, a1, a2, a3, a4, a5)
-    ;   第1引数 RDI <- RAX (番号)
-    ;   第2引数 RSI <- RDI (a1)
-    ;   第3引数 RDX <- RSI (a2)
-    ;   第4引数 RCX <- RDX (a3)
-    ;   第5引数 R8  <- R10 (a4)
-    ;   第6引数 R9  <- R8  (a5)
-    ; 元の値はスタックに退避済みなので順序に注意して組み替える
-    ; movの順番が重要
-    mov r9,  r8       ; a5
-    mov r8,  r10      ; a4
-    mov rcx, rdx      ; a3
-    mov rdx, rsi      ; a2
-    mov rsi, rdi      ; a1
-    mov rdi, rax      ; num
-
-    call syscall_dispatch
-    ; 戻り値は RAX に入っている (そのまま使う)
+    mov rdi, rsp ; TrapFrame* (syscall_entry で積んだフレームの先頭) を引数にする
+    call handle_syscall
+    jmp syscall_return_path ; syscall_dispatch から戻ったら、syscall_return_path へジャンプして sysret でリング3へ戻る
 
 
 ; fork した子がスケジューラから最初に選ばれたときの着地点。

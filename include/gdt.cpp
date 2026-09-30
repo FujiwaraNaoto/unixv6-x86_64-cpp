@@ -202,6 +202,7 @@ void initialize_gdt()
 
 void set_kernel_stack(uint64_t rsp0)
 {
-    tss.rsp[0] = rsp0;
+    tss.rsp[0] = rsp0;// 割り込み/例外でリング3から降りてきたとき用
+    syscall_kernel_rsp = rsp0;// syscall で降りてきたとき用 (syscall は TSS を見ない)
 }
 } // namespace gdt
