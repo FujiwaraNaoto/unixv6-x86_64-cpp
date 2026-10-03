@@ -82,6 +82,11 @@ static long sys_fork()
     return static_cast<long>(process::fork());
 }
 
+static long sys_wait4(uint64_t status_ptr)
+{
+    return static_cast<long>(process::wait(static_cast<int *>(status_ptr)));
+}
+
 namespace SystemCall
 {
 
@@ -95,6 +100,8 @@ extern "C" long syscall_dispatch(uint64_t num, uint64_t a1, uint64_t a2, uint64_
             return sys_write(a1, a2, a3);
         case SyscallNo::kFork:
             return sys_fork();
+        case SyscallNo::kWait4:
+            return sys_wait4(a1);
         case SyscallNo::kExit:
             return sys_exit(a1);
         default:
