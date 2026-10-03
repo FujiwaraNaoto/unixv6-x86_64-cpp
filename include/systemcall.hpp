@@ -9,7 +9,7 @@ constexpr int kRead  = 0;
 constexpr int kWrite = 1;
 constexpr int kFork  = 57;
 constexpr int kExit  = 60;
-constexpr int kWait4 = 61;
+constexpr int kWait = 61;
 } // namespace SyscallNo
 
 // MSR 番号(識別子)
