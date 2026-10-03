@@ -322,7 +322,7 @@ int wait(int *exit_code_out)
                     *exit_code_out = exit_code;
                 }
 
-                int pid = child->pid;
+                int pid = static_cast<int>(child->pid);
                 free_process_resources(child);
 
                 return pid;
@@ -376,7 +376,7 @@ int fork_user(Process *parent, Process *child, uint8_t *child_stack)
     child->context          = context;
 
     child->state = ProcessState::Runnable;
-    return child->pid; // return the child's pid to the parent process
+    return static_cast<int>(child->pid); // return the child's pid to the parent process
 }
 
 // カーネルスレッドの fork で、リング3のユーザスタックはコピーしない
@@ -414,7 +414,7 @@ int fork_kernel(Process *parent, Process *child, uint8_t *child_stack){
     *child->context = snap;
 
     child->state = ProcessState::Runnable;
-    return child->pid; // return the child's pid to the parent process
+    return static_cast<int>(child->pid); // return the child's pid to the parent process
 }
 
 } // namespace

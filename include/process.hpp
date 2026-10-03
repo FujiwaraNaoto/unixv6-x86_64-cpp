@@ -87,9 +87,13 @@ struct ProcessId
 {
     uint64_t value;
 
-    operator uint64_t() const
+    explicit operator uint64_t() const
     {
         return value;
+    }
+    explicit operator int() const
+    {
+        return static_cast<int>(value);
     }
 
     ProcessId& operator++() // prefix increment

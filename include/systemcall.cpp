@@ -84,7 +84,7 @@ static long sys_fork()
 
 static long sys_wait(uint64_t status_ptr)
 {
-    return static_cast<long>(process::wait(static_cast<int *>(status_ptr)));
+    return static_cast<long>(process::wait(reinterpret_cast<int *>(status_ptr)));
 }
 
 namespace SystemCall
