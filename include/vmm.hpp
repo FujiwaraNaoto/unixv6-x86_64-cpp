@@ -98,7 +98,13 @@ class VirtualMemoryManager final
                      PhysicalAddress physical_address,
                      PageFlag flags);
 
-    bool copy_user_pages(PhysicalAddress src_pml4_phys, PhysicalAddress dst_pml4_phys);
+    // src のユーザーページ (PML4[0] 配下) を複製して dst に同じ仮想アドレスでマップする。
+    // 途中で物理メモリが尽きたら、それまでに割り当てたページを解放して false を返す。
+    bool copy_user_pages(PhysicalAddress src_pml4_phys, PhysicalAddress dest_pml4_phys);
+
+    // pml4 のユーザーページ (PML4[0] 配下で User が立っているもの) を解放する。
+    // ページテーブル自体は解放しない。
+    void free_user_pages(PhysicalAddress pml4_phys);
 
   private:
     VirtualAddress get_or_create_table(VirtualAddress parent_table, uint64_t index, PageFlag flags);
