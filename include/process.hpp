@@ -82,9 +82,33 @@ constexpr size_t KERNEL_STACK_SIZE = 16_KiB;
 //       呼ばれるので、呼び出し可能オブジェクトにすること自体は技術的に可能。
 using EntryPoint = void (*)();
 
+
+struct ProcessId
+{
+    uint64_t value;
+
+    operator uint64_t() const
+    {
+        return value;
+    }
+
+    ProcessId& operator++() // prefix increment
+    {
+        value++;
+        return *this;
+    }
+
+    ProcessId operator++(int) // postfix increment
+    {
+        ProcessId temp = *this;
+        ++(*this);
+        return temp;
+    }
+};
+
 struct Process
 {
-    uint64_t pid;
+    ProcessId pid;
     ProcessState state;
     ProcessContext *context; // カーネルスタック上の保存コンテキストを指す
     uint64_t kernel_stack;
