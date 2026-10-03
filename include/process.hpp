@@ -104,6 +104,11 @@ struct ProcessId
         ++(*this);
         return temp;
     }
+    ProcessId& operator=(uint64_t new_value)
+    {
+        value = new_value;
+        return *this;
+    }
 };
 
 struct Process
