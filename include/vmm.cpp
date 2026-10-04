@@ -409,22 +409,13 @@ void VirtualMemoryManager::destroy_address_space(PhysicalAddress pml4_phys)
                 {
                     if (pd[j] & PageFlag::Present)
                     {
-                        const PhysicalAddress pt_phys = entry_to_phys(pd[j]);
-                        VirtualAddress pt             = physical_to_virtual(pt_phys);
-
-                        for (int k = 0; k < ENTRIES_PER_TABLE; k++)
-                        {
-                            if (pt[k] & PageFlag::Present)
-                            {
-                                pmm::pmm_ptr->free(entry_to_phys(pt[k]));
-                            }
-                        }
-                        pmm::pmm_ptr->free(pd_phys);
+                        pmm::pmm_ptr->free(entry_to_phys(pd[j]));// PT
                     }
                 }
-                pmm::pmm_ptr->free(pdpt_phys);
+                pmm::pmm_ptr->free(pd_phys); // PD
             }
         }
+        pmm::pmm_ptr->free(pdpt_phys); // PDPT
     }
 
     // 最後にPML4自体を解放する

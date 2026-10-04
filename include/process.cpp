@@ -287,6 +287,12 @@ static void schedule_from_zombie(ProcessContext **discard_context)
 
 void free_process_resources(Process *proc)
 {
+    if (proc->kernel_stack)
+    {
+        process::heap_ptr_->free(reinterpret_cast<void *>(proc->kernel_stack));
+        proc->kernel_stack = 0;
+    }
+
     if (proc->pml4)
     {
         vmm::vmm_ptr->destroy_address_space(proc->pml4);
@@ -295,7 +301,7 @@ void free_process_resources(Process *proc)
     proc->pml4          = PhysicalAddress{};
     proc->parent        = nullptr;
     proc->sleep_channel = nullptr;
-    proc->exit_status   = static_cast<int>(ProcessState::Unused);
+    proc->exit_status   = 0;
     proc->state         = ProcessState::Unused;
 }
 
