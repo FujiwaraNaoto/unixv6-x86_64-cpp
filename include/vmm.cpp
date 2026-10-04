@@ -366,7 +366,6 @@ bool VirtualMemoryManager::copy_user_pages(PhysicalAddress src_pml4_phys, Physic
 
     if (!copied)
     {
-        free_user_pages(dest_pml4_phys);
         return false;
     }
     return true;
