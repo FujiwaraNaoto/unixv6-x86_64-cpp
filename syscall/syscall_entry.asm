@@ -20,7 +20,6 @@ saved_user_rsp: resq 1
 
 section .text
 extern syscall_dispatch
-extern set_current_trapframe
 extern syscall_kernel_rsp ; 現在プロセスのカーネルスタックの先頭を指す変数
 extern handle_syscall
 
