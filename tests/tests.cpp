@@ -25,6 +25,7 @@ void run_all(IConsole *console)
     // sleep_wakeup(out);
     fork_wait(out);
     fork_from_ring3(out);
+    process_free(out);
 
     virtio_block_read(out);
     virtio_block_read_write(out);
