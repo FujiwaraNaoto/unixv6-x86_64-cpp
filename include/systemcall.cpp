@@ -11,6 +11,12 @@ extern "C" void wrmsr(uint32_t msr, uint64_t value);
 
 extern "C" void handle_syscall(TrapFrame *tf)
 {
+    Process *proc = process::current_process();
+    if(proc)
+    {
+        proc->trap_frame = tf;
+    }
+
     // syscall_entry.asm で積まれた TrapFrame のレジスタを引数にして syscall_dispatch を呼ぶ
     long ret = SystemCall::syscall_dispatch(tf->rax, tf->rdi, tf->rsi, tf->rdx, tf->r10, tf->r8);
 
