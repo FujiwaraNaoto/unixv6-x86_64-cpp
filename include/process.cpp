@@ -154,7 +154,7 @@ Process *create_process(EntryPoint entry, const char *name)
     proc->context->rbp  = 0;
     proc->context->rip  = reinterpret_cast<uint64_t>(trampoline);
     proc->sleep_channel = nullptr; // 初期状態では起きている
-    proc->trap_frame     = nullptr;
+    proc->trap_frame    = nullptr;
 
     proc->state = ProcessState::Runnable; // 構築完了。これでスケジューラが拾えるようになる
     return proc;
@@ -342,7 +342,7 @@ int wait(int *exit_code_out)
 }
 
 
-namespace 
+namespace
 {
 int fork_user(Process *parent, Process *child, uint8_t *child_stack)
 {
@@ -360,7 +360,7 @@ int fork_user(Process *parent, Process *child, uint8_t *child_stack)
     TrapFrame *child_tf = reinterpret_cast<TrapFrame *>(stack_top) - 1;
     *child_tf           = *parent->trap_frame;
     child_tf->rax       = 0; // child returns 0 from fork()
-    child->trap_frame    = child_tf;
+    child->trap_frame   = child_tf;
 
     // その下に、スケジューラが switch_context で読むコンテキストを置く。
     // switch_context は 6 本 pop して ret するので、fork_return に着地した時点の
@@ -380,7 +380,8 @@ int fork_user(Process *parent, Process *child, uint8_t *child_stack)
 }
 
 // カーネルスレッドの fork で、リング3のユーザスタックはコピーしない
-int fork_kernel(Process *parent, Process *child, uint8_t *child_stack){
+int fork_kernel(Process *parent, Process *child, uint8_t *child_stack)
+{
 
     // copy the parent's kernel stack to the child's kernel stack
     // (make the child process's kernel stack identical to the parent's kernel stack)
@@ -475,10 +476,11 @@ int fork()
     {
         // Copy the parent's trap frame to the child's trap frame
         return fork_user(parent, child, child_stack);
-    }else{
+    }
+    else
+    {
         return fork_kernel(parent, child, child_stack);
     }
-
 }
 
 } // namespace process

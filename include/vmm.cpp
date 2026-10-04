@@ -54,8 +54,7 @@ extern "C" uint64_t read_cr3();
 extern "C" void asm_flush_tlb();
 
 
-
-template<typename Visitor>
+template <typename Visitor>
 bool for_each_user_page(PhysicalAddress pml4_phys, Visitor visitor)
 {
     VirtualAddress pml4 = physical_to_virtual(pml4_phys);
@@ -65,7 +64,7 @@ bool for_each_user_page(PhysicalAddress pml4_phys, Visitor visitor)
     }
     VirtualAddress pgdpt = physical_to_virtual(entry_to_phys(pml4[0]));
 
-    for(int i = 0; i < ENTRIES_PER_TABLE; i++)
+    for (int i = 0; i < ENTRIES_PER_TABLE; i++)
     {
         if (!(pgdpt[i] & vmm::PageFlag::Present))
         {
@@ -343,7 +342,8 @@ bool VirtualMemoryManager::copy_user_pages(PhysicalAddress src_pml4_phys, Physic
 {
 
 
-    auto copy = [&dest_pml4_phys](PageVirtualAddress virtual_address, uint64_t entry) -> bool {
+    auto copy = [&dest_pml4_phys](PageVirtualAddress virtual_address, uint64_t entry) -> bool
+    {
         // 新しい物理ページを割り当てて内容をコピーする
         const PhysicalAddress new_phys = pmm::pmm_ptr->allocate();
         if (!new_phys)
@@ -364,7 +364,8 @@ bool VirtualMemoryManager::copy_user_pages(PhysicalAddress src_pml4_phys, Physic
 
     bool copied = for_each_user_page(src_pml4_phys, copy);
 
-    if(!copied){
+    if (!copied)
+    {
         free_user_pages(dest_pml4_phys);
         return false;
     }
@@ -374,7 +375,8 @@ bool VirtualMemoryManager::copy_user_pages(PhysicalAddress src_pml4_phys, Physic
 
 void VirtualMemoryManager::free_user_pages(PhysicalAddress pml4_phys)
 {
-    auto free=[](PageVirtualAddress, uint64_t entry)->bool{
+    auto free = [](PageVirtualAddress, uint64_t entry) -> bool
+    {
         pmm::pmm_ptr->free(entry_to_phys(entry));
         return true; // 続行
     };

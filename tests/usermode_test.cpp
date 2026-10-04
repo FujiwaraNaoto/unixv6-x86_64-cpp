@@ -53,8 +53,8 @@ namespace
                  : "r"(check)
                  : "rax", "rbx", "rcx", "rdx", "rsi", "rdi", "r11", "r12", "r13", "r14", "r15", "memory");
 
-    const char ok[] = "REG-OK\n";
-    const char ng[] = "REG-NG\n";
+    const char ok[]    = "REG-OK\n";
+    const char ng[]    = "REG-NG\n";
     const char *result = (mismatch == 0) ? ok : ng;
     asm volatile("mov $1, %%rax\n"
                  "mov $1, %%rdi\n"
@@ -64,9 +64,8 @@ namespace
                  :
                  : "r"(result)
                  : "rax", "rdi", "rsi", "rdx", "rcx", "r11", "memory");
-    
-    
-    
+
+
     asm volatile("mov $60, %%rax\n" // exit
                  "xor %%rdi, %%rdi\n"
                  "syscall\n"

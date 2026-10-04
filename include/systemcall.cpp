@@ -12,7 +12,7 @@ extern "C" void wrmsr(uint32_t msr, uint64_t value);
 extern "C" void handle_syscall(TrapFrame *tf)
 {
     Process *proc = process::current_process();
-    if(proc)
+    if (proc)
     {
         proc->trap_frame = tf;
     }
@@ -73,8 +73,8 @@ static long sys_exit(uint64_t code)
     syscall_console->set_color(Color::Yellow, Color::Black);
     syscall_console->printf("\n[SYS]  exit(%u) called\n", (unsigned)code);
     syscall_console->set_color(Color::LightGrey, Color::Black);
-    
-    if(process::current_process()!=nullptr)
+
+    if (process::current_process() != nullptr)
     {
         process::exit(static_cast<int>(code));
     }

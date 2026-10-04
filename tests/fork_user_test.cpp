@@ -102,7 +102,9 @@ void user_fork_entry()
             fail("failed to resolve .user physical address\n");
             return;
         }
-        vmm::vmm_ptr->map_page_in(self->pml4, PageVirtualAddress{va}, phys,
+        vmm::vmm_ptr->map_page_in(self->pml4,
+                                  PageVirtualAddress{va},
+                                  phys,
                                   vmm::PageFlag::Present | vmm::PageFlag::User);
     }
 
@@ -113,7 +115,9 @@ void user_fork_entry()
         fail("failed to allocate user stack\n");
         return;
     }
-    vmm::vmm_ptr->map_page_in(self->pml4, kUserStack, stack_phys,
+    vmm::vmm_ptr->map_page_in(self->pml4,
+                              kUserStack,
+                              stack_phys,
                               vmm::PageFlag::Present | vmm::PageFlag::Writable | vmm::PageFlag::User);
 
     // ここから戻らない。終了は exit システムコール (process::exit) 経由。

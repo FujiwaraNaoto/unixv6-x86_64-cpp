@@ -40,8 +40,8 @@ constexpr uint8_t SC_RELEASE_MASK = 0x80;
 constexpr uint8_t SC_EXTENDED_PREFIX = 0xE0;
 constexpr uint8_t SC_E0_DELETE       = 0x53; // 0xE0 0x53 = Delete
 
-//std::atomic<T>はフリースタンディング環境使用可能
-// https://cpprefjp.github.io/reference/atomic.html
+// std::atomic<T>はフリースタンディング環境使用可能
+//  https://cpprefjp.github.io/reference/atomic.html
 std::array<char, 256> buffer_    = {};
 std::atomic<size_t> head_        = 0;
 std::atomic<size_t> tail_        = 0;

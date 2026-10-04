@@ -21,8 +21,8 @@ struct [[gnu::packed]] TrapFrame
     uint64_t r8;
     uint64_t rbp;
     uint64_t rbx;
-    uint64_t rax;      // syscall 番号。戻るときは戻り値
-    uint64_t rcx;      // syscall 命令が入れたユーザーの RIP (sysret が使う)
+    uint64_t rax; // syscall 番号。戻るときは戻り値
+    uint64_t rcx; // syscall 命令が入れたユーザーの RIP (sysret が使う)
     uint64_t rdx;
     uint64_t rsi;
     uint64_t rdi;
@@ -96,7 +96,7 @@ struct ProcessId
         return static_cast<int>(value);
     }
 
-    ProcessId& operator++() // prefix increment
+    ProcessId &operator++() // prefix increment
     {
         value++;
         return *this;
@@ -108,7 +108,7 @@ struct ProcessId
         ++(*this);
         return temp;
     }
-    ProcessId& operator=(uint64_t new_value)
+    ProcessId &operator=(uint64_t new_value)
     {
         value = new_value;
         return *this;
@@ -128,7 +128,8 @@ struct Process
     void *sleep_channel; // プロセスが sleep している場合のチャネル (待機理由) 0=起きている
     Process *parent;     // 親プロセスへのポインタ (fork などで使う)
     int exit_status;     // プロセスの終了ステータス (exit() で設定される)
-    TrapFrame *trap_frame; // syscall/syscall_entry.asm が積む、リング3のレジスタ一式．カーネルスレッドからの場合は nullptr
+    TrapFrame
+        *trap_frame; // syscall/syscall_entry.asm が積む、リング3のレジスタ一式．カーネルスレッドからの場合は nullptr
 };
 
 namespace process
