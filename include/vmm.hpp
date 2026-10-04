@@ -106,6 +106,9 @@ class VirtualMemoryManager final
     // ページテーブル自体は解放しない。
     void free_user_pages(PhysicalAddress pml4_phys);
 
+    void destroy_address_space(PhysicalAddress pml4_phys);
+
+
   private:
     VirtualAddress get_or_create_table(VirtualAddress parent_table, uint64_t index, PageFlag flags);
 

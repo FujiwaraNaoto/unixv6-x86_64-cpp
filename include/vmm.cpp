@@ -383,4 +383,53 @@ void VirtualMemoryManager::free_user_pages(PhysicalAddress pml4_phys)
     for_each_user_page(pml4_phys, free);
 }
 
+void VirtualMemoryManager::destroy_address_space(PhysicalAddress pml4_phys)
+{
+    VirtualAddress pml4 = physical_to_virtual(pml4_phys);
+    if (!pml4)
+    {
+        return; // 無効なPML4物理アドレスは無視
+    }
+    // テーブルより先に開放すること
+    free_user_pages(pml4_phys);
+
+    if (pml4[0] & PageFlag::Present)
+    {
+        const PhysicalAddress pdpt_phys = entry_to_phys(pml4[0]);
+        VirtualAddress pdpt             = physical_to_virtual(pdpt_phys);
+
+        for (int i = 0; i < ENTRIES_PER_TABLE; i++)
+        {
+            if (pdpt[i] & PageFlag::Present)
+            {
+                const PhysicalAddress pd_phys = entry_to_phys(pdpt[i]);
+                VirtualAddress pd             = physical_to_virtual(pd_phys);
+
+                for (int j = 0; j < ENTRIES_PER_TABLE; j++)
+                {
+                    if (pd[j] & PageFlag::Present)
+                    {
+                        const PhysicalAddress pt_phys = entry_to_phys(pd[j]);
+                        VirtualAddress pt             = physical_to_virtual(pt_phys);
+
+                        for (int k = 0; k < ENTRIES_PER_TABLE; k++)
+                        {
+                            if (pt[k] & PageFlag::Present)
+                            {
+                                pmm::pmm_ptr->free(entry_to_phys(pt[k]));
+                            }
+                        }
+                        pmm::pmm_ptr->free(pd_phys);
+                    }
+                }
+                pmm::pmm_ptr->free(pdpt_phys);
+            }
+        }
+    }
+
+    // 最後にPML4自体を解放する
+    pmm::pmm_ptr->free(pml4_phys);
+}
+
+
 } // namespace vmm
