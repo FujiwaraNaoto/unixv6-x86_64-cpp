@@ -6,7 +6,9 @@
 #include "console.hpp"
 #include <array>
 
-extern "C" uint64_t read_cr2(); // page fault 例外発生時に CR2 レジスタに格納される、アクセスしようとした仮想アドレスを返す
+
+// page fault 例外発生時に CR2 レジスタに格納される、アクセスしようとした仮想アドレスを返す
+extern "C" uint64_t read_cr2();
 
 namespace exception
 {
@@ -54,6 +56,33 @@ static std::array<const char *, NUM_EXCEPTIONS> exception_messages = {
     "Control Protection Exception",
 };
 
+enum class ExceptionType : uint8_t
+{
+    DivideByZero = 0,
+    Debug,
+    NonMaskableInterrupt,
+    Breakpoint,
+    Overflow,
+    BoundRangeExceeded,
+    InvalidOpcode,
+    DeviceNotAvailable,
+    DoubleFault,
+    CoprocessorSegmentOverrun,
+    InvalidTSS,
+    SegmentNotPresent,
+    StackSegmentFault,
+    GeneralProtectionFault,
+    PageFault,
+    Reserved,
+    FloatingPointException,
+    AlignmentCheck,
+    MachineCheck,
+    SIMDException,
+    VirtualizationException,
+    ControlProtectionException
+};
+
+
 void isr_common_handler(register_state_t *regs)
 {
     handler_console->set_color(Color::White, Color::Red);
@@ -70,8 +99,8 @@ void isr_common_handler(register_state_t *regs)
     handler_console->printf("RIP: 0x%016lx, CS=0x%016lx, RFLAGS=0x%016lx\n", regs->rip, regs->cs, regs->rflags);
     handler_console->printf(
         "RSP: 0x%016lx, SS=0x%016lx, ERR=0x%lx, INT=%lu\n", regs->rsp, regs->ss, regs->err_code, regs->int_no);
-    
-    if(regs->int_no == 14) // Page Fault
+
+    if (regs->int_no == static_cast<uint8_t>(ExceptionType::PageFault))
     {
         handler_console->printf("Page Fault Address: 0x%016lx\n", read_cr2());
     }
