@@ -359,7 +359,11 @@ bool VirtualMemoryManager::copy_user_pages(PhysicalAddress src_pml4_phys, Physic
         // 子供のPML4に同じ仮想アドレスでマップ
         // フラグは親のエントリの下位 12 ビットをそのまま引き継ぐ
         const PageFlag flags = static_cast<PageFlag>(entry & 0xFFF);
-        return vmm::vmm_ptr->map_page_in(dest_pml4_phys, virtual_address, new_phys, flags);
+        if (!vmm::vmm_ptr->map_page_in(dest_pml4_phys, virtual_address, new_phys, flags))
+        {
+            pmm::pmm_ptr->free(new_phys);
+            return false;
+        }
     };
 
     bool copied = for_each_user_page(src_pml4_phys, copy);
@@ -408,7 +412,7 @@ void VirtualMemoryManager::destroy_address_space(PhysicalAddress pml4_phys)
                 {
                     if (pd[j] & PageFlag::Present)
                     {
-                        pmm::pmm_ptr->free(entry_to_phys(pd[j]));// PT
+                        pmm::pmm_ptr->free(entry_to_phys(pd[j])); // PT
                     }
                 }
                 pmm::pmm_ptr->free(pd_phys); // PD

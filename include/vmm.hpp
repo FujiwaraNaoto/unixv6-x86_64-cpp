@@ -1,4 +1,5 @@
-#pragma once
+#ifndef VMM_HPP
+#define VMM_HPP
 #include <cstdint>
 #include <optional>
 #include "pmm.hpp"
@@ -99,7 +100,6 @@ class VirtualMemoryManager final
                      PageFlag flags);
 
     // src のユーザーページ (PML4[0] 配下) を複製して dst に同じ仮想アドレスでマップする。
-    // 途中で物理メモリが尽きたら、それまでに割り当てたページを解放して false を返す。
     bool copy_user_pages(PhysicalAddress src_pml4_phys, PhysicalAddress dest_pml4_phys);
 
     // pml4 のユーザーページ (PML4[0] 配下で User が立っているもの) を解放する。
@@ -119,3 +119,5 @@ class VirtualMemoryManager final
 inline VirtualMemoryManager *vmm_ptr = nullptr;
 
 } // namespace vmm
+
+#endif // VMM_HPP

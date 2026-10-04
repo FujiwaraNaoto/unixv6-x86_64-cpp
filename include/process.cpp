@@ -354,7 +354,6 @@ int fork_user(Process *parent, Process *child, uint8_t *child_stack)
 {
     if (!vmm::vmm_ptr->copy_user_pages(parent->pml4, child->pml4))
     {
-        // copy_user_pages() が複製済みのユーザーページを解放してから戻ってくる
         vmm::vmm_ptr->destroy_address_space(child->pml4);
         process::heap_ptr_->free(child_stack);
         child->state = ProcessState::Unused;
