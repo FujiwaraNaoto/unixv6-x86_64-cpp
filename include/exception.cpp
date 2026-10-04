@@ -6,6 +6,8 @@
 #include "console.hpp"
 #include <array>
 
+extern "C" uint64_t read_cr2(); // page fault 例外発生時に CR2 レジスタに格納される、アクセスしようとした仮想アドレスを返す
+
 namespace exception
 {
 namespace
@@ -68,6 +70,12 @@ void isr_common_handler(register_state_t *regs)
     handler_console->printf("RIP: 0x%016lx, CS=0x%016lx, RFLAGS=0x%016lx\n", regs->rip, regs->cs, regs->rflags);
     handler_console->printf(
         "RSP: 0x%016lx, SS=0x%016lx, ERR=0x%lx, INT=%lu\n", regs->rsp, regs->ss, regs->err_code, regs->int_no);
+    
+    if(regs->int_no == 14) // Page Fault
+    {
+        handler_console->printf("Page Fault Address: 0x%016lx\n", read_cr2());
+    }
+
     while (1)
     {
         asm volatile("hlt");
