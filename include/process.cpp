@@ -316,6 +316,10 @@ int wait(int *exit_code_out)
         for (size_t i = 0; i < process_table_.size(); ++i)
         {
             Process *child = &process_table_[i];
+            // 未使用のスロットは子ではない。fork が途中で失敗した場合、state だけ Unused に
+            // 戻されて parent が残るので、ここで弾かないと「居ない子」を待って永久に寝る。
+            if (child->state == ProcessState::Unused)
+                continue;
             if (child->parent != p)
                 continue;
             has_child = true;
