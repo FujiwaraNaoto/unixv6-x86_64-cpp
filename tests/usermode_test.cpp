@@ -5,6 +5,7 @@
 #include "vmm.hpp"
 #include "gdt.hpp"
 #include "process.hpp"
+#include "user_syscall.hpp"
 
 // .user セクションの範囲 (kernel.ld が定義する)。この中だけを User 許可でマップする。
 extern "C" char __user_start[];
@@ -20,14 +21,7 @@ namespace
 [[gnu::section(".user")]] void user_program()
 {
     const char msg[] = "Hello from ring 3!\n";
-    asm volatile("mov $1, %%rax\n"  // write
-                 "mov $1, %%rdi\n"  // stdout
-                 "mov %0, %%rsi\n"  // buf
-                 "mov $19, %%rdx\n" // len
-                 "syscall\n"
-                 :
-                 : "r"(msg)
-                 : "rax", "rdi", "rsi", "rdx", "rcx", "r11", "memory");
+    user_syscall(SyscallNo::kWrite, 1 /* stdout */, reinterpret_cast<long>(msg) /* buf */, 19 /* len */);
     // syscall をまたいでレジスタが保たれるかを確かめる。
     // 入口がカーネルスタックへ移り、TrapFrame に積んで戻せていないと、ここで崩れる。
     // (callee-saved の rbx/r12-r15 は、カーネル側が壊しても誰も戻してくれない)
@@ -56,22 +50,9 @@ namespace
     const char ok[]    = "REG-OK\n";
     const char ng[]    = "REG-NG\n";
     const char *result = (mismatch == 0) ? ok : ng;
-    asm volatile("mov $1, %%rax\n"
-                 "mov $1, %%rdi\n"
-                 "mov %0, %%rsi\n"
-                 "mov $7, %%rdx\n"
-                 "syscall\n"
-                 :
-                 : "r"(result)
-                 : "rax", "rdi", "rsi", "rdx", "rcx", "r11", "memory");
+    user_syscall(SyscallNo::kWrite, 1, reinterpret_cast<long>(result), 7);
+    user_syscall(SyscallNo::kExit, 0, 0, 0);
 
-
-    asm volatile("mov $60, %%rax\n" // exit
-                 "xor %%rdi, %%rdi\n"
-                 "syscall\n"
-                 :
-                 :
-                 : "rax", "rdi");
     // 念のため
     while (1)
     {

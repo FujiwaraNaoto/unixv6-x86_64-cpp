@@ -5,6 +5,7 @@
 #include "pmm.hpp"
 #include "vmm.hpp"
 #include "systemcall.hpp"
+#include "user_syscall.hpp"
 
 // .user セクションの範囲 (kernel.ld が定義する)
 extern "C" char __user_start[];
@@ -23,13 +24,6 @@ constexpr PageVirtualAddress kUserStack{0x600000};
 // ─── リング3で動く部分 ───────────────────────────────────────────
 // .rodata を参照しないよう、文字列はすべてスタック上に作る
 // (カーネルの .rodata はユーザーにマップしていないので、触ると #PF になる)。
-
-[[gnu::section(".user")]] long user_syscall(long num, long a1, long a2, long a3)
-{
-    long ret;
-    asm volatile("syscall" : "=a"(ret) : "a"(num), "D"(a1), "S"(a2), "d"(a3) : "rcx", "r11", "memory");
-    return ret;
-}
 
 [[gnu::section(".user")]] void user_write(const char *text, long length)
 {
