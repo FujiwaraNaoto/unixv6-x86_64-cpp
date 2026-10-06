@@ -364,6 +364,7 @@ bool VirtualMemoryManager::copy_user_pages(PhysicalAddress src_pml4_phys, Physic
             pmm::pmm_ptr->free(new_phys);
             return false;
         }
+        return true; // このページのコピーは成功。for_each_user_page に次へ進ませる
     };
 
     bool copied = for_each_user_page(src_pml4_phys, copy);
