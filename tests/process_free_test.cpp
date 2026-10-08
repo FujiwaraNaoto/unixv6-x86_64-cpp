@@ -86,7 +86,8 @@ bool fork_and_wait()
         return false; // プロセステーブルが埋まった = 回収した枠が再利用されていない
     }
     int code;
-    return process::wait(&code) == pid;
+    auto waited = process::wait(&code);
+    return waited && waited->value == static_cast<uint64_t>(pid);
 }
 
 // fork + wait を繰り返しても空きページが減らないことを確かめる (子の PML4 とカーネルスタック)。

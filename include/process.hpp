@@ -1,6 +1,7 @@
 #pragma once
 #include <cstdint>
 #include <cstddef>
+#include <optional>
 #include "address.hpp"
 #include "kstring.hpp"
 #include "units.hpp"
@@ -162,7 +163,10 @@ void wakeup(void *channel);
 // wait for child process to exit.
 // If a child process has exited, return its pid and write its exit status to *exit_code_out.
 // If there are no child processes, return -1.
-int wait(int *exit_code_out); // 子プロセスの終了を待つ。終了した子プロセスの exit_status を status に書き込む
+// 子プロセスの終了を待つ。終了した子の exit_status を exit_code_out に書き込み、その pid を返す。
+// 子プロセスが 1 つも無ければ nullopt を返す (ProcessId には無効値が無いので optional で表す)。
+// -fno-exceptions なので、中身は .value() ではなく *opt / opt->value で取り出すこと。
+std::optional<ProcessId> wait(int *exit_code_out);
 
 // fork the current process. Return the pid of the child process to the parent, and 0 to the child.
 // If fork fails, return -1.

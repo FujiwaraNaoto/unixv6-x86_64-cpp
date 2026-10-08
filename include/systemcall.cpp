@@ -90,7 +90,13 @@ static long sys_fork()
 
 static long sys_wait(uint64_t status_ptr)
 {
-    return static_cast<long>(process::wait(reinterpret_cast<int *>(status_ptr)));
+    // ユーザー空間へは rax 経由の生の整数で返すので、ここで optional をほどく。
+    auto pid = process::wait(reinterpret_cast<int *>(status_ptr));
+    if (!pid)
+    {
+        return -1; // 子プロセスが居ない
+    }
+    return static_cast<long>(pid->value);
 }
 
 namespace SystemCall

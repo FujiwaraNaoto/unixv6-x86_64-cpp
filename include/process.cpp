@@ -305,7 +305,7 @@ void free_process_resources(Process *proc)
     proc->state         = ProcessState::Unused;
 }
 
-int wait(int *exit_code_out)
+std::optional<ProcessId> wait(int *exit_code_out)
 {
     Process *p = current_proc_;
 
@@ -332,7 +332,7 @@ int wait(int *exit_code_out)
                     *exit_code_out = exit_code;
                 }
 
-                int pid = static_cast<int>(child->pid);
+                const ProcessId pid = child->pid;
                 free_process_resources(child);
 
                 return pid;
@@ -341,7 +341,7 @@ int wait(int *exit_code_out)
 
         if (!has_child)
         {
-            return -1;
+            return std::nullopt; // 待つ相手が居ない
         }
 
         // when child processes exist but none of them are zombies, the parent process should sleep until a child
