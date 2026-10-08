@@ -358,9 +358,9 @@ int fork_user(Process *parent, Process *child, uint8_t *child_stack)
 {
     if (!vmm::vmm_ptr->copy_user_pages(parent->pml4, child->pml4))
     {
-        vmm::vmm_ptr->destroy_address_space(child->pml4);
-        process::heap_ptr_->free(child_stack);
-        child->state = ProcessState::Unused;
+        // copy_user_pages() は複製済みのユーザーページを自分で解放してから戻る。
+        // 残りの資源 (カーネルスタック・アドレス空間) と parent はここで片付ける。
+        free_process_resources(child);
         return -1;
     }
 
@@ -457,16 +457,18 @@ int fork()
     child->entry         = parent->entry;
     child->name          = parent->name;
     child->parent        = parent;
-    child->entry         = parent->entry;
-    child->name          = parent->name;
     child->sleep_channel = nullptr;
     child->trap_frame    = nullptr;
+    // 失敗経路では free_process_resources() に後始末を任せる。どこで失敗しても
+    // 「まだ確保していない資源」を解放しようとしないよう、空の状態から始める。
+    child->kernel_stack = 0;
+    child->pml4         = PhysicalAddress{};
 
     // allocate a new page table for the child process
     uint8_t *child_stack = static_cast<uint8_t *>(heap_ptr_->alloc(KERNEL_STACK_SIZE));
     if (!child_stack)
     {
-        child->state = ProcessState::Unused; // スタック確保失敗した
+        free_process_resources(child); // スタック確保失敗。スロットを未使用に戻す
         return -1;
     }
     child->kernel_stack = reinterpret_cast<uint64_t>(child_stack);
@@ -475,8 +477,7 @@ int fork()
     child->pml4 = vmm::vmm_ptr->create_address_space();
     if (!child->pml4)
     {
-        heap_ptr_->free(reinterpret_cast<void *>(child_stack));
-        child->state = ProcessState::Unused; // ページテーブル確保失敗
+        free_process_resources(child); // ページテーブル確保失敗。カーネルスタックもここで解放される
         return -1;
     }
 
