@@ -38,15 +38,20 @@ static_assert(offsetof(TrapFrame, user_rsp) == 120, "TF_USER_RSP in syscall_entr
 
 // Callee-saved register (except rsp)
 struct [[gnu::packed]] ProcessContext
-{
-    uint64_t r15;
-    uint64_t r14;
-    uint64_t r13;
-    uint64_t r12;
-    uint64_t rbx;
-    uint64_t rbp;
-    uint64_t rip;
+{                 // ProcessContext*が指しているアドレスからのオフセット
+    uint64_t rbp; // +0
+    uint64_t rbx; // +8
+    uint64_t r12; // +16
+    uint64_t r13; // +24
+    uint64_t r14; // +32
+    uint64_t r15; // +40
+    uint64_t rip; // +48 retが拾う戻りアドレス
 };
+
+static_assert(sizeof(ProcessContext) == 56, "6 pop + ret in switch.asm");
+static_assert(offsetof(ProcessContext, rbp) == 0, "first pop in switch.asm");
+static_assert(offsetof(ProcessContext, r15) == 40, "last pop in switch.asm");
+static_assert(offsetof(ProcessContext, rip) == 48, "ret target in switch.asm");
 
 enum class ProcessState
 {
