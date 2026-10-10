@@ -21,7 +21,7 @@ saved_user_rsp: resq 1
 section .text
 extern syscall_dispatch
 extern syscall_kernel_rsp ; 現在プロセスのカーネルスタックの先頭を指す変数
-extern handle_syscall
+extern handle_syscall ; void handle_syscall(TrapFrame *tf);
 
 GLOBAL syscall_entry
 syscall_entry:
