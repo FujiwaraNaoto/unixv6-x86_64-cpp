@@ -36,7 +36,7 @@ static_assert(offsetof(TrapFrame, rax) == 80, "TF_RAX in syscall_entry.asm");
 static_assert(offsetof(TrapFrame, rdi) == 112, "TF_RDI in syscall_entry.asm");
 static_assert(offsetof(TrapFrame, user_rsp) == 120, "TF_USER_RSP in syscall_entry.asm");
 
-
+// Callee-saved register (except rsp)
 struct [[gnu::packed]] ProcessContext
 {
     uint64_t r15;
