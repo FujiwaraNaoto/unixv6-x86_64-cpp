@@ -354,6 +354,27 @@ std::optional<ProcessId> wait(int *exit_code_out)
 
 namespace
 {
+/*
+ring3のプロセスがfork()を読んだ時に子が親と同じ場所から戻り値0でユーザモードに戻れる状態を
+作りスケジューラに渡す関数
+
+child_stack + KERNEL_STACK_SIZE  ← 上端 (syscall_kernel_rsp もここ)
+┌──────────────────────┐
+│ TrapFrame (親のコピー) │ ← child->trap_frame   rax = 0
+│   rip, user rsp, ... │
+├──────────────────────┤
+│ ProcessContext       │ ← child->context
+│   r15..rbp = 0       │
+│   rip = fork_return  │
+├──────────────────────┤
+│                      │
+│   (空き: 以後のカーネル │
+│    スタックとして使う)  │
+│                      │
+└──────────────────────┘
+child_stack                       ← 下端 (アドレスが低い)
+
+*/
 int fork_user(Process *parent, Process *child, uint8_t *child_stack)
 {
     if (!vmm::vmm_ptr->copy_user_pages(parent->pml4, child->pml4))
