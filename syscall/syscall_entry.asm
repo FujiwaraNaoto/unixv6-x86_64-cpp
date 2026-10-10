@@ -26,9 +26,9 @@ extern handle_syscall
 GLOBAL syscall_entry
 syscall_entry:
     ; caller-saved レジスタを退避 (dispatch が壊す可能性)
-    mov [rel saved_user_rsp], rsp ; syscall_entry でのユーザスタックを保存
-    mov rsp, [rel syscall_kernel_rsp] ; カーネルスタックに切り替え
-    push qword [rel saved_user_rsp] ; syscall_entry でのユーザスタックを退避
+    mov [rel saved_user_rsp], rsp ; syscall_entry でのユーザスタックを保存.ユーザRSPをグローバル変数へ逃す
+    mov rsp, [rel syscall_kernel_rsp] ; カーネルスタックに切り替え.
+    push qword [rel saved_user_rsp] ; syscall_entry でのユーザスタックを退避. 逃した値をカーネルスタックに積み直す
     push rdi
     push rsi
     push rdx

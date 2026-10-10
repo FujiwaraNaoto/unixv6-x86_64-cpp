@@ -39,8 +39,9 @@ void parent_thread()
         thread_console->set_color(Color::Yellow, Color::Black);
         if (wpid)
         {
-            thread_console->printf(
-                "[FORK] parent: child %u exited with code %u\n", (unsigned)wpid->value, (unsigned)code);
+            thread_console->printf("[FORK] parent: child %u exited with code %u\n",
+                                   (unsigned)wpid->value,
+                                   (unsigned)code);
         }
         else
         {
