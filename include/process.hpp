@@ -1,20 +1,57 @@
 #pragma once
 #include <cstdint>
 #include <cstddef>
+#include <optional>
 #include "address.hpp"
 #include "kstring.hpp"
 #include "units.hpp"
 
-struct [[gnu::packed]] ProcessContext
+
+// syscall の入口 (syscall/syscall_entry.asm) がカーネルスタックに積む、
+// リング3のレジスタ一式。並びは push している順の逆 (rsp が指す側が r15)。
+// fork した子は、このフレームの rax だけを 0 に変えたコピーから復帰する。
+struct [[gnu::packed]] TrapFrame
 {
     uint64_t r15;
     uint64_t r14;
     uint64_t r13;
     uint64_t r12;
-    uint64_t rbx;
+    uint64_t r11; // syscall 命令が入れたユーザーの RFLAGS (sysret が使う)
+    uint64_t r10;
+    uint64_t r9;
+    uint64_t r8;
     uint64_t rbp;
-    uint64_t rip;
+    uint64_t rbx;
+    uint64_t rax; // syscall 番号。戻るときは戻り値
+    uint64_t rcx; // syscall 命令が入れたユーザーの RIP (sysret が使う)
+    uint64_t rdx;
+    uint64_t rsi;
+    uint64_t rdi;
+    uint64_t user_rsp; // syscall した時点のユーザーの RSP
 };
+
+// syscall_entry.asm がオフセットを直接書いているので、ずれたらここで気づけるようにする
+static_assert(sizeof(TrapFrame) == 128, "TrapFrame size must match syscall_entry.asm");
+static_assert(offsetof(TrapFrame, rax) == 80, "TF_RAX in syscall_entry.asm");
+static_assert(offsetof(TrapFrame, rdi) == 112, "TF_RDI in syscall_entry.asm");
+static_assert(offsetof(TrapFrame, user_rsp) == 120, "TF_USER_RSP in syscall_entry.asm");
+
+// Callee-saved register (except rsp)
+struct [[gnu::packed]] ProcessContext
+{                 // ProcessContext*が指しているアドレスからのオフセット
+    uint64_t rbp; // +0
+    uint64_t rbx; // +8
+    uint64_t r12; // +16
+    uint64_t r13; // +24
+    uint64_t r14; // +32
+    uint64_t r15; // +40
+    uint64_t rip; // +48 retが拾う戻りアドレス
+};
+
+static_assert(sizeof(ProcessContext) == 56, "6 pop + ret in switch.asm");
+static_assert(offsetof(ProcessContext, rbp) == 0, "first pop in switch.asm");
+static_assert(offsetof(ProcessContext, r15) == 40, "last pop in switch.asm");
+static_assert(offsetof(ProcessContext, rip) == 48, "ret target in switch.asm");
 
 enum class ProcessState
 {
@@ -51,9 +88,42 @@ constexpr size_t KERNEL_STACK_SIZE = 16_KiB;
 //       呼ばれるので、呼び出し可能オブジェクトにすること自体は技術的に可能。
 using EntryPoint = void (*)();
 
+
+struct ProcessId
+{
+    uint64_t value;
+
+    explicit operator uint64_t() const
+    {
+        return value;
+    }
+    explicit operator int() const
+    {
+        return static_cast<int>(value);
+    }
+
+    ProcessId &operator++() // prefix increment
+    {
+        value++;
+        return *this;
+    }
+
+    ProcessId operator++(int) // postfix increment
+    {
+        ProcessId temp = *this;
+        ++(*this);
+        return temp;
+    }
+    ProcessId &operator=(uint64_t new_value)
+    {
+        value = new_value;
+        return *this;
+    }
+};
+
 struct Process
 {
-    uint64_t pid;
+    ProcessId pid;
     ProcessState state;
     ProcessContext *context; // カーネルスタック上の保存コンテキストを指す
     uint64_t kernel_stack;
@@ -64,6 +134,8 @@ struct Process
     void *sleep_channel; // プロセスが sleep している場合のチャネル (待機理由) 0=起きている
     Process *parent;     // 親プロセスへのポインタ (fork などで使う)
     int exit_status;     // プロセスの終了ステータス (exit() で設定される)
+    TrapFrame
+        *trap_frame; // syscall/syscall_entry.asm が積む、リング3のレジスタ一式．カーネルスレッドからの場合は nullptr
 };
 
 namespace process
@@ -96,7 +168,10 @@ void wakeup(void *channel);
 // wait for child process to exit.
 // If a child process has exited, return its pid and write its exit status to *exit_code_out.
 // If there are no child processes, return -1.
-int wait(int *exit_code_out); // 子プロセスの終了を待つ。終了した子プロセスの exit_status を status に書き込む
+// 子プロセスの終了を待つ。終了した子の exit_status を exit_code_out に書き込み、その pid を返す。
+// 子プロセスが 1 つも無ければ nullopt を返す (ProcessId には無効値が無いので optional で表す)。
+// -fno-exceptions なので、中身は .value() ではなく *opt / opt->value で取り出すこと。
+std::optional<ProcessId> wait(int *exit_code_out);
 
 // fork the current process. Return the pid of the child process to the parent, and 0 to the child.
 // If fork fails, return -1.

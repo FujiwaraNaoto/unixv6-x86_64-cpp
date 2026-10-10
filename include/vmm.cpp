@@ -53,6 +53,62 @@ extern "C" void load_cr3(uint64_t value);
 extern "C" uint64_t read_cr3();
 extern "C" void asm_flush_tlb();
 
+
+template <typename Visitor>
+bool for_each_user_page(PhysicalAddress pml4_phys, Visitor visitor)
+{
+    VirtualAddress pml4 = physical_to_virtual(pml4_phys);
+    if (!pml4 || !(pml4[0] & vmm::PageFlag::Present))
+    {
+        return true; // absent PML4 or not present, nothing to do
+    }
+    VirtualAddress pgdpt = physical_to_virtual(entry_to_phys(pml4[0]));
+
+    for (int i = 0; i < ENTRIES_PER_TABLE; i++)
+    {
+        if (!(pgdpt[i] & vmm::PageFlag::Present))
+        {
+            continue; // skip if PDPT entry is not present
+        }
+        VirtualAddress pd = physical_to_virtual(entry_to_phys(pgdpt[i]));
+
+        for (int j = 0; j < ENTRIES_PER_TABLE; j++)
+        {
+            if (!(pd[j] & vmm::PageFlag::Present))
+            {
+                continue; // skip if PD entry is not present
+            }
+            VirtualAddress pt = physical_to_virtual(entry_to_phys(pd[j]));
+
+            for (int k = 0; k < ENTRIES_PER_TABLE; k++)
+            {
+                uint64_t entry = pt[k];
+                if (!(entry & vmm::PageFlag::Present))
+                {
+                    continue; // skip if PT entry is not present
+                }
+                if (!(entry & vmm::PageFlag::User))
+                {
+                    continue; // skip if not a User page
+                }
+
+                auto shift = [](uint64_t value, int shift) -> uint64_t { return value << shift; };
+
+                // Calculate the virtual address from the indices of PDPT(=i), PD(=j), and PT(=k)
+                const PageVirtualAddress virtual_address{shift(i, 30) | shift(j, 21) |
+                                                         shift(k, 12)}; // PDPTのインデックスを仮想アドレスに変換
+
+                if (!visitor(virtual_address, entry))
+                {
+                    return false; // visitorがfalseを返したら中断
+                }
+            }
+        }
+    }
+    return true; // 全てのユーザページを訪問した
+}
+
+
 } // namespace
 
 namespace vmm
@@ -282,75 +338,92 @@ bool VirtualMemoryManager::map_page_in(PhysicalAddress pml4_phys,
     return true;
 }
 
-void VirtualMemoryManager::copy_user_pages(PhysicalAddress src_pml4_phys, PhysicalAddress dst_pml4_phys)
+bool VirtualMemoryManager::copy_user_pages(PhysicalAddress src_pml4_phys, PhysicalAddress dest_pml4_phys)
 {
-    VirtualAddress src = physical_to_virtual(src_pml4_phys);
-    if (!src)
+
+
+    auto copy = [&dest_pml4_phys](PageVirtualAddress virtual_address, uint64_t entry) -> bool
     {
-        return; // PML4が存在しない場合はコピーできない
-    }
-
-    if (!(src[0] & PageFlag::Present))
-    {
-        return; // PML4エントリが存在しない場合はコピーできない
-    }
-
-    VirtualAddress src_pdpt = physical_to_virtual(entry_to_phys(src[0]));
-
-
-    for (int i = 0; i < ENTRIES_PER_TABLE; i++)
-    {
-        if (!(src_pdpt[i] & PageFlag::Present))
+        // 新しい物理ページを割り当てて内容をコピーする
+        const PhysicalAddress new_phys = pmm::pmm_ptr->allocate();
+        if (!new_phys)
         {
-            continue; // PDPTエントリが存在しない場合はコピーできない
+            return false; // メモリ不足
         }
-        VirtualAddress src_pd = physical_to_virtual(entry_to_phys(src_pdpt[i]));
 
-        for (int j = 0; j < ENTRIES_PER_TABLE; j++)
+        VirtualAddress dest_page = physical_to_virtual(new_phys);
+        VirtualAddress src_page  = physical_to_virtual(entry_to_phys(entry));
+
+        std::memcpy(dest_page.ptr, src_page.ptr, PAGE_SIZE);
+
+        // 子供のPML4に同じ仮想アドレスでマップ
+        // フラグは親のエントリの下位 12 ビットをそのまま引き継ぐ
+        const PageFlag flags = static_cast<PageFlag>(entry & 0xFFF);
+        if (!vmm::vmm_ptr->map_page_in(dest_pml4_phys, virtual_address, new_phys, flags))
         {
-            if (!(src_pd[j] & PageFlag::Present))
+            pmm::pmm_ptr->free(new_phys);
+            return false;
+        }
+        return true; // このページのコピーは成功。for_each_user_page に次へ進ませる
+    };
+
+    bool copied = for_each_user_page(src_pml4_phys, copy);
+
+    if (!copied)
+    {
+        return false;
+    }
+    return true;
+}
+
+
+void VirtualMemoryManager::free_user_pages(PhysicalAddress pml4_phys)
+{
+    auto free = [](PageVirtualAddress, uint64_t entry) -> bool
+    {
+        pmm::pmm_ptr->free(entry_to_phys(entry));
+        return true; // 続行
+    };
+    for_each_user_page(pml4_phys, free);
+}
+
+void VirtualMemoryManager::destroy_address_space(PhysicalAddress pml4_phys)
+{
+    VirtualAddress pml4 = physical_to_virtual(pml4_phys);
+    if (!pml4)
+    {
+        return; // 無効なPML4物理アドレスは無視
+    }
+    // テーブルより先に開放すること
+    free_user_pages(pml4_phys);
+
+    if (pml4[0] & PageFlag::Present)
+    {
+        const PhysicalAddress pdpt_phys = entry_to_phys(pml4[0]);
+        VirtualAddress pdpt             = physical_to_virtual(pdpt_phys);
+
+        for (int i = 0; i < ENTRIES_PER_TABLE; i++)
+        {
+            if (pdpt[i] & PageFlag::Present)
             {
-                continue; // PDエントリが存在しない場合はコピーできない
-            }
-            VirtualAddress src_pt = physical_to_virtual(entry_to_phys(src_pd[j]));
+                const PhysicalAddress pd_phys = entry_to_phys(pdpt[i]);
+                VirtualAddress pd             = physical_to_virtual(pd_phys);
 
-            for (int k = 0; k < ENTRIES_PER_TABLE; k++)
-            {
-
-                uint64_t e = src_pt[k];
-                if (!(e & PageFlag::Present))
+                for (int j = 0; j < ENTRIES_PER_TABLE; j++)
                 {
-                    continue; // PTエントリが存在しない場合はコピーできない
+                    if (pd[j] & PageFlag::Present)
+                    {
+                        pmm::pmm_ptr->free(entry_to_phys(pd[j])); // PT
+                    }
                 }
-                if (!(e & PageFlag::User))
-                {
-                    continue; // Userページでない場合はコピーしない
-                }
-
-                auto shift = [](uint64_t e, int shift) -> uint64_t { return e << shift; };
-
-                const PageVirtualAddress virtual_address{shift(i, 30) | shift(j, 21) |
-                                                         shift(k, 12)}; // PDPTのインデックスを仮想アドレスに変換
-
-                // 新しい物理ページを割り当てて内容をコピーする
-                const PhysicalAddress new_phys = pmm::pmm_ptr->allocate();
-                if (!new_phys)
-                {
-                    return; // メモリ不足
-                }
-
-                VirtualAddress dist_page = physical_to_virtual(new_phys);
-                VirtualAddress src_page  = physical_to_virtual(entry_to_phys(e));
-
-                std::memcpy(dist_page.ptr, src_page.ptr, PAGE_SIZE);
-
-                //子供のPML4に同じ仮想アドレスでマップ
-                // フラグは親のエントリの下位 12 ビットをそのまま引き継ぐ
-                const PageFlag flags = static_cast<PageFlag>(e & 0xFFF);
-                vmm::vmm_ptr->map_page_in(dst_pml4_phys, virtual_address, new_phys, flags);
+                pmm::pmm_ptr->free(pd_phys); // PD
             }
         }
+        pmm::pmm_ptr->free(pdpt_phys); // PDPT
     }
+
+    // 最後にPML4自体を解放する
+    pmm::pmm_ptr->free(pml4_phys);
 }
 
 

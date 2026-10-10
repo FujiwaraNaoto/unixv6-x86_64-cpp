@@ -26,9 +26,13 @@ SECTIONS {
         *(.text)
         *(.text.*)
     }
-
-    .user ALIGN(4096) : {
+    
+    /* リング3で実行するコード。ページ単位でUser許可にするため独立させる。境界シンボルはユーザページをマップする側が使う */
+    .user ALIGN(4096) : AT(ADDR(.user) - KERNEL_VMA){
+        __user_start = .;
         *(.user)
+        . = ALIGN(4096);
+        __user_end = .;
     }
 
     /* 読み取り専用データ (GDT など) */
@@ -45,7 +49,7 @@ SECTIONS {
 
     /* グローバルコンストラクタへのポインタ配列 (CRT 相当)。
      * 境界シンボルをカーネルから走査してコンストラクタを呼ぶ。 */
-    .init_array ALIGN(8) : {
+    .init_array ALIGN(8) : AT(ADDR(.init_array) - KERNEL_VMA) {
         __init_array_start = .;
         KEEP(*(SORT_BY_INIT_PRIORITY(.init_array.*) .init_array))
         __init_array_end = .;

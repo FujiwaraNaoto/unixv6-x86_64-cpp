@@ -1,4 +1,5 @@
-#pragma once
+#ifndef VMM_HPP
+#define VMM_HPP
 #include <cstdint>
 #include <optional>
 #include "pmm.hpp"
@@ -98,7 +99,15 @@ class VirtualMemoryManager final
                      PhysicalAddress physical_address,
                      PageFlag flags);
 
-    void copy_user_pages(PhysicalAddress src_pml4_phys, PhysicalAddress dst_pml4_phys);
+    // src のユーザーページ (PML4[0] 配下) を複製して dst に同じ仮想アドレスでマップする。
+    bool copy_user_pages(PhysicalAddress src_pml4_phys, PhysicalAddress dest_pml4_phys);
+
+    // pml4 のユーザーページ (PML4[0] 配下で User が立っているもの) を解放する。
+    // ページテーブル自体は解放しない。
+    void free_user_pages(PhysicalAddress pml4_phys);
+
+    void destroy_address_space(PhysicalAddress pml4_phys);
+
 
   private:
     VirtualAddress get_or_create_table(VirtualAddress parent_table, uint64_t index, PageFlag flags);
@@ -110,3 +119,5 @@ class VirtualMemoryManager final
 inline VirtualMemoryManager *vmm_ptr = nullptr;
 
 } // namespace vmm
+
+#endif // VMM_HPP

@@ -35,9 +35,18 @@ void parent_thread()
         thread_console->set_color(Color::LightGrey, Color::Black);
 
         int code;
-        int wpid = process::wait(&code);
+        auto wpid = process::wait(&code);
         thread_console->set_color(Color::Yellow, Color::Black);
-        thread_console->printf("[FORK] parent: child %u exited with code %u\n", (unsigned)wpid, (unsigned)code);
+        if (wpid)
+        {
+            thread_console->printf("[FORK] parent: child %u exited with code %u\n",
+                                   (unsigned)wpid->value,
+                                   (unsigned)code);
+        }
+        else
+        {
+            thread_console->printf("[FORK] parent: wait() found no child\n");
+        }
         thread_console->set_color(Color::LightGrey, Color::Black);
     }
 }

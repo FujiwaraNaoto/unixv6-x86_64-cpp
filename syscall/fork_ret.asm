@@ -20,7 +20,7 @@ section .text
 global fork_capture
 fork_capture:
     mov     rax, [rsp]      ; rax = 戻りアドレス(fork() 内の復帰ポイント). call直後なので[rsp]=戻りアドレス
-    mov     [rdi+0],  rbp
+    mov     [rdi+0],  rbp   ; 第一引数rdi. ProcessContextの先頭アドレスでもある
     mov     [rdi+8],  rbx
     mov     [rdi+16], r12
     mov     [rdi+24], r13
