@@ -5,13 +5,32 @@
 
 namespace heap
 {
-static constexpr size_t BLOCK_HEADER   = sizeof(Block);
 static uint64_t ALIGN                  = 8;  // 8バイトアラインメント
 static constexpr size_t MIN_SPLIT_SIZE = 32; // ブロックを分割する最小サイズ
 static uint64_t virt_start_            = 0;
 static uint64_t virt_end_              = 0;
 static uint64_t brk_                   = 0;
 static Block *head_                    = nullptr; // ブロックの先頭を指すポインタ
+
+// ヘッダとペイロードの往復。必ず対称でなければならないので、
+// sizeof(Block) の加減算はこの 2 つだけに閉じる。
+//
+//   ┌────────┬──────────────────┐
+//   │ Block  │ payload          │
+//   └────────┴──────────────────┘
+//   ↑ block   ↑ payload_of(block)
+
+// ブロックヘッダ → 呼び出し元に返すペイロードの先頭
+static void *payload_of(Block *block)
+{
+    return reinterpret_cast<uint8_t *>(block) + sizeof(Block);
+}
+
+// ペイロードの先頭 → その手前にあるブロックヘッダ
+static Block *header_of(void *payload)
+{
+    return reinterpret_cast<Block *>(reinterpret_cast<uint8_t *>(payload) - sizeof(Block));
+}
 
 
 void *Heap::sbrk(intptr_t increment)
@@ -78,7 +97,7 @@ Heap::Heap(uint64_t virt_start,
     }
 
     head_       = reinterpret_cast<Block *>(p);
-    head_->size = pmm::PAGE_SIZE - BLOCK_HEADER; // ブロックのサイズをページ
+    head_->size = pmm::PAGE_SIZE - sizeof(Block); // ブロックのサイズをページ
     head_->free = true;
     head_->next = nullptr;
     head_->prev = nullptr;
@@ -98,12 +117,11 @@ void *Heap::alloc(size_t size)
         if (block->free && block->size >= total_size)
         {
             // ブロックが十分なサイズを持っている場合
-            if (block->size >= total_size + BLOCK_HEADER + MIN_SPLIT_SIZE)
+            if (block->size >= total_size + sizeof(Block) + MIN_SPLIT_SIZE)
             {
-                // ブロックを分割
-                Block *new_block = reinterpret_cast<Block *>(reinterpret_cast<uint8_t *>(block) + BLOCK_HEADER +
-                                                             total_size);
-                new_block->size  = block->size - total_size - BLOCK_HEADER;
+                // ブロックを分割。payload_of(block) の total_size バイト先が次のヘッダになる
+                Block *new_block = reinterpret_cast<Block *>(static_cast<uint8_t *>(payload_of(block)) + total_size);
+                new_block->size  = block->size - total_size - sizeof(Block);
                 new_block->free  = true;
                 new_block->next  = block->next;
                 new_block->prev  = block;
@@ -115,12 +133,12 @@ void *Heap::alloc(size_t size)
                 block->next = new_block;
                 block->size = total_size; // ブロックのサイズを更新
             }
-            block->free = false;                        // ブロックを使用中にする
-            return reinterpret_cast<void *>(block + 1); // ヘッダの後ろがユーザーデータ領域
+            block->free = false;      // ブロックを使用中にする
+            return payload_of(block); // ヘッダの後ろがユーザーデータ領域
         }
     } // for
 
-    size_t pages_needed = (total_size + BLOCK_HEADER + pmm::PAGE_SIZE - 1) / pmm::PAGE_SIZE; // 必要なページ数を計算
+    size_t pages_needed = (total_size + sizeof(Block) + pmm::PAGE_SIZE - 1) / pmm::PAGE_SIZE; // 必要なページ数を計算
     void *new_mem       = morecore(pages_needed);
     if (!new_mem)
     {
@@ -142,7 +160,7 @@ void *Heap::alloc(size_t size)
     {
         // 新しいブロックを作成
         Block *new_block = reinterpret_cast<Block *>(new_mem);
-        new_block->size  = pages_needed * pmm::PAGE_SIZE - BLOCK_HEADER;
+        new_block->size  = pages_needed * pmm::PAGE_SIZE - sizeof(Block);
         new_block->free  = true;
         new_block->next  = nullptr;
         new_block->prev  = last_block;
@@ -156,13 +174,13 @@ void Heap::free(void *ptr)
 {
     if (!ptr)
         return;
-    auto *block = reinterpret_cast<Block *>(ptr) - 1; // ブロックのヘッダを取得
-    block->free = true;                               // ブロックを解放
+    Block *block = header_of(ptr); // ブロックのヘッダを取得
+    block->free  = true;           // ブロックを解放
 
     // 次のブロックも空いていれば結合
     if (block->next && block->next->free)
     {
-        block->size += BLOCK_HEADER + block->next->size; // 次のブロックと結合
+        block->size += sizeof(Block) + block->next->size; // 次のブロックと結合
         block->next = block->next->next;
         if (block->next)
         {
@@ -173,7 +191,7 @@ void Heap::free(void *ptr)
     // 前のブロックも空いていれば結合
     if (block->prev && block->prev->free)
     {
-        block->prev->size += BLOCK_HEADER + block->size; // 前のブロックと結合
+        block->prev->size += sizeof(Block) + block->size; // 前のブロックと結合
         block->prev->next = block->next;
         if (block->next)
         {
