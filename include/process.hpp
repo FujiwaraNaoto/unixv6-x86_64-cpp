@@ -53,6 +53,18 @@ static_assert(offsetof(ProcessContext, rbp) == 0, "first pop in switch.asm");
 static_assert(offsetof(ProcessContext, r15) == 40, "last pop in switch.asm");
 static_assert(offsetof(ProcessContext, rip) == 48, "ret target in switch.asm");
 
+
+// 構造体のメンバは先に書いたものほどアドレスが低い方に置かれる
+struct [[gnu::packed]] UserForkFrame
+{
+    ProcessContext context;
+    TrapFrame trap_frame;
+};
+
+// switch_context が context を pop し終えたとき、rsp がちょうど trap_frame を指すこと
+static_assert(offsetof(UserForkFrame, trap_frame) == sizeof(ProcessContext), "fork_return expects rsp == &trap_frame");
+
+
 enum class ProcessState
 {
     Unused,

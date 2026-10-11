@@ -385,26 +385,33 @@ int fork_user(Process *parent, Process *child, uint8_t *child_stack)
         return -1;
     }
 
+
+    // fork した子のカーネルスタック上端に置く初期フレーム。
+    // 構造体のメンバは先に書いたものほど低いアドレスに置かれる (図では下)。
+    //
+    //   高  ┌────────────────┐ ← child_stack + KERNEL_STACK_SIZE
+    //       │ TrapFrame      │
+    //       ├────────────────┤ ← child->trap_frame  fork_return 着地時の rsp → sysret
+    //       │ ProcessContext │
+    //   低  └────────────────┘ ← child->context     switch_context: 6 pop + ret → fork_return
+
     // 子のカーネルスタックの一番上に、親の TrapFrame の複製を置く
-    uint8_t *stack_top  = child_stack + KERNEL_STACK_SIZE;
-    TrapFrame *child_tf = reinterpret_cast<TrapFrame *>(stack_top) - 1;
-    *child_tf           = *parent->trap_frame;
-    child_tf->rax       = 0; // child returns 0 from fork()
-    child->trap_frame   = child_tf;
+    uint8_t *stack_top = child_stack + KERNEL_STACK_SIZE;
+    // sizeof(UserForkFrame)することでUserForkFrame分を確保する. ローカル変数確保でsubする理由と同じ
+    auto *frame           = reinterpret_cast<UserForkFrame *>(stack_top - sizeof(UserForkFrame));
+    frame->trap_frame     = *parent->trap_frame;
+    frame->trap_frame.rax = 0; // child returns 0 from fork()
 
-    // その下に、スケジューラが switch_context で読むコンテキストを置く。
-    // switch_context は 6 本 pop して ret するので、fork_return に着地した時点の
-    // rsp はちょうど TrapFrame の先頭になる。
-    ProcessContext *context = reinterpret_cast<ProcessContext *>(child_tf) - 1;
-    context->r15            = 0;
-    context->r14            = 0;
-    context->r13            = 0;
-    context->r12            = 0;
-    context->rbx            = 0;
-    context->rbp            = 0;
-    context->rip            = reinterpret_cast<uint64_t>(fork_return);
-    child->context          = context;
-
+    frame->context = ProcessContext
+    {
+        .rbp = 0;
+        .rbx = 0;
+        .r12 = 0;
+        .r13 = 0;
+        .r14 = 0;
+        .r15 = 0;
+        .rip = reinterpret_cast<uint64_t>(fork_return);
+    };
     child->state = ProcessState::Runnable;
     return static_cast<int>(child->pid); // return the child's pid to the parent process
 }
