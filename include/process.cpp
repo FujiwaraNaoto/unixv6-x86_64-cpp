@@ -175,7 +175,7 @@ Process *create_process(EntryPoint entry, const char *name)
     proc->name  = name; // kstring が容量超過分を切り捨てて null 終端する
 
     uint8_t *stack_top = proc->kernel_stack.top();
-    // 引くことでProcessContextのメモリ領域を確保する
+    // スタックはアドレスの小さい方に成長していく。アセンブリでローカル変数確保の容量で引くことでProcessContextのメモリ領域を確保する
     auto *context = reinterpret_cast<ProcessContext *>(stack_top - sizeof(ProcessContext));
 
     *context = ProcessContext{
@@ -387,27 +387,31 @@ std::optional<ProcessId> wait(int *exit_code_out)
 
 namespace
 {
-/*
-ring3のプロセスがfork()を読んだ時に子が親と同じ場所から戻り値0でユーザモードに戻れる状態を
-作りスケジューラに渡す関数
 
-child_stack + KERNEL_STACK_SIZE  ← 上端 (syscall_kernel_rsp もここ)
-┌──────────────────────┐
-│ TrapFrame (親のコピー) │ ← child->trap_frame   rax = 0
-│   rip, user rsp, ... │
-├──────────────────────┤
-│ ProcessContext       │ ← child->context
-│   r15..rbp = 0       │
-│   rip = fork_return  │
-├──────────────────────┤
-│                      │
-│   (空き: 以後のカーネル │
-│    スタックとして使う)  │
-│                      │
-└──────────────────────┘
-child_stack                       ← 下端 (アドレスが低い)
 
-*/
+// ring3のプロセスがfork()を読んだ時に子が親と同じ場所から戻り値0でユーザモードに戻れる状態を
+// 作りスケジューラに渡す関数
+
+// child_stack + KERNEL_STACK_SIZE  ← 上端 (syscall_kernel_rsp もここ)
+// ┌──────────────────────┐
+// │ TrapFrame (親のコピー) │ ← child->trap_frame   rax = 0
+// │   rip, user rsp, ... │
+// ├──────────────────────┤
+// │ ProcessContext       │ ← child->context
+// │   r15..rbp = 0       │
+// │   rip = fork_return  │
+// ├──────────────────────┤
+// │                      │
+// │   (空き: 以後のカーネル │
+// │    スタックとして使う)  │
+// │                      │
+// └──────────────────────┘
+// child_stack                       ← 下端 (アドレスが低い)
+
+
+
+//カーネル側(上半分)は親と共有する．ユーザ側(下半分)は親のページを複製(同じ仮想アドレス，別の物理ページ)
+// リング3のプロセスから呼ばれたfork
 int fork_user(Process *parent, Process *child, uint8_t *child_stack)
 {
     if (!vmm::vmm_ptr->copy_user_pages(parent->pml4, child->pml4))
@@ -455,32 +459,36 @@ int fork_user(Process *parent, Process *child, uint8_t *child_stack)
     return static_cast<int>(child->pid); // return the child's pid to the parent process
 }
 
-
+// カーネルスレッドから呼ばれたfork().
 // カーネルスレッドの fork。親のカーネルスタックを丸ごと複製し、子はリング0のまま
 // fork_capture() の直後(★)から再開する。リング3のユーザスタックはコピーしない。
+// 箱は各関数のスタックフレーム (戻りアドレス・保存レジスタ・ローカル変数)。
+// 関数のコード自体は親子で共有している。
 //
-//          親のカーネルスタック                   子のカーネルスタック
-//   高  ┌───────────────────┐               ┌───────────────────┐
-//       │ parent_thread ... │               │ parent_thread ... │
-//       ├───────────────────┤               ├───────────────────┤
-//       │ fork()            │   ── 複製 ──→  │ fork()            │
-//       ├───────────────────┤               ├───────────────────┤
-//       │ fork_kernel()     │               │ fork_kernel()     │
-//       ├───────────────────┤ ← caller_rsp  ├───────────────────┤ ← to_child(caller_rsp)
-//       │                   │               │ ProcessContext    │    ★に着地したときの rsp
-//       │                   │               │  rbp..r15 = snap  │
-//       │                   │               │  rip = ★          │
-//       │ (空き)             │               ├───────────────────┤ ← child->context
-//       │                   │               │ (空き)             │
-//   低  └───────────────────┘               └───────────────────┘
-//       parent->kernel_stack.base           child_stack
+//          親のカーネルスタック                     子のカーネルスタック
+//   高  ┌───────────────────────┐             ┌───────────────────────┐
+//       │ parent_thread のフレーム│             │parent_thread のフレーム│ (複製)
+//       ├───────────────────────┤             ├───────────────────────┤
+//       │ fork() のフレーム       │  ── 複製 ─→  │fork() のフレーム       │ (複製)
+//       ├───────────────────────┤             ├───────────────────────┤
+//       │ fork_kernel() のフレーム│             │fork_kernel() のフレーム│ (複製)
+//       ├───────────────────────┤ ← caller_rsp├───────────────────────┤ ← to_child(caller_rsp)
+//       │                       │             │ ProcessContext        │    ★に着地したときの rsp
+//       │                       │             │  rbp..r15 = snap      │ (親が後から書く)
+//       │                       │             │  rip = ★              │
+//       │ (空き)                 │             ├───────────────────────┤ ← child->context
+//       │                       │              |(空き)                 │
+//   低  └───────────────────────┘              └───────────────────────┘
+//       parent->kernel_stack.base             child_stack
 
+// カーネル側(上半分)は親と共有(同じ表)．ユーザ側(下半分)は空のまま
 // カーネルスレッドの fork で、リング3のユーザスタックはコピーしない
 int fork_kernel(Process *parent, Process *child, uint8_t *child_stack)
 {
     uint8_t *parent_stack = parent->kernel_stack.base;
 
     // 親のスタック上のアドレスを、子のスタック上の同じ相対位置に写す
+    // 子のスタックは仮想アドレスが親と違うため補正が必要
     auto to_child = [&](uint64_t parent_addr)
     { return parent_addr - reinterpret_cast<uint64_t>(parent_stack) + reinterpret_cast<uint64_t>(child_stack); };
 
