@@ -539,13 +539,9 @@ int fork()
     child->name   = parent->name;
     child->parent = parent;
 
-    // allocate a new page table for the child process
-    uint8_t *child_stack = static_cast<uint8_t *>(heap_ptr_->alloc(KERNEL_STACK_SIZE));
-    if (!child_stack)
-    {
-        free_process_resources(child); // スタック確保失敗。スロットを未使用に戻す
-        return -1;
-    }
+    // カーネルスタックは allocate_process() が確保済み。
+    auto *child_stack = reinterpret_cast<uint8_t *>(child->kernel_stack);
+
     bool is_user_thread = (parent->trap_frame != nullptr);
     if (is_user_thread)
     {

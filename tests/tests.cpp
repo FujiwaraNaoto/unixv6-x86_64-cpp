@@ -20,9 +20,9 @@ void run_all(IConsole *console)
     pmm_alloc_free(out);
     heap_sbrk_alloc(out);
 
-    // scheduler_yield(out);
-    // addrspace_separation(out);
-    // sleep_wakeup(out);
+    scheduler_yield(out);
+    addrspace_separation(out);
+    sleep_wakeup(out);
     fork_wait(out);
     fork_from_ring3(out);
     process_free(out);
