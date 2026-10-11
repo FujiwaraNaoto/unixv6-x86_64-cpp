@@ -139,7 +139,7 @@ void *Heap::alloc(size_t size)
     } // for
 
     size_t pages_needed = (total_size + sizeof(Block) + pmm::PAGE_SIZE - 1) / pmm::PAGE_SIZE; // 必要なページ数を計算
-    void *new_mem       = morecore(pages_needed);
+    void *new_mem = morecore(pages_needed);
     if (!new_mem)
     {
         return nullptr; // メモリの確保に失敗
