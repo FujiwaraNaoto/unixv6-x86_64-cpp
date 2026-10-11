@@ -2,10 +2,27 @@
 #include "serial.hpp"
 #include "keyboard.hpp"
 #include "gdt.hpp"
+#include "console.hpp"
+#include "process.hpp"
 
 extern "C" void syscall_entry();
 extern "C" uint64_t rdmsr(uint32_t msr);
 extern "C" void wrmsr(uint32_t msr, uint64_t value);
+
+extern "C" void handle_syscall(TrapFrame *tf)
+{
+    Process *proc = process::current_process();
+    if (proc)
+    {
+        proc->trap_frame = tf;
+    }
+
+    // syscall_entry.asm で積まれた TrapFrame のレジスタを引数にして syscall_dispatch を呼ぶ
+    long ret = SystemCall::syscall_dispatch(tf->rax, tf->rdi, tf->rsi, tf->rdx, tf->r10, tf->r8);
+
+    // 戻り値を TrapFrame の rax に書き戻す
+    tf->rax = static_cast<uint64_t>(ret);
+}
 
 namespace
 {
@@ -56,10 +73,30 @@ static long sys_exit(uint64_t code)
     syscall_console->set_color(Color::Yellow, Color::Black);
     syscall_console->printf("\n[SYS]  exit(%u) called\n", (unsigned)code);
     syscall_console->set_color(Color::LightGrey, Color::Black);
-    // フェーズ6ではプロセス連携をせず、ここで停止
+
+    if (process::current_process() != nullptr)
+    {
+        process::exit(static_cast<int>(code));
+    }
     while (1)
         asm volatile("hlt");
     return 0;
+}
+
+static long sys_fork()
+{
+    return static_cast<long>(process::fork());
+}
+
+static long sys_wait(uint64_t status_ptr)
+{
+    // ユーザー空間へは rax 経由の生の整数で返すので、ここで optional をほどく。
+    auto pid = process::wait(reinterpret_cast<int *>(status_ptr));
+    if (!pid)
+    {
+        return -1; // 子プロセスが居ない
+    }
+    return static_cast<long>(pid->value);
 }
 
 namespace SystemCall
@@ -73,6 +110,10 @@ extern "C" long syscall_dispatch(uint64_t num, uint64_t a1, uint64_t a2, uint64_
             return sys_read(a1, a2, a3);
         case SyscallNo::kWrite:
             return sys_write(a1, a2, a3);
+        case SyscallNo::kFork:
+            return sys_fork();
+        case SyscallNo::kWait:
+            return sys_wait(a1);
         case SyscallNo::kExit:
             return sys_exit(a1);
         default:

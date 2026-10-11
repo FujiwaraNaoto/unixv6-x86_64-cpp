@@ -43,6 +43,13 @@ void sleep_wakeup(IConsole *console);
 // fork / exit / wait: 子プロセスの生成と終了ステータスの回収を確認する。
 void fork_wait(IConsole *console);
 
+// fork / exit / wait: リング3のユーザーページに降りて、syscall で write/exit を呼ぶ。
+void fork_from_ring3(IConsole *console);
+
+// プロセス終了時の解放: アドレス空間の破棄と fork + wait の繰り返しで、空きページ数が減らないことを確認する。
+void process_free(IConsole *console);
+
+
 // リング3: ユーザーページへ遷移し、syscall で write/exit を呼ぶ。
 // NOTE: usermode::enter() は戻らないため、このテストからは復帰しない。
 [[noreturn]] void usermode_ring3(IConsole *console);

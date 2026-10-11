@@ -11,7 +11,7 @@ BITS 64
 section .text
 GLOBAL switch_context
 switch_context:
-    ; 現在のレジスタをスタックに積む (Context構造体と同じ並び)
+    ; 現在のレジスタをスタックに積む (ProcessContext構造体と逆順なのはそういう仕様)
     push r15
     push r14
     push r13

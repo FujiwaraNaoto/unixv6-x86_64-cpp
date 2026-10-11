@@ -6,6 +6,10 @@
 namespace exception
 {
 
+// x86-64 のロングモードでは、例外時に CPU が ss -> rsp -> rflags -> cs -> rip の順にスタックに積む。
+//  err_code は例外の種類によって CPU が積むか積まないかが決まっている。
+// int_no は CPU が積むが、err_code は CPU が積まない例外もあるので、CPU が積むかどうかを判定する必要がある。
+// isr_commonが 呼ばれる時に rax~r15を積む
 struct [[gnu::packed]] register_state_t
 {
     uint64_t r15, r14, r13, r12, r11, r10, r9, r8;
