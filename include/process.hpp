@@ -81,8 +81,7 @@ namespace heap
 class Heap;
 }
 
-constexpr size_t MAX_PROCESSES     = 64;
-constexpr size_t KERNEL_STACK_SIZE = 16_KiB;
+constexpr size_t MAX_PROCESSES = 64;
 
 // プロセスのエントリポイント (引数なし・戻り値なしの関数)。
 //
@@ -137,8 +136,9 @@ struct Process
 {
     ProcessId pid;
     ProcessState state;
-    ProcessContext *context; // カーネルスタック上の保存コンテキストを指す
-    uint64_t kernel_stack;
+    ProcessContext *context;  // カーネルスタック上の保存コンテキストを指す
+    KernelStack kernel_stack; // そのプロセス専用のカーネルスタック領域の先頭アドレス。
+                              // 上端 (rsp の出発点) は .top() で取る
     EntryPoint entry;
     kstring<16> name; // NOTE: kstring は固定容量の文字列で、容量超過分は切り捨てられる.
                       // C++の標準ライブラリは使えないので、std::string は使えない

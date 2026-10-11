@@ -86,7 +86,7 @@ static void schedule(Process *prev_proc)
 
         // set TSS's RSP0 to the top of the current process's kernel stack, so that when an interrupt occurs, the
         // CPU will switch to this stack.
-        gdt::set_kernel_stack(current_proc_->kernel_stack + KERNEL_STACK_SIZE);
+        gdt::set_kernel_stack(reinterpret_cast<uint64_t>(current_proc_->kernel_stack.top()));
 
         // prev がプロセスならそのコンテキストへ、kernel_main (スケジューラ) からの
         // 呼び出しなら scheduler_context_ へ保存する。後者は Runnable が尽きたときの
@@ -132,7 +132,7 @@ Process *allocate_process()
     proc->trap_frame    = nullptr; // リング3から syscall で入ったときだけ設定される
     // 失敗したときに free_process_resources() が「まだ確保していない資源」を
     // 解放しようとしないよう、空の状態から始める。
-    proc->kernel_stack = 0;
+    proc->kernel_stack = KernelStack{};
     proc->pml4         = PhysicalAddress{};
 
     void *stack = heap_ptr_->alloc(KERNEL_STACK_SIZE);
@@ -141,7 +141,7 @@ Process *allocate_process()
         free_process_resources(proc);
         return nullptr;
     }
-    proc->kernel_stack = reinterpret_cast<uint64_t>(stack);
+    proc->kernel_stack = KernelStack{static_cast<uint8_t *>(stack)};
 
     proc->pml4 = vmm::vmm_ptr->create_address_space();
     if (!proc->pml4)
@@ -156,13 +156,13 @@ Process *allocate_process()
 
 // カーネルスレッドを作る。entry は trampoline() 経由で呼ばれる。
 //
-//   高  ┌────────────────┐ ← kernel_stack + KERNEL_STACK_SIZE
+//   高  ┌────────────────┐ ← kernel_stack.top()
 //       │ ProcessContext │   rbp..r15 = 0, rip = trampoline
 //       ├────────────────┤ ← proc->context   switch_context: 6 pop + ret → trampoline
 //       │                │
 //       │ (空き)          │   trampoline 以降はここをスタックとして使う
 //       │                │
-//   低  └────────────────┘ ← kernel_stack
+//   低  └────────────────┘ ← kernel_stack.base
 
 Process *create_process(EntryPoint entry, const char *name)
 {
@@ -174,7 +174,7 @@ Process *create_process(EntryPoint entry, const char *name)
     proc->entry = entry;
     proc->name  = name; // kstring が容量超過分を切り捨てて null 終端する
 
-    uint8_t *stack_top = reinterpret_cast<uint8_t *>(proc->kernel_stack) + KERNEL_STACK_SIZE;
+    uint8_t *stack_top = proc->kernel_stack.top();
     // 引くことでProcessContextのメモリ領域を確保する
     auto *context = reinterpret_cast<ProcessContext *>(stack_top - sizeof(ProcessContext));
 
@@ -268,7 +268,7 @@ static void schedule_from_zombie(ProcessContext **discard_context)
         {
             vmm::vmm_ptr->switch_address_space(current_proc_->pml4);
         }
-        gdt::set_kernel_stack(current_proc_->kernel_stack + KERNEL_STACK_SIZE);
+        gdt::set_kernel_stack(reinterpret_cast<uint64_t>(current_proc_->kernel_stack.top()));
         switch_context(discard_context, current_proc_->context);
         return;
     }
@@ -322,8 +322,8 @@ void free_process_resources(Process *proc)
 {
     if (proc->kernel_stack)
     {
-        process::heap_ptr_->free(reinterpret_cast<void *>(proc->kernel_stack));
-        proc->kernel_stack = 0;
+        process::heap_ptr_->free(proc->kernel_stack.base);
+        proc->kernel_stack = KernelStack{};
     }
 
     if (proc->pml4)
@@ -473,12 +473,12 @@ int fork_user(Process *parent, Process *child, uint8_t *child_stack)
 //       │ (空き)             │               ├───────────────────┤ ← child->context
 //       │                   │               │ (空き)             │
 //   低  └───────────────────┘               └───────────────────┘
-//       parent->kernel_stack                  child_stack
+//       parent->kernel_stack.base           child_stack
 
 // カーネルスレッドの fork で、リング3のユーザスタックはコピーしない
 int fork_kernel(Process *parent, Process *child, uint8_t *child_stack)
 {
-    uint8_t *parent_stack = reinterpret_cast<uint8_t *>(parent->kernel_stack);
+    uint8_t *parent_stack = parent->kernel_stack.base;
 
     // 親のスタック上のアドレスを、子のスタック上の同じ相対位置に写す
     auto to_child = [&](uint64_t parent_addr)
@@ -540,7 +540,7 @@ int fork()
     child->parent = parent;
 
     // カーネルスタックは allocate_process() が確保済み。
-    auto *child_stack = reinterpret_cast<uint8_t *>(child->kernel_stack);
+    auto *child_stack = child->kernel_stack.base;
 
     bool is_user_thread = (parent->trap_frame != nullptr);
     if (is_user_thread)
