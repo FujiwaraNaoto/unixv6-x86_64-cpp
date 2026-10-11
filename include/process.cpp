@@ -402,29 +402,61 @@ int fork_user(Process *parent, Process *child, uint8_t *child_stack)
     frame->trap_frame     = *parent->trap_frame;
     frame->trap_frame.rax = 0; // child returns 0 from fork()
 
-    frame->context = ProcessContext
-    {
-        .rbp = 0;
-        .rbx = 0;
-        .r12 = 0;
-        .r13 = 0;
-        .r14 = 0;
-        .r15 = 0;
-        .rip = reinterpret_cast<uint64_t>(fork_return);
+    frame->context = ProcessContext{
+        .rbp = 0,
+        .rbx = 0,
+        .r12 = 0,
+        .r13 = 0,
+        .r14 = 0,
+        .r15 = 0,
+        .rip = reinterpret_cast<uint64_t>(fork_return),
     };
+
+    // Process からこのフレームを指す。
+    // スケジューラは child->context を読んで switch_context でそこへ飛び、
+    // fork_return は child->trap_frame の位置に rsp が合った状態で sysret する。
+    child->context    = &frame->context;
+    child->trap_frame = &frame->trap_frame;
+
     child->state = ProcessState::Runnable;
     return static_cast<int>(child->pid); // return the child's pid to the parent process
 }
 
+
+// カーネルスレッドの fork。親のカーネルスタックを丸ごと複製し、子はリング0のまま
+// fork_capture() の直後(★)から再開する。リング3のユーザスタックはコピーしない。
+//
+//          親のカーネルスタック                   子のカーネルスタック
+//   高  ┌───────────────────┐               ┌───────────────────┐
+//       │ parent_thread ... │               │ parent_thread ... │
+//       ├───────────────────┤               ├───────────────────┤
+//       │ fork()            │   ── 複製 ──→  │ fork()            │
+//       ├───────────────────┤               ├───────────────────┤
+//       │ fork_kernel()     │               │ fork_kernel()     │
+//       ├───────────────────┤ ← caller_rsp  ├───────────────────┤ ← to_child(caller_rsp)
+//       │                   │               │ ProcessContext    │    ★に着地したときの rsp
+//       │                   │               │  rbp..r15 = snap  │
+//       │                   │               │  rip = ★          │
+//       │ (空き)             │               ├───────────────────┤ ← child->context
+//       │                   │               │ (空き)             │
+//   低  └───────────────────┘               └───────────────────┘
+//       parent->kernel_stack                  child_stack
+
 // カーネルスレッドの fork で、リング3のユーザスタックはコピーしない
 int fork_kernel(Process *parent, Process *child, uint8_t *child_stack)
 {
+    uint8_t *parent_stack = reinterpret_cast<uint8_t *>(parent->kernel_stack);
+
+    // 親のスタック上のアドレスを、子のスタック上の同じ相対位置に写す
+    auto to_child = [&](uint64_t parent_addr)
+    { return parent_addr - reinterpret_cast<uint64_t>(parent_stack) + reinterpret_cast<uint64_t>(child_stack); };
+
 
     // copy the parent's kernel stack to the child's kernel stack
     // (make the child process's kernel stack identical to the parent's kernel stack)
     for (size_t i = 0; i < KERNEL_STACK_SIZE; i++)
     {
-        child_stack[i] = reinterpret_cast<uint8_t *>(parent->kernel_stack)[i];
+        child_stack[i] = parent_stack[i];
     }
 
     // 子は sysret を使わず、リング0のまま「fork_capture を呼んだ直後」から復帰し、
@@ -443,13 +475,11 @@ int fork_kernel(Process *parent, Process *child, uint8_t *child_stack)
     }
 
     // ── 以降は親のみ実行 ──
-    // 子スタック上に context ブロックを配置する。switch_context は
-    //   rsp=context → pop 6本 → ret で ★へ着地し、着地後 rsp=context+56。
-    // これを「親の fork の rsp をミラーした位置(caller_rsp+offset)」に一致させたいので、
-    //   child->context = caller_rsp + offset - 56 に置き、snap を書き込む。
-    uint64_t offset = reinterpret_cast<uint64_t>(child_stack) - parent->kernel_stack;
-    child->context  = reinterpret_cast<ProcessContext *>(caller_rsp + offset - sizeof(ProcessContext));
-    *child->context = snap;
+    // 子が★に着地したときの rsp を求め、そのすぐ下に ProcessContext を置く。
+    // switch_context が 6 本 pop + ret すると、rsp はちょうど child_rsp_at_resume になる。
+    uint64_t child_rsp_at_resume = to_child(caller_rsp);
+    child->context               = reinterpret_cast<ProcessContext *>(child_rsp_at_resume - sizeof(ProcessContext));
+    *child->context              = snap;
 
     child->state = ProcessState::Runnable;
     return static_cast<int>(child->pid); // return the child's pid to the parent process
