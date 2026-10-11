@@ -105,57 +105,91 @@ static void schedule(Process *prev_proc)
     }
 }
 
-Process *create_process(EntryPoint entry, const char *name)
+
+// 空きスロットを確保し、カーネルスタックとアドレス空間を用意する。
+// 成功すると Embryo 状態の Process を返す。スタックの中身 (context など) は呼び出し側が置く。
+// 失敗したら確保済みの資源を解放し、スロットを Unused に戻して nullptr を返す。
+Process *allocate_process()
 {
     Process *proc = nullptr;
-    for (size_t idx = 0; idx < process_table_.size(); ++idx)
+    for (Process &p : process_table_)
     {
-        if (process_table_[idx].state == ProcessState::Unused)
+        if (p.state == ProcessState::Unused)
         {
-            proc = &process_table_[idx];
+            proc = &p;
             break;
         }
     }
-
     if (proc == nullptr)
     {
-        return nullptr; // The process table is full.
+        return nullptr; // プロセステーブルが満杯
     }
-    proc->pid   = next_pid_++;
-    proc->state = ProcessState::Embryo;
-    proc->entry = entry;
-    proc->name  = name; // kstring が容量超過分を切り捨てて null 終端する
-    proc->trap_frame = nullptr; //リング3からsyscallで呼ばれた場合にtrap_frameが積まれるので、初期化しておく
 
-    uint8_t *stack = static_cast<uint8_t *>(heap_ptr_->alloc(KERNEL_STACK_SIZE));
+    proc->pid           = next_pid_++;
+    proc->state         = ProcessState::Embryo;
+    proc->parent        = nullptr;
+    proc->sleep_channel = nullptr;
+    proc->trap_frame    = nullptr; // リング3から syscall で入ったときだけ設定される
+    // 失敗したときに free_process_resources() が「まだ確保していない資源」を
+    // 解放しようとしないよう、空の状態から始める。
+    proc->kernel_stack = 0;
+    proc->pml4         = PhysicalAddress{};
+
+    void *stack = heap_ptr_->alloc(KERNEL_STACK_SIZE);
     if (stack == nullptr)
     {
-        proc->state = ProcessState::Unused; // スタック確保失敗した
+        free_process_resources(proc);
         return nullptr;
     }
     proc->kernel_stack = reinterpret_cast<uint64_t>(stack);
 
-    // allocate a new page table for each processes
     proc->pml4 = vmm::vmm_ptr->create_address_space();
-    if (not proc->pml4)
+    if (!proc->pml4)
     {
-        proc->state = ProcessState::Unused; // ページテーブル確保失敗した
+        free_process_resources(proc); // カーネルスタックもここで解放される
         return nullptr;
     }
 
-    uint8_t *stack_top = stack + KERNEL_STACK_SIZE;
-    stack_top -= sizeof(ProcessContext);
-    proc->context       = reinterpret_cast<ProcessContext *>(stack_top);
-    proc->context->r15  = 0;
-    proc->context->r14  = 0;
-    proc->context->r13  = 0;
-    proc->context->r12  = 0;
-    proc->context->rbx  = 0;
-    proc->context->rbp  = 0;
-    proc->context->rip  = reinterpret_cast<uint64_t>(trampoline);
-    proc->sleep_channel = nullptr; // 初期状態では起きている
-    proc->trap_frame    = nullptr;
+    return proc;
+}
 
+
+
+// カーネルスレッドを作る。entry は trampoline() 経由で呼ばれる。
+//
+//   高  ┌────────────────┐ ← kernel_stack + KERNEL_STACK_SIZE
+//       │ ProcessContext │   rbp..r15 = 0, rip = trampoline
+//       ├────────────────┤ ← proc->context   switch_context: 6 pop + ret → trampoline
+//       │                │
+//       │ (空き)          │   trampoline 以降はここをスタックとして使う
+//       │                │
+//   低  └────────────────┘ ← kernel_stack
+
+Process *create_process(EntryPoint entry, const char *name)
+{
+    Process *proc = allocate_process();
+    if (proc == nullptr)
+    {
+        return nullptr; // The process table is full.
+    }
+    proc->entry = entry;
+    proc->name  = name; // kstring が容量超過分を切り捨てて null 終端する
+    
+    uint8_t *stack_top = reinterpret_cast<uint8_t*>(proc->kernel_stack)+KERNEL_STACK_SIZE;
+    // 引くことでProcessContextのメモリ領域を確保する
+    auto *context = reinterpret_cast<ProcessContext*>(stack_top - sizeof(ProcessContext));
+
+    *context = ProcessContext{
+        .rbp = 0,
+        .rbx = 0,
+        .r12=0,
+        .r13=0,
+        .r14=0,
+        .r15=0,
+        .rip=reinterpret_cast<uint64_t>(trampoline);
+    };
+
+    proc->context = context;
     proc->state = ProcessState::Runnable; // 構築完了。これでスケジューラが拾えるようになる
     return proc;
 }
