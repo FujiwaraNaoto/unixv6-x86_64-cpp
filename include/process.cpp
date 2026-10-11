@@ -500,16 +500,17 @@ int fork_kernel(Process *parent, Process *child, uint8_t *child_stack)
         child_stack[i] = parent_stack[i];
     }
 
-    // 子は sysret を使わず、リング0のまま「fork_capture を呼んだ直後」から復帰し、
-    // current_proc_ で親子を判定して 0 を返す。あとは fork の通常エピローグが
-    // コピー済みスタック上で parent_thread へ ret する。
-    // fork_capture は現在の callee-saved と復帰ポイント(=直後の★)を switch_context
-    // 形式で snap に保存し、呼び出し元(この fork)の rsp を返す。
+    // 2. 今の callee-saved と復帰点 (= 直後の★) を、switch_context が読む形式で snap に取っておく。
+    //    戻り値は fork_capture から戻った直後の rsp (= 図の caller_rsp)。
     ProcessContext snap;
     uint64_t caller_rsp = fork_capture(&snap);
 
-    // ★復帰ポイント: 親(current_proc_==parent)はここを素通り。
-    //   子は後で switch_context 経由でここへ復帰し、current_proc_==child となる。
+   　// ★ fork_capture() は setjmp と同じく 2 回戻ってくる。
+    //   1 回目: 親が普通に戻る。current_proc_ == parent なので素通りする。
+    //   2 回目: 子がスケジュールされ、switch_context の ret でここに着地する。
+    //           リング0のまま、複製したスタックの上で動いている。
+    //           yield() が先に current_proc_ = child にしているので 0 を返し、
+    //           あとは複製された fork() のフレームを通って呼び出し元へ戻っていく。
     if (current_proc_ == child)
     {
         return 0; // 子: fork() は 0 を返す
