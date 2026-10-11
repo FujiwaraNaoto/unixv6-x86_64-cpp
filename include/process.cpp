@@ -154,7 +154,6 @@ Process *allocate_process()
 }
 
 
-
 // カーネルスレッドを作る。entry は trampoline() 経由で呼ばれる。
 //
 //   高  ┌────────────────┐ ← kernel_stack + KERNEL_STACK_SIZE
@@ -174,23 +173,23 @@ Process *create_process(EntryPoint entry, const char *name)
     }
     proc->entry = entry;
     proc->name  = name; // kstring が容量超過分を切り捨てて null 終端する
-    
-    uint8_t *stack_top = reinterpret_cast<uint8_t*>(proc->kernel_stack)+KERNEL_STACK_SIZE;
+
+    uint8_t *stack_top = reinterpret_cast<uint8_t *>(proc->kernel_stack) + KERNEL_STACK_SIZE;
     // 引くことでProcessContextのメモリ領域を確保する
-    auto *context = reinterpret_cast<ProcessContext*>(stack_top - sizeof(ProcessContext));
+    auto *context = reinterpret_cast<ProcessContext *>(stack_top - sizeof(ProcessContext));
 
     *context = ProcessContext{
         .rbp = 0,
         .rbx = 0,
-        .r12=0,
-        .r13=0,
-        .r14=0,
-        .r15=0,
-        .rip=reinterpret_cast<uint64_t>(trampoline);
+        .r12 = 0,
+        .r13 = 0,
+        .r14 = 0,
+        .r15 = 0,
+        .rip = reinterpret_cast<uint64_t>(trampoline),
     };
 
     proc->context = context;
-    proc->state = ProcessState::Runnable; // 構築完了。これでスケジューラが拾えるようになる
+    proc->state   = ProcessState::Runnable; // 構築完了。これでスケジューラが拾えるようになる
     return proc;
 }
 
@@ -529,32 +528,16 @@ int fork()
     {
         return -1; // カーネル初期文脈では fork しない
     }
-    Process *child = nullptr;
-    for (size_t i = 0; i < process_table_.size(); ++i)
-    {
-        if (process_table_[i].state == ProcessState::Unused)
-        {
-            child = &process_table_[i];
-            break;
-        }
-    }
+    Process *child = allocate_process();
     if (!child)
     {
-        return -1; // process table is full
+        return -1;
     }
 
     //子供に親の情報をコピーする
-    child->pid           = next_pid_++;
-    child->state         = ProcessState::Embryo;
-    child->entry         = parent->entry;
-    child->name          = parent->name;
-    child->parent        = parent;
-    child->sleep_channel = nullptr;
-    child->trap_frame    = nullptr;
-    // 失敗経路では free_process_resources() に後始末を任せる。どこで失敗しても
-    // 「まだ確保していない資源」を解放しようとしないよう、空の状態から始める。
-    child->kernel_stack = 0;
-    child->pml4         = PhysicalAddress{};
+    child->entry  = parent->entry;
+    child->name   = parent->name;
+    child->parent = parent;
 
     // allocate a new page table for the child process
     uint8_t *child_stack = static_cast<uint8_t *>(heap_ptr_->alloc(KERNEL_STACK_SIZE));
@@ -563,16 +546,6 @@ int fork()
         free_process_resources(child); // スタック確保失敗。スロットを未使用に戻す
         return -1;
     }
-    child->kernel_stack = reinterpret_cast<uint64_t>(child_stack);
-
-    // allocate a new page table for the child process
-    child->pml4 = vmm::vmm_ptr->create_address_space();
-    if (!child->pml4)
-    {
-        free_process_resources(child); // ページテーブル確保失敗。カーネルスタックもここで解放される
-        return -1;
-    }
-
     bool is_user_thread = (parent->trap_frame != nullptr);
     if (is_user_thread)
     {

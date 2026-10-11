@@ -189,4 +189,8 @@ std::optional<ProcessId> wait(int *exit_code_out);
 // If fork fails, return -1.
 int fork();
 
+
+void free_process_resources(Process *proc);
+Process *allocate_process();
+
 } // namespace process
