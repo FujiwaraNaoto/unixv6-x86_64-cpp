@@ -1,6 +1,7 @@
 
 #include "pic.hpp"
 #include "io.hpp"
+#include "bitmask_enum.hpp"
 
 
 namespace
@@ -43,14 +44,8 @@ enum class Icw4 : uint8_t
     SpecialFullyNested = 0x10, // 多段カスケード用。2 個構成では不要
 };
 
-constexpr Icw1 operator|(Icw1 a, Icw1 b)
-{
-    return static_cast<Icw1>(static_cast<uint8_t>(a) | static_cast<uint8_t>(b));
-}
-constexpr Icw4 operator|(Icw4 a, Icw4 b)
-{
-    return static_cast<Icw4>(static_cast<uint8_t>(a) | static_cast<uint8_t>(b));
-}
+void enable_bitmask_enum(Icw1);
+void enable_bitmask_enum(Icw4);
 
 // enum の中身のバイトを取り出す (C++23 の std::to_underlying 相当)
 template <typename E>

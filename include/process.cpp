@@ -505,7 +505,7 @@ int fork_kernel(Process *parent, Process *child, uint8_t *child_stack)
     ProcessContext snap;
     uint64_t caller_rsp = fork_capture(&snap);
 
-   　// ★ fork_capture() は setjmp と同じく 2 回戻ってくる。
+    // ★ fork_capture() は setjmp と同じく 2 回戻ってくる。
     //   1 回目: 親が普通に戻る。current_proc_ == parent なので素通りする。
     //   2 回目: 子がスケジュールされ、switch_context の ret でここに着地する。
     //           リング0のまま、複製したスタックの上で動いている。

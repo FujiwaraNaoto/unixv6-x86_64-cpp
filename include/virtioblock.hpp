@@ -5,6 +5,7 @@
 #include <optional>
 #include <type_traits>
 #include "address.hpp"
+#include "bitmask_enum.hpp"
 
 /*
 Reference: https://ozlabs.org/~rusty/virtio-spec/virtio-0.9.5.pdf
@@ -46,11 +47,7 @@ enum class VRingDescriptorFlags : uint16_t
     DESC_F_WRITE = 2,
 };
 
-// フラグ同士を | で組み合わせられるようにする (呼び出し側で static_cast しなくて済む)
-constexpr VRingDescriptorFlags operator|(VRingDescriptorFlags a, VRingDescriptorFlags b)
-{
-    return static_cast<VRingDescriptorFlags>(static_cast<uint16_t>(a) | static_cast<uint16_t>(b));
-}
+void enable_bitmask_enum(VRingDescriptorFlags);
 
 // ─── virtio-blk リクエスト種別 ───────────────────────────────────
 enum class VirtIOBlockRequestType : uint32_t
