@@ -6,6 +6,7 @@
 #include "console.hpp"
 #include "address.hpp"
 #include "units.hpp"
+#include "bitmask_enum.hpp"
 
 constexpr uint64_t PAGE_SIZE = 4_KiB;
 constexpr uint64_t PAGE_MASK = ~(PAGE_SIZE - 1);
@@ -41,15 +42,13 @@ enum class PageFlag : uint64_t
     NoExecute = 1ULL << 63,
 };
 
-// フラグ同士を組み合わせる / 一部を取り出す
-constexpr PageFlag operator|(PageFlag a, PageFlag b)
-{
-    return static_cast<PageFlag>(static_cast<uint64_t>(a) | static_cast<uint64_t>(b));
-}
-constexpr PageFlag operator&(PageFlag a, PageFlag b)
-{
-    return static_cast<PageFlag>(static_cast<uint64_t>(a) & static_cast<uint64_t>(b));
-}
+void enable_bitmask_enum(PageFlag);
+
+// NOTE: この名前空間で operator| / operator& を宣言すると、名前探索がここで止まって
+//       グローバルのテンプレート演算子 (bitmask_enum.hpp) が隠れてしまう。
+//       PageFlag 同士の演算も使えるよう、明示的に持ち込む。
+using ::operator&;
+using ::operator|;
 
 // ページテーブルのエントリ (生の uint64_t) にフラグを立てる / フラグが立っているかを調べる。
 // エントリは物理アドレスとフラグが混ざった値なので、ここだけは整数との演算を許す。

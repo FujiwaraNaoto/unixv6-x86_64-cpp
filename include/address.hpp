@@ -2,6 +2,26 @@
 #define INCLUDE_ADDRESS_HPP
 #include <cstdint>
 #include <optional>
+#include "units.hpp"
+
+constexpr size_t KERNEL_STACK_SIZE = 16_KiB;
+
+// プロセスごとのカーネルスタック領域。heap から確保した KERNEL_STACK_SIZE バイト。
+// 「下端 (alloc が返した先頭)」と「上端 (rsp の出発点)」を取り違えないよう、型で区別する。
+struct KernelStack
+{
+    uint8_t *base = nullptr; // alloc が返した先頭 (一番低いアドレス)。nullptr = 未確保
+
+    uint8_t *top() const
+    {
+        return base + KERNEL_STACK_SIZE;
+    } // rsp の出発点 (上端)
+
+    explicit operator bool() const
+    {
+        return base != nullptr;
+    }
+};
 
 // 物理アドレス。
 // 仮想アドレスや普通の整数と取り違えないよう、型で区別する。

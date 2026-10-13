@@ -86,7 +86,7 @@ static void schedule(Process *prev_proc)
 
         // set TSS's RSP0 to the top of the current process's kernel stack, so that when an interrupt occurs, the
         // CPU will switch to this stack.
-        gdt::set_kernel_stack(current_proc_->kernel_stack + KERNEL_STACK_SIZE);
+        gdt::set_kernel_stack(reinterpret_cast<uint64_t>(current_proc_->kernel_stack.top()));
 
         // prev がプロセスならそのコンテキストへ、kernel_main (スケジューラ) からの
         // 呼び出しなら scheduler_context_ へ保存する。後者は Runnable が尽きたときの
@@ -132,7 +132,7 @@ Process *allocate_process()
     proc->trap_frame    = nullptr; // リング3から syscall で入ったときだけ設定される
     // 失敗したときに free_process_resources() が「まだ確保していない資源」を
     // 解放しようとしないよう、空の状態から始める。
-    proc->kernel_stack = 0;
+    proc->kernel_stack = KernelStack{};
     proc->pml4         = PhysicalAddress{};
 
     void *stack = heap_ptr_->alloc(KERNEL_STACK_SIZE);
@@ -141,7 +141,7 @@ Process *allocate_process()
         free_process_resources(proc);
         return nullptr;
     }
-    proc->kernel_stack = reinterpret_cast<uint64_t>(stack);
+    proc->kernel_stack = KernelStack{static_cast<uint8_t *>(stack)};
 
     proc->pml4 = vmm::vmm_ptr->create_address_space();
     if (!proc->pml4)
@@ -156,13 +156,13 @@ Process *allocate_process()
 
 // カーネルスレッドを作る。entry は trampoline() 経由で呼ばれる。
 //
-//   高  ┌────────────────┐ ← kernel_stack + KERNEL_STACK_SIZE
+//   高  ┌────────────────┐ ← kernel_stack.top()
 //       │ ProcessContext │   rbp..r15 = 0, rip = trampoline
 //       ├────────────────┤ ← proc->context   switch_context: 6 pop + ret → trampoline
 //       │                │
 //       │ (空き)          │   trampoline 以降はここをスタックとして使う
 //       │                │
-//   低  └────────────────┘ ← kernel_stack
+//   低  └────────────────┘ ← kernel_stack.base
 
 Process *create_process(EntryPoint entry, const char *name)
 {
@@ -174,8 +174,8 @@ Process *create_process(EntryPoint entry, const char *name)
     proc->entry = entry;
     proc->name  = name; // kstring が容量超過分を切り捨てて null 終端する
 
-    uint8_t *stack_top = reinterpret_cast<uint8_t *>(proc->kernel_stack) + KERNEL_STACK_SIZE;
-    // 引くことでProcessContextのメモリ領域を確保する
+    uint8_t *stack_top = proc->kernel_stack.top();
+    // スタックはアドレスの小さい方に成長していく。アセンブリでローカル変数確保の容量で引くことでProcessContextのメモリ領域を確保する
     auto *context = reinterpret_cast<ProcessContext *>(stack_top - sizeof(ProcessContext));
 
     *context = ProcessContext{
@@ -268,7 +268,7 @@ static void schedule_from_zombie(ProcessContext **discard_context)
         {
             vmm::vmm_ptr->switch_address_space(current_proc_->pml4);
         }
-        gdt::set_kernel_stack(current_proc_->kernel_stack + KERNEL_STACK_SIZE);
+        gdt::set_kernel_stack(reinterpret_cast<uint64_t>(current_proc_->kernel_stack.top()));
         switch_context(discard_context, current_proc_->context);
         return;
     }
@@ -322,8 +322,8 @@ void free_process_resources(Process *proc)
 {
     if (proc->kernel_stack)
     {
-        process::heap_ptr_->free(reinterpret_cast<void *>(proc->kernel_stack));
-        proc->kernel_stack = 0;
+        process::heap_ptr_->free(proc->kernel_stack.base);
+        proc->kernel_stack = KernelStack{};
     }
 
     if (proc->pml4)
@@ -387,27 +387,31 @@ std::optional<ProcessId> wait(int *exit_code_out)
 
 namespace
 {
-/*
-ring3のプロセスがfork()を読んだ時に子が親と同じ場所から戻り値0でユーザモードに戻れる状態を
-作りスケジューラに渡す関数
 
-child_stack + KERNEL_STACK_SIZE  ← 上端 (syscall_kernel_rsp もここ)
-┌──────────────────────┐
-│ TrapFrame (親のコピー) │ ← child->trap_frame   rax = 0
-│   rip, user rsp, ... │
-├──────────────────────┤
-│ ProcessContext       │ ← child->context
-│   r15..rbp = 0       │
-│   rip = fork_return  │
-├──────────────────────┤
-│                      │
-│   (空き: 以後のカーネル │
-│    スタックとして使う)  │
-│                      │
-└──────────────────────┘
-child_stack                       ← 下端 (アドレスが低い)
 
-*/
+// ring3のプロセスがfork()を読んだ時に子が親と同じ場所から戻り値0でユーザモードに戻れる状態を
+// 作りスケジューラに渡す関数
+
+// child_stack + KERNEL_STACK_SIZE  ← 上端 (syscall_kernel_rsp もここ)
+// ┌──────────────────────┐
+// │ TrapFrame (親のコピー) │ ← child->trap_frame   rax = 0
+// │   rip, user rsp, ... │
+// ├──────────────────────┤
+// │ ProcessContext       │ ← child->context
+// │   r15..rbp = 0       │
+// │   rip = fork_return  │
+// ├──────────────────────┤
+// │                      │
+// │   (空き: 以後のカーネル │
+// │    スタックとして使う)  │
+// │                      │
+// └──────────────────────┘
+// child_stack                       ← 下端 (アドレスが低い)
+
+
+
+//カーネル側(上半分)は親と共有する．ユーザ側(下半分)は親のページを複製(同じ仮想アドレス，別の物理ページ)
+// リング3のプロセスから呼ばれたfork
 int fork_user(Process *parent, Process *child, uint8_t *child_stack)
 {
     if (!vmm::vmm_ptr->copy_user_pages(parent->pml4, child->pml4))
@@ -455,32 +459,36 @@ int fork_user(Process *parent, Process *child, uint8_t *child_stack)
     return static_cast<int>(child->pid); // return the child's pid to the parent process
 }
 
-
+// カーネルスレッドから呼ばれたfork().
 // カーネルスレッドの fork。親のカーネルスタックを丸ごと複製し、子はリング0のまま
 // fork_capture() の直後(★)から再開する。リング3のユーザスタックはコピーしない。
+// 箱は各関数のスタックフレーム (戻りアドレス・保存レジスタ・ローカル変数)。
+// 関数のコード自体は親子で共有している。
 //
-//          親のカーネルスタック                   子のカーネルスタック
-//   高  ┌───────────────────┐               ┌───────────────────┐
-//       │ parent_thread ... │               │ parent_thread ... │
-//       ├───────────────────┤               ├───────────────────┤
-//       │ fork()            │   ── 複製 ──→  │ fork()            │
-//       ├───────────────────┤               ├───────────────────┤
-//       │ fork_kernel()     │               │ fork_kernel()     │
-//       ├───────────────────┤ ← caller_rsp  ├───────────────────┤ ← to_child(caller_rsp)
-//       │                   │               │ ProcessContext    │    ★に着地したときの rsp
-//       │                   │               │  rbp..r15 = snap  │
-//       │                   │               │  rip = ★          │
-//       │ (空き)             │               ├───────────────────┤ ← child->context
-//       │                   │               │ (空き)             │
-//   低  └───────────────────┘               └───────────────────┘
-//       parent->kernel_stack                  child_stack
+//          親のカーネルスタック                     子のカーネルスタック
+//   高  ┌───────────────────────┐             ┌───────────────────────┐
+//       │ parent_thread のフレーム│             │parent_thread のフレーム│ (複製)
+//       ├───────────────────────┤             ├───────────────────────┤
+//       │ fork() のフレーム       │  ── 複製 ─→  │fork() のフレーム       │ (複製)
+//       ├───────────────────────┤             ├───────────────────────┤
+//       │ fork_kernel() のフレーム│             │fork_kernel() のフレーム│ (複製)
+//       ├───────────────────────┤ ← caller_rsp├───────────────────────┤ ← to_child(caller_rsp)
+//       │                       │             │ ProcessContext        │    ★に着地したときの rsp
+//       │                       │             │  rbp..r15 = snap      │ (親が後から書く)
+//       │                       │             │  rip = ★              │
+//       │ (空き)                 │             ├───────────────────────┤ ← child->context
+//       │                       │              |(空き)                 │
+//   低  └───────────────────────┘              └───────────────────────┘
+//       parent->kernel_stack.base             child_stack
 
+// カーネル側(上半分)は親と共有(同じ表)．ユーザ側(下半分)は空のまま
 // カーネルスレッドの fork で、リング3のユーザスタックはコピーしない
 int fork_kernel(Process *parent, Process *child, uint8_t *child_stack)
 {
-    uint8_t *parent_stack = reinterpret_cast<uint8_t *>(parent->kernel_stack);
+    uint8_t *parent_stack = parent->kernel_stack.base;
 
     // 親のスタック上のアドレスを、子のスタック上の同じ相対位置に写す
+    // 子のスタックは仮想アドレスが親と違うため補正が必要
     auto to_child = [&](uint64_t parent_addr)
     { return parent_addr - reinterpret_cast<uint64_t>(parent_stack) + reinterpret_cast<uint64_t>(child_stack); };
 
@@ -492,16 +500,17 @@ int fork_kernel(Process *parent, Process *child, uint8_t *child_stack)
         child_stack[i] = parent_stack[i];
     }
 
-    // 子は sysret を使わず、リング0のまま「fork_capture を呼んだ直後」から復帰し、
-    // current_proc_ で親子を判定して 0 を返す。あとは fork の通常エピローグが
-    // コピー済みスタック上で parent_thread へ ret する。
-    // fork_capture は現在の callee-saved と復帰ポイント(=直後の★)を switch_context
-    // 形式で snap に保存し、呼び出し元(この fork)の rsp を返す。
+    // 2. 今の callee-saved と復帰点 (= 直後の★) を、switch_context が読む形式で snap に取っておく。
+    //    戻り値は fork_capture から戻った直後の rsp (= 図の caller_rsp)。
     ProcessContext snap;
     uint64_t caller_rsp = fork_capture(&snap);
 
-    // ★復帰ポイント: 親(current_proc_==parent)はここを素通り。
-    //   子は後で switch_context 経由でここへ復帰し、current_proc_==child となる。
+    // ★ fork_capture() は setjmp と同じく 2 回戻ってくる。
+    //   1 回目: 親が普通に戻る。current_proc_ == parent なので素通りする。
+    //   2 回目: 子がスケジュールされ、switch_context の ret でここに着地する。
+    //           リング0のまま、複製したスタックの上で動いている。
+    //           yield() が先に current_proc_ = child にしているので 0 を返し、
+    //           あとは複製された fork() のフレームを通って呼び出し元へ戻っていく。
     if (current_proc_ == child)
     {
         return 0; // 子: fork() は 0 を返す
@@ -540,7 +549,7 @@ int fork()
     child->parent = parent;
 
     // カーネルスタックは allocate_process() が確保済み。
-    auto *child_stack = reinterpret_cast<uint8_t *>(child->kernel_stack);
+    auto *child_stack = child->kernel_stack.base;
 
     bool is_user_thread = (parent->trap_frame != nullptr);
     if (is_user_thread)
