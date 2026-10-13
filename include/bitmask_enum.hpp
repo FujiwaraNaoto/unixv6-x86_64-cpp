@@ -1,6 +1,7 @@
 #ifndef BITMASK_ENUM_HPP
 #define BITMASK_ENUM_HPP
 #include <type_traits>
+#include "enum_util.hpp"
 
 // ビットフラグを表す enum class に、| と & を一度だけ定義するための仕組み。
 //
@@ -22,7 +23,7 @@
 // をうっかり | で混ぜるとコンパイルエラーになる。
 
 template <typename E>
-concept BitmaskEnum = std::is_enum_v<E> && requires(E e) { enable_bitmask_enum(e); };
+concept BitmaskEnum = ScopedEnum<E> && requires(E e) { enable_bitmask_enum(e); };
 
 template <BitmaskEnum E>
 constexpr E operator|(E a, E b)

@@ -1,5 +1,6 @@
 
 #include <cstdint>
+#include <concepts>
 #include "vmm.hpp"
 #include <cstring>
 
@@ -54,7 +55,17 @@ extern "C" uint64_t read_cr3();
 extern "C" void asm_flush_tlb();
 
 
-template <typename Visitor>
+// for_each_user_page に渡す visitor の要件。
+// 仮想アドレスとページテーブルエントリ (参照) を受け取り、続けるなら true、
+// 打ち切るなら false を返す。
+//
+// 要件を満たさない visitor は、for_each_user_page の中ではなく「渡した行」で弾かれる。
+template <typename V>
+concept UserPageVisitor = requires(V v, PageVirtualAddress virtual_address, uint64_t &entry) {
+    { v(virtual_address, entry) } -> std::same_as<bool>;
+};
+
+template <UserPageVisitor Visitor>
 bool for_each_user_page(PhysicalAddress pml4_phys, Visitor visitor)
 {
     VirtualAddress pml4 = physical_to_virtual(pml4_phys);

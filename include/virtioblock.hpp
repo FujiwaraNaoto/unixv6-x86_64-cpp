@@ -6,6 +6,7 @@
 #include <type_traits>
 #include "address.hpp"
 #include "bitmask_enum.hpp"
+#include "enum_util.hpp"
 
 /*
 Reference: https://ozlabs.org/~rusty/virtio-spec/virtio-0.9.5.pdf
@@ -64,14 +65,6 @@ enum class VirtIOBlockStatus : uint8_t
     UNSUPP  = 2,    // VIRTIO_BLK_S_UNSUPP
     PENDING = 0xFF, // 仕様外。ドライバが「未完了」の印として先に書いておく値
 };
-
-// enum class の中身の整数を取り出す (C++23 の std::to_underlying 相当)。
-// レジスタに書くときなど、生の値が必要な箇所で static_cast を並べずに済む。
-template <typename E>
-constexpr std::underlying_type_t<E> to_underlying(E e)
-{
-    return static_cast<std::underlying_type_t<E>>(e);
-}
 
 struct [[gnu::packed]] VRingDescriptor
 {
