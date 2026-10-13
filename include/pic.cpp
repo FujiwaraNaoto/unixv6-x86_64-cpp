@@ -1,6 +1,8 @@
 
 #include "pic.hpp"
 #include "io.hpp"
+#include "bitmask_enum.hpp"
+#include "enum_util.hpp"
 
 
 namespace
@@ -43,21 +45,8 @@ enum class Icw4 : uint8_t
     SpecialFullyNested = 0x10, // 多段カスケード用。2 個構成では不要
 };
 
-constexpr Icw1 operator|(Icw1 a, Icw1 b)
-{
-    return static_cast<Icw1>(static_cast<uint8_t>(a) | static_cast<uint8_t>(b));
-}
-constexpr Icw4 operator|(Icw4 a, Icw4 b)
-{
-    return static_cast<Icw4>(static_cast<uint8_t>(a) | static_cast<uint8_t>(b));
-}
-
-// enum の中身のバイトを取り出す (C++23 の std::to_underlying 相当)
-template <typename E>
-constexpr uint8_t to_byte(E value)
-{
-    return static_cast<uint8_t>(value);
-}
+void enable_bitmask_enum(Icw1);
+void enable_bitmask_enum(Icw4);
 
 // ICW3: カスケードの結線を伝える。マスタとスレーブで値の意味が違う。
 //   マスタ  : スレーブが繋がっている IRQ 線のビットマスク
@@ -123,10 +112,10 @@ struct PitCommand
     }
 };
 
-static_assert(to_byte(Icw1::Initialize | Icw1::Icw4Needed) == 0x11, "ICW1");
+static_assert(to_underlying(Icw1::Initialize | Icw1::Icw4Needed) == 0x11, "ICW1");
 static_assert(MASTER_CASCADE_MASK == 0x04, "ICW3 (master)");
 static_assert(SLAVE_CASCADE_ID == 0x02, "ICW3 (slave)");
-static_assert(to_byte(Icw4::Mode8086) == 0x01, "ICW4");
+static_assert(to_underlying(Icw4::Mode8086) == 0x01, "ICW4");
 static_assert(static_cast<uint8_t>(PitCommand{.channel        = PitChannel::Channel0,
                                               .access         = PitAccess::LowThenHighByte,
                                               .mode           = PitMode::SquareWave,

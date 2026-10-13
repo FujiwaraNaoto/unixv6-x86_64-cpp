@@ -47,6 +47,7 @@ CFLAGS   = -m64 -std=c++20 -g \
            -fno-exceptions -fno-rtti \
            -nostdlib -nostdinc \
            -Wall -Wextra -O2 \
+           -Werror=return-type -Werror=uninitialized \
 		   -mcmodel=kernel	\
            -fno-pic -fno-pie \
            -mno-red-zone -mno-mmx -mno-sse -mno-sse2 \
