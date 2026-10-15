@@ -57,8 +57,8 @@ static_assert(offsetof(ProcessContext, rip) == 48, "ret target in switch.asm");
 // 構造体のメンバは先に書いたものほどアドレスが低い方に置かれる
 struct [[gnu::packed]] UserForkFrame
 {
-    ProcessContext context;
-    TrapFrame trap_frame;
+    ProcessContext context; // low addres
+    TrapFrame trap_frame;   // high address
 };
 
 // switch_context が context を pop し終えたとき、rsp がちょうど trap_frame を指すこと

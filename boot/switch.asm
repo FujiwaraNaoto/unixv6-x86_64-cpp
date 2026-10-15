@@ -22,7 +22,7 @@ switch_context:
     ; 現在の rsp を *old に保存 (old は Context** なので2段階)
     mov [rdi], rsp
 
-    ; 次のプロセスの rsp に切り替え
+    ; 次のプロセスの rsp(=&context) に切り替え
     mov rsp, rsi
 
     ; 次のプロセスのレジスタを復元
@@ -31,8 +31,10 @@ switch_context:
     pop r12
     pop r13
     pop r14
-    pop r15
+    pop r15 ; rsp+48
 
+    ; retで ripフィールド(=fork_return)をpopしそこへジャンプ
     ; スタックに積まれている戻りアドレスへ ret
     ; (新規プロセスの場合は trampoline へ飛ぶよう仕込んである)
     ret
+    ; ret終了時点で rsp=+56 = &trap_frame
