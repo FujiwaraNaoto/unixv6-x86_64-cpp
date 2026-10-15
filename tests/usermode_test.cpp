@@ -59,12 +59,17 @@ namespace
         .att_syntax prefix
     )"
                  :
-                 : [out] "r"(after), [buf] "r"(check), [in_rbx] "i"(kRbx), [in_r12] "i"(kR12),
-                   [in_r13] "i"(kR13), [in_r14] "i"(kR14), [in_r15] "i"(kR15)
+                 : [out] "r"(after),
+                   [buf] "r"(check),
+                   [in_rbx] "i"(kRbx),
+                   [in_r12] "i"(kR12),
+                   [in_r13] "i"(kR13),
+                   [in_r14] "i"(kR14),
+                   [in_r15] "i"(kR15)
                  : "rax", "rbx", "rcx", "rdx", "rsi", "rdi", "r11", "r12", "r13", "r14", "r15", "memory");
 
-    const bool regs_kept =
-        after[0] == kRbx && after[1] == kR12 && after[2] == kR13 && after[3] == kR14 && after[4] == kR15;
+    const bool regs_kept = after[0] == kRbx && after[1] == kR12 && after[2] == kR13 && after[3] == kR14 &&
+                           after[4] == kR15;
 
     const char ok[]    = "REG-OK\n";
     const char ng[]    = "REG-NG\n";

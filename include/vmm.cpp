@@ -61,8 +61,11 @@ extern "C" void asm_flush_tlb();
 //
 // 要件を満たさない visitor は、for_each_user_page の中ではなく「渡した行」で弾かれる。
 template <typename V>
-concept UserPageVisitor = requires(V v, PageVirtualAddress virtual_address, uint64_t &entry) {
-    { v(virtual_address, entry) } -> std::same_as<bool>;
+concept UserPageVisitor = requires(V v, PageVirtualAddress virtual_address, uint64_t &entry)
+{
+    {
+        v(virtual_address, entry)
+        } -> std::same_as<bool>;
 };
 
 template <UserPageVisitor Visitor>
