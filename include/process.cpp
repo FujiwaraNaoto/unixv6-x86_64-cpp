@@ -81,9 +81,10 @@ static void schedule(Process *prev_proc)
 
         if (current_proc_->pml4)
         {
-            vmm::vmm_ptr->switch_address_space(current_proc_->pml4);
+            vmm::vmm_ptr->switch_address_space(current_proc_->pml4); // step1: CR3を子の空間へ
         }
 
+        // step2: TSS.rsp0と syscall_kernel_rsp
         // set TSS's RSP0 to the top of the current process's kernel stack, so that when an interrupt occurs, the
         // CPU will switch to this stack.
         gdt::set_kernel_stack(reinterpret_cast<uint64_t>(current_proc_->kernel_stack.top()));
@@ -94,6 +95,7 @@ static void schedule(Process *prev_proc)
         ProcessContext **old_ctx = prev_proc ? &prev_proc->context
                                              : reinterpret_cast<ProcessContext **>(&scheduler_context_);
 
+        // step2: rspを子のフレームへ
         switch_context(old_ctx, current_proc_->context);
         return;
     }
@@ -409,11 +411,11 @@ namespace
 // child_stack                       ← 下端 (アドレスが低い)
 
 
-
 //カーネル側(上半分)は親と共有する．ユーザ側(下半分)は親のページを複製(同じ仮想アドレス，別の物理ページ)
 // リング3のプロセスから呼ばれたfork
 int fork_user(Process *parent, Process *child, uint8_t *child_stack)
 {
+    // ユーザページの複製
     if (!vmm::vmm_ptr->copy_user_pages(parent->pml4, child->pml4))
     {
         // copy_user_pages() は複製済みのユーザーページを自分で解放してから戻る。
@@ -436,9 +438,10 @@ int fork_user(Process *parent, Process *child, uint8_t *child_stack)
     uint8_t *stack_top = child_stack + KERNEL_STACK_SIZE;
     // sizeof(UserForkFrame)することでUserForkFrame分を確保する. ローカル変数確保でsubする理由と同じ
     auto *frame           = reinterpret_cast<UserForkFrame *>(stack_top - sizeof(UserForkFrame));
-    frame->trap_frame     = *parent->trap_frame;
-    frame->trap_frame.rax = 0; // child returns 0 from fork()
+    frame->trap_frame     = *parent->trap_frame; // copy parent's frame
+    frame->trap_frame.rax = 0;                   // child returns 0 from fork()
 
+    //スケジューラ(switch_context)がretで飛ぶ先(rip)を指定する
     frame->context = ProcessContext{
         .rbp = 0,
         .rbx = 0,

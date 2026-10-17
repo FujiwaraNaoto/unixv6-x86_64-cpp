@@ -23,7 +23,10 @@
 // をうっかり | で混ぜるとコンパイルエラーになる。
 
 template <typename E>
-concept BitmaskEnum = ScopedEnum<E> && requires(E e) { enable_bitmask_enum(e); };
+concept BitmaskEnum = ScopedEnum<E> && requires(E e)
+{
+    enable_bitmask_enum(e);
+};
 
 template <BitmaskEnum E>
 constexpr E operator|(E a, E b)

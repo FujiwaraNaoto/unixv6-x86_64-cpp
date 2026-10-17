@@ -71,7 +71,7 @@ syscall_return_path:
     pop r8
     pop rbp
     pop rbx
-    pop rax     ; return address (ユーザーのRIP, sysretで復帰)
+    pop rax     ; return address
     pop rcx     ; ユーザーのRIP(sysretがRCX->RIPにする)
     pop rdx
     pop rsi

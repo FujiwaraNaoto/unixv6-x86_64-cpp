@@ -22,34 +22,58 @@ namespace
 {
     const char msg[] = "Hello from ring 3!\n";
     user_syscall(SyscallNo::kWrite, 1 /* stdout */, reinterpret_cast<long>(msg) /* buf */, 19 /* len */);
-    // syscall をまたいでレジスタが保たれるかを確かめる。
-    // 入口がカーネルスタックへ移り、TrapFrame に積んで戻せていないと、ここで崩れる。
-    // (callee-saved の rbx/r12-r15 は、カーネル側が壊しても誰も戻してくれない)
+    // syscall をまたいで callee-saved レジスタ (rbx / r12-r15) が保たれるかを確かめる。
+    // 入口がカーネルスタックへ移り、TrapFrame に積んで戻せていないとここで崩れる。
+    //
+    // アセンブリは「決まった値を入れる → syscall → 結果をメモリへ書き出す」だけを行い、
+    // 値の比較は下の C++ でやる。1 つの asm 文に収めているのは、文を分けると syscall の
+    // 前後でコンパイラがこれらのレジスタを自由に使ってしまうため。
+    constexpr uint64_t kRbx = 0x1111111111111111;
+    constexpr uint64_t kR12 = 0x2222222222222222;
+    constexpr uint64_t kR13 = 0x3333333333333333;
+    constexpr uint64_t kR14 = 0x4444444444444444;
+    constexpr uint64_t kR15 = 0x5555555555555555;
+
     const char check[] = "regs\n";
-    uint64_t mismatch  = 0;
-    asm volatile("mov $0x1111111111111111, %%rbx\n"
-                 "mov $0x2222222222222222, %%r12\n"
-                 "mov $0x3333333333333333, %%r13\n"
-                 "mov $0x4444444444444444, %%r14\n"
-                 "mov $0x5555555555555555, %%r15\n"
-                 "mov $1, %%rax\n" // write (中身はどうでもよいので短く)
-                 "mov $1, %%rdi\n"
-                 "mov %1, %%rsi\n"
-                 "mov $5, %%rdx\n"
-                 "syscall\n"
-                 "xor %0, %0\n"
-                 "mov $0x1111111111111111, %%rcx\n cmp %%rcx, %%rbx\n je 1f\n or $1,  %0\n1:\n"
-                 "mov $0x2222222222222222, %%rcx\n cmp %%rcx, %%r12\n je 2f\n or $2,  %0\n2:\n"
-                 "mov $0x3333333333333333, %%rcx\n cmp %%rcx, %%r13\n je 3f\n or $4,  %0\n3:\n"
-                 "mov $0x4444444444444444, %%rcx\n cmp %%rcx, %%r14\n je 4f\n or $8,  %0\n4:\n"
-                 "mov $0x5555555555555555, %%rcx\n cmp %%rcx, %%r15\n je 5f\n or $16, %0\n5:\n"
-                 : "=&r"(mismatch)
-                 : "r"(check)
+    uint64_t after[5]  = {}; // syscall から戻った直後の rbx, r12, r13, r14, r15
+
+    asm volatile(R"(
+        .intel_syntax noprefix
+        mov rbx, %p[in_rbx]
+        mov r12, %p[in_r12]
+        mov r13, %p[in_r13]
+        mov r14, %p[in_r14]
+        mov r15, %p[in_r15]
+
+        mov rax, 1              # write (中身はどうでもよいので短く)
+        mov rdi, 1              # stdout
+        mov rsi, %[buf]
+        mov rdx, 5
+        syscall
+
+        mov [%[out] + 0x00], rbx
+        mov [%[out] + 0x08], r12
+        mov [%[out] + 0x10], r13
+        mov [%[out] + 0x18], r14
+        mov [%[out] + 0x20], r15
+        .att_syntax prefix
+    )"
+                 :
+                 : [out] "r"(after),
+                   [buf] "r"(check),
+                   [in_rbx] "i"(kRbx),
+                   [in_r12] "i"(kR12),
+                   [in_r13] "i"(kR13),
+                   [in_r14] "i"(kR14),
+                   [in_r15] "i"(kR15)
                  : "rax", "rbx", "rcx", "rdx", "rsi", "rdi", "r11", "r12", "r13", "r14", "r15", "memory");
+
+    const bool regs_kept = after[0] == kRbx && after[1] == kR12 && after[2] == kR13 && after[3] == kR14 &&
+                           after[4] == kR15;
 
     const char ok[]    = "REG-OK\n";
     const char ng[]    = "REG-NG\n";
-    const char *result = (mismatch == 0) ? ok : ng;
+    const char *result = regs_kept ? ok : ng;
     user_syscall(SyscallNo::kWrite, 1, reinterpret_cast<long>(result), 7);
     user_syscall(SyscallNo::kExit, 0, 0, 0);
 
@@ -78,12 +102,14 @@ namespace
 //   // カーネルから syscall 命令を直接テストしようとした場合 (動かない):
 //   const char msg[] = "Hello from syscall!\n";
 //   uint64_t ret;
-//   asm volatile("mov $1, %%rax\n" // RAX = 1 (write)
-//                "mov $1, %%rdi\n" // RDI = 1 (stdout)
-//                "mov %1, %%rsi\n" // RSI = buf
-//                "mov %2, %%rdx\n" // RDX = len
+//   asm volatile(".intel_syntax noprefix\n"
+//                "mov rax, 1\n"  // RAX = 1 (write)
+//                "mov rdi, 1\n"  // RDI = 1 (stdout)
+//                "mov rsi, %1\n" // RSI = buf
+//                "mov rdx, %2\n" // RDX = len
 //                "syscall\n"
-//                "mov %%rax, %0\n" // 戻り値
+//                "mov %0, rax\n" // 戻り値
+//                ".att_syntax prefix\n"
 //                : "=r"(ret)
 //                : "r"(msg), "r"((uint64_t)(sizeof(msg) - 1))
 //                : "rax", "rdi", "rsi", "rdx", "rcx", "r11", "memory");
