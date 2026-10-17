@@ -38,23 +38,25 @@ namespace
     uint64_t after[5]  = {}; // syscall から戻った直後の rbx, r12, r13, r14, r15
 
     asm volatile(R"(
-        mov %[in_rbx], %%rbx
-        mov %[in_r12], %%r12
-        mov %[in_r13], %%r13
-        mov %[in_r14], %%r14
-        mov %[in_r15], %%r15
+        .intel_syntax noprefix
+        mov rbx, %p[in_rbx]
+        mov r12, %p[in_r12]
+        mov r13, %p[in_r13]
+        mov r14, %p[in_r14]
+        mov r15, %p[in_r15]
 
-        mov  $1, %%rax          # write (中身はどうでもよいので短く)
-        mov  $1, %%rdi          # stdout
-        mov  %[buf], %%rsi
-        mov  $5, %%rdx
+        mov rax, 1              # write (中身はどうでもよいので短く)
+        mov rdi, 1              # stdout
+        mov rsi, %[buf]
+        mov rdx, 5
         syscall
 
-        mov %%rbx, 0x00(%[out])
-        mov %%r12, 0x08(%[out])
-        mov %%r13, 0x10(%[out])
-        mov %%r14, 0x18(%[out])
-        mov %%r15, 0x20(%[out])
+        mov [%[out] + 0x00], rbx
+        mov [%[out] + 0x08], r12
+        mov [%[out] + 0x10], r13
+        mov [%[out] + 0x18], r14
+        mov [%[out] + 0x20], r15
+        .att_syntax prefix
     )"
                  :
                  : [out] "r"(after), [buf] "r"(check), [in_rbx] "i"(kRbx), [in_r12] "i"(kR12),
@@ -95,12 +97,14 @@ namespace
 //   // カーネルから syscall 命令を直接テストしようとした場合 (動かない):
 //   const char msg[] = "Hello from syscall!\n";
 //   uint64_t ret;
-//   asm volatile("mov $1, %%rax\n" // RAX = 1 (write)
-//                "mov $1, %%rdi\n" // RDI = 1 (stdout)
-//                "mov %1, %%rsi\n" // RSI = buf
-//                "mov %2, %%rdx\n" // RDX = len
+//   asm volatile(".intel_syntax noprefix\n"
+//                "mov rax, 1\n"  // RAX = 1 (write)
+//                "mov rdi, 1\n"  // RDI = 1 (stdout)
+//                "mov rsi, %1\n" // RSI = buf
+//                "mov rdx, %2\n" // RDX = len
 //                "syscall\n"
-//                "mov %%rax, %0\n" // 戻り値
+//                "mov %0, rax\n" // 戻り値
+//                ".att_syntax prefix\n"
 //                : "=r"(ret)
 //                : "r"(msg), "r"((uint64_t)(sizeof(msg) - 1))
 //                : "rax", "rdi", "rsi", "rdx", "rcx", "r11", "memory");
