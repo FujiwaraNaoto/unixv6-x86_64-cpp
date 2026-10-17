@@ -415,6 +415,7 @@ namespace
 // リング3のプロセスから呼ばれたfork
 int fork_user(Process *parent, Process *child, uint8_t *child_stack)
 {
+    // ユーザページの複製
     if (!vmm::vmm_ptr->copy_user_pages(parent->pml4, child->pml4))
     {
         // copy_user_pages() は複製済みのユーザーページを自分で解放してから戻る。
@@ -440,6 +441,7 @@ int fork_user(Process *parent, Process *child, uint8_t *child_stack)
     frame->trap_frame     = *parent->trap_frame; // copy parent's frame
     frame->trap_frame.rax = 0;                   // child returns 0 from fork()
 
+    //スケジューラ(switch_context)がretで飛ぶ先(rip)を指定する
     frame->context = ProcessContext{
         .rbp = 0,
         .rbx = 0,
