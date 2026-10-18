@@ -65,6 +65,8 @@ bool mark_block_used(uint32_t blockno)
     block.data()[byte_index] |= bit_mask;
     return block.write_back();
 }
+
+// TODO: write_disk_inode()に命名を変更
 bool write_inode(uint32_t inum, const DiskInode &inode)
 {
     auto block = fs.block_store->acquire(inode_block(inum));
@@ -75,6 +77,7 @@ bool write_inode(uint32_t inum, const DiskInode &inode)
     return block.write_back();
 }
 
+// TODO: get_disk_inode()に命名変更
 std::optional<DiskInode> read_inode(uint32_t inum)
 {
     auto block = fs.block_store->acquire(inode_block(inum));
