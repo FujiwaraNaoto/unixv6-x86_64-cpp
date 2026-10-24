@@ -207,3 +207,46 @@ jobs:
             serial.log
             qemu-int.log
           retention-days: 7
+
+  format:
+    name: format (clang-format 14)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      # ランナー既定の clang-format は 18 系で、.clang-format が前提にしている
+      # 14 系とは整形結果が違う (この設定ファイル自体 14 で使えない項目を外してある)。
+      # ローカル (Ubuntu 22.04 の 14.0.0) と揃えるため、pip の wheel で固定する。
+      # Ubuntu 24.04 は PEP 668 で system 全体への pip install を拒むので venv に入れる。
+      - name: clang-format 14 を入れる
+        run: |
+          python3 -m venv .cfvenv
+          ./.cfvenv/bin/pip install --quiet clang-format==14.0.6
+          ./.cfvenv/bin/clang-format --version
+
+      # make format は find . なので build/ や未追跡ファイルまで拾う。
+      # CI では git 管理下のソースだけを対象にする (対象の拡張子は make format と同じ)。
+      - name: 整形差分が無いか
+        run: |
+          mapfile -d '' files < <(git ls-files -z -- '*.c' '*.cpp' '*.h' '*.hpp')
+          echo "対象 ${#files[@]} ファイル"
+          if ./.cfvenv/bin/clang-format --dry-run -Werror "${files[@]}"; then
+            echo "整形済み"
+            exit 0
+          fi
+          # 直し方が分かるように、実際に整形した差分を出して artifact にも残す。
+          ./.cfvenv/bin/clang-format -i "${files[@]}"
+          git diff > clang-format.diff
+          echo '----- 必要な整形差分 (git apply clang-format.diff で当てられる) -----'
+          cat clang-format.diff
+          echo "::error::clang-format の整形差分がある (make format を実行して commit してください)"
+          exit 1
+
+      - name: 整形差分を残す
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: clang-format-diff
+          path: clang-format.diff
+          retention-days: 7
+          if-no-files-found: ignore
