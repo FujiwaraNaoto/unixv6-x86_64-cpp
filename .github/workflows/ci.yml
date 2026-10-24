@@ -30,15 +30,18 @@ jobs:
 
       # grub-mkrescue は grub-common、BIOS 用モジュールは grub-pc-bin、
       # ISO 作成に xorriso と mtools が必要。
+      # コンパイラは Makefile が CC = g++-13 で固定しているので、ランナー既定の
+      # g++ ではなくバージョン付きの g++-13 を入れる。こうしておけば、ランナー
+      # イメージの既定が将来 14 に変わっても CI と手元のビルドが食い違わない。
       - name: Install toolchain
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            g++ binutils nasm grub-common grub-pc-bin xorriso mtools
+            g++-13 binutils nasm grub-common grub-pc-bin xorriso mtools
 
       - name: Show tool versions
         run: |
-          g++ --version | head -1
+          g++-13 --version | head -1
           nasm -v
           grub-mkrescue --version
 
