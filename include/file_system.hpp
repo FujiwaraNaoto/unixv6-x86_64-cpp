@@ -127,25 +127,16 @@ inline NullBlockStore *null_block_store = nullptr;
 namespace FileSystem
 {
 
-// ファイルシステムの初期化を担うクラス。
-// コンストラクタが「スーパーブロックを読み、未フォーマットならフォーマットする」
-// 処理を行う。状態は fs.cpp のモジュール内 static が持ち、
-// superblock() / balloc() などはフリー関数としてそれを操作する
-// (BufferCache::Manager と同じ形)。
-class Manager final
-{
-  public:
-    explicit Manager(uint32_t total_blocks, IBlockStore *block_store = nullptr, IConsole *console = nullptr);
-    // 初期化に成功したか。
-    // フォーマット済みだった場合も、新規にフォーマットした場合も true。
-    bool valid() const
-    {
-        return valid_;
-    }
-
-  private:
-    bool valid_ = false;
-};
+// ファイルシステムの初期化 (スーパーブロックを読み、未フォーマットならフォーマットする)。
+// 状態は file_system.cpp のモジュール内 static が持ち、superblock() / balloc() などは
+// フリー関数としてそれを操作する (buffer_cache.cpp と同じ形)。
+//
+// block_store は差し替えの境目。nullptr なら null_block_store (何もしない実装) になる。
+// テストでは偽の IBlockStore を渡せば、BufferCache 無しでファイルシステムを動かせる。
+//
+// 戻り値は初期化に成功したか。フォーマット済みだった場合も、新規にフォーマットした
+// 場合も true。
+[[nodiscard]] bool initialize(uint32_t total_blocks, IBlockStore *block_store = nullptr, IConsole *console = nullptr);
 
 const SuperBlock &superblock();
 

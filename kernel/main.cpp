@@ -141,19 +141,25 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, uint32_t mb_addr
         .write_block = &VirtIOBlock::write_block,
     };
 
-    BufferCache::Manager buffer_cache(device);
-    if (not buffer_cache.valid())
+    if (not BufferCache::initialize(device))
     {
         vga::vga->puts("BufferCache initialization failed\n");
         asm volatile("hlt");
     }
-    // block_store を渡さずに Manager を作ったときの既定値。
+    // block_store を渡さずに FileSystem::initialize() を呼んだときの既定値。
     // (グローバルに置くと初期化順序がリンク順任せになるので、ここで作る)
     NullBlockStore null_block_store_instance;
     null_block_store = &null_block_store_instance;
 
-    BufferCache::BlockStore block_store(device);
-    FileSystem::Manager fs_manager(VirtIOBlock::capacity(), &block_store, vga::vga);
+    // ファイルシステムへ注入する IBlockStore。null_block_store と同じ理由でグローバルに
+    // 置かず、ここで作る。kernel_main は返らないので、以降の全アクセスより長生きする。
+    // (状態を持たないので、参照先は initialize() で登録したキャッシュとデバイス)
+    BufferCache::BlockStore block_store;
+    if (not FileSystem::initialize(VirtIOBlock::capacity(), &block_store, vga::vga))
+    {
+        vga::vga->puts("FileSystem initialization failed\n");
+        asm volatile("hlt");
+    }
 #ifdef ENABLE_TESTS
     // 各機能の動作確認 (どのテストを走らせるかは tests/tests.cpp で切り替える)
     tests::run_all(vga::vga);

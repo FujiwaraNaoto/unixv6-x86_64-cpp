@@ -11,7 +11,7 @@ std::array<Buffer, NBUF> buffers;
 // 再利用はこの LRU 側から探す。
 //
 // 静的初期化の時点で自分自身を指す = 「空のリスト」にしておく。こうすると
-// Manager を作る前に acquire() が呼ばれても、リスト走査が空振りして nullptr が
+// initialize() の前に acquire() が呼ばれても、リスト走査が空振りして nullptr が
 // 返るだけで済む。各関数で初期化済みフラグを見る必要が無くなる。
 // (自身のアドレスは定数式なので .init_array ではなく .data に畳まれる)
 Buffer head = {
@@ -25,6 +25,7 @@ Buffer head = {
 };
 
 BufferCache::BlockDevice device{}; // 未初期化状態では両方とも空の std::function
+bool initialized = false;          // initialize() を 2 回通さないための印
 BufferCache::Statistics stats{.hits = 0, .misses = 0, .evictions = 0, .writebacks = 0};
 
 // buffer をリストから外す
@@ -116,12 +117,19 @@ Buffer *find_cached(uint32_t blockno)
 namespace BufferCache
 {
 
-Manager::Manager(const BlockDevice &block_device)
+bool initialize(const BlockDevice &block_device)
 {
+    // 2 回目はやり直さない。refcnt と LRU リストを初期値に戻すと、誰かが掴んでいる
+    // バッファが同時に別のブロックとして再利用されてしまう。
+    if (initialized)
+    {
+        return false;
+    }
+
     // std::function の operator bool。呼び出し先が入っていなければ登録しない。
     if (!block_device.read_block || !block_device.write_block)
     {
-        return; // valid_ は false のまま
+        return false;
     }
     device = block_device;
 
@@ -136,8 +144,9 @@ Manager::Manager(const BlockDevice &block_device)
         link_as_most_recent(&buffer);
     }
 
-    stats  = Statistics{.hits = 0, .misses = 0, .evictions = 0, .writebacks = 0};
-    valid_ = true;
+    stats       = Statistics{.hits = 0, .misses = 0, .evictions = 0, .writebacks = 0};
+    initialized = true;
+    return true;
 }
 
 Buffer *read(uint32_t blockno)
@@ -231,11 +240,11 @@ BlockRef BlockStore::acquire(uint32_t blockno)
     }
     return BlockRef(blockno, this, buffer->data.data());
 }
+
 bool BlockStore::write_back(uint32_t blockno)
 {
     return BufferCache::write(lookup(blockno));
 }
-
 
 void BlockStore::release(uint32_t blockno)
 {

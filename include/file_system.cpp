@@ -134,15 +134,14 @@ bool format(uint32_t total_blocks, IConsole *console)
 namespace FileSystem
 {
 
-Manager::Manager(uint32_t total_blocks, IBlockStore *block_store, IConsole *console)
+bool initialize(uint32_t total_blocks, IBlockStore *block_store, IConsole *console)
 {
     FileSystem::block_store = block_store ? block_store : null_block_store;
     FileSystem::console     = console ? console : null_console;
 
     if (internal::load_superblock())
     {
-        valid_ = true;
-        return;
+        return true;
     }
 
     // if the magic number is not matched, the disk is not formatted yet. format it.
@@ -150,10 +149,9 @@ Manager::Manager(uint32_t total_blocks, IBlockStore *block_store, IConsole *cons
 
     if (!format(total_blocks, console))
     {
-        valid_ = false;
-        return;
+        return false;
     }
-    valid_ = internal::load_superblock();
+    return internal::load_superblock();
 }
 
 std::optional<uint32_t> allocate_block()
