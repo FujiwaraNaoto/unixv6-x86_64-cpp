@@ -16,6 +16,11 @@ void run_all(IConsole *console)
     // nullptr が渡されたときは、出力を捨てる既定のコンソール (kernel_main が作る) に出す
     IConsole *out = (console != nullptr) ? console : null_console;
 
+#ifdef TEST_ONLY
+    // ONLY=<テスト名> を付けてビルドしたとき (Makefile 参照)。上の NOTE にある
+    // 「呼ぶと戻ってこない」テストを、tests.cpp を書き換えずに 1 つだけ走らせる。
+    TEST_ONLY(out);
+#else
     higher_half_check(out);
     pmm_alloc_free(out);
     heap_sbrk_alloc(out);
@@ -29,6 +34,7 @@ void run_all(IConsole *console)
 
     virtio_block_read(out);
     virtio_block_read_write(out);
+#endif
 }
 
 } // namespace tests

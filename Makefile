@@ -43,6 +43,25 @@ else
   GRUB_TITLE = UnixV6 x86-64 C++ Ph1
 endif
 
+# ─── 単体テスト構成 (ONLY=<テスト名>) ─────────────────────────────
+# run_all() に入れられない「呼ぶと戻ってこない」テスト を 1 つだけ走らせるための構成。
+# tests.cpp を書き換えずに起動できるので、手元と CI で同じ手順になる。
+#
+#   make ONLY=division_by_zero tests   … そのテストだけ入った ISO を起動
+#   make ONLY=usermode_ring3 iso       … ISO を作るだけ
+#
+# ONLY を付けた時点でテスト入りビルドになるので TESTS=1 は不要。出力先と ISO 名も
+# テストごとに分かれるため、通常構成やテスト構成と .o が混ざらない。
+ONLY ?=
+
+ifneq ($(ONLY),)
+  BUILD_NAME = tests-$(ONLY)
+  TEST_FLAGS = -DENABLE_TESTS -Itests -DTEST_ONLY=$(ONLY)
+  TEST_SRC   = $(wildcard tests/*.cpp)
+  ISO        = unixv6-tests-$(ONLY).iso
+  GRUB_TITLE = UnixV6 x86-64 C++ (only: $(ONLY))
+endif
+
 # NOTE: ubuntuのg++はデフォルトで --enable-default-pie が有効になっている．-mcmodel=kernelと競合するため、-fno-pie を明示的に指定する必要がある。
 CFLAGS   = -m64 -std=c++20 -g \
            -ffreestanding -fno-stack-protector -fno-builtin \
@@ -161,7 +180,7 @@ $(ISO): $(KERNEL)
 	@echo ">>> ISO ready: $@"
 
 clean:
-	rm -rf build iso unixv6.iso unixv6-tests.iso qemu.log serial.log
+	rm -rf build iso unixv6.iso unixv6-tests.iso unixv6-tests-*.iso qemu.log serial.log
 
 format:
 	@echo "[format] Running clang-format..."
