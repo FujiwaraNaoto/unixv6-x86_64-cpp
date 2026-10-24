@@ -2,7 +2,10 @@
 #define GDT_HPP
 #include <cstdint>
 
-extern "C" inline uint64_t syscall_kernel_rsp = 0;
+extern "C"
+{
+    inline uint64_t syscall_kernel_rsp = 0;
+}
 
 namespace gdt
 {

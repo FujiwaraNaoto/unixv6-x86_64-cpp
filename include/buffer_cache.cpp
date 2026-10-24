@@ -24,7 +24,7 @@ Buffer head = {
     .data    = {},
 };
 
-BufferCache::BlockDevice device{}; // 未初期化状態では両方とも空の std::function
+BufferCache::BlockDevice device{}; // 未初期化状態では両方とも nullptr
 bool initialized = false;          // initialize() を 2 回通さないための印
 BufferCache::Statistics stats{.hits = 0, .misses = 0, .evictions = 0, .writebacks = 0};
 
@@ -126,7 +126,7 @@ bool initialize(const BlockDevice &block_device)
         return false;
     }
 
-    // std::function の operator bool。呼び出し先が入っていなければ登録しない。
+    // 呼び出し先が入っていなければ登録しない。
     if (!block_device.read_block || !block_device.write_block)
     {
         return false;
