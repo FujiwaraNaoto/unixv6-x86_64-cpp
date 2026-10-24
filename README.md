@@ -3,7 +3,7 @@
 Unix V6 (と xv6) を下敷きに、**x86-64 + C++20** で書き直している自作 OS です。
 GRUB (Multiboot2) から起動し、QEMU 上で動かしています。
 
-製作途中で、2026-08-31 時点では **phase8: ファイルシステムの途中** です。
+製作途中で、2026-10-24 時点では **phase8: ファイルシステムの途中** です。
 
 ## 特徴
 
@@ -12,6 +12,7 @@ GRUB (Multiboot2) から起動し、QEMU 上で動かしています。
   - 標準ライブラリが使えないので `std::string` の代わりに固定長の `kstring`、
     `std::function` の代わりに関数ポインタ、といった置き換えをしている
 - ハードウェアは QEMU の標準的な構成 (PIC / PIT / PS/2 キーボード / VGA テキスト / シリアル / PCI + virtio-blk)
+- 動作確認はカーネル内のテストハーネスで行い、GitHub Actions の CI でビルド・QEMU 実行・clang-format を毎回チェックする
 
 ## 遊び方
 
@@ -23,7 +24,8 @@ make run-gui      # 別ウィンドウ(GTK)で起動。シリアル出力は ser
 make run-vscode   # ターミナル直結(-nographic)で起動。終了は Ctrl-A X
 ```
 
-必要なもの: `g++` (C++20)、`nasm`、`ld`、`grub-mkrescue` (+`xorriso`)、`qemu-system-x86_64`。
+必要なもの: `g++-13` (Makefile でバージョン固定)、`nasm`、`ld`、`grub-mkrescue` (+`xorriso` / `mtools`)、`qemu-system-x86_64`。
+ディスクイメージ `fs.img` は `make fs.img` で作る (未フォーマットのまま起動すると、カーネルが自分でフォーマットする)。
 
 ### 機能テスト
 
@@ -38,9 +40,19 @@ make tests-gdb    # 同上を gdb 待ち受けで
 make tests-build  # 起動せずビルドだけ
 ```
 
-どのテストを走らせるかは [`tests/tests.cpp`](tests/tests.cpp) の `run_all()` で切り替える。
-リング3遷移やキーボードのエコーのように「呼ぶと戻ってこない」テストは `run_all()` には
-入れていないので、必要なときだけ個別に呼ぶこと。
+走らせるテストは [`tests/tests.cpp`](tests/tests.cpp) の `kTests` 表に並べる。
+`run_all()` が順に実行して `[TEST] <名前>: OK / FAILED` と集計行をシリアル/VGA に出し、
+最後に `isa-debug-exit` へ書き込んで QEMU を終了させる (成功なら終了コード 33、失敗なら 35)。
+このデバイスを付けずに起動した場合は何も起きず、そのまま `hlt` ループへ進む。
+
+キーボードのエコーのように「呼ぶと戻ってこない」テストは `kTests` に入れられないので、
+`ONLY=<テスト名>` でそのテストだけを入れたカーネルを作って起動する
+(`tests.cpp` を書き換えなくて済む)。
+
+```sh
+make ONLY=keyboard_echo tests   # そのテストだけ入った ISO を起動
+make ONLY=keyboard_echo iso     # ISO を作るだけ
+```
 
 生成物は構成ごとに分かれているので、通常ビルドとテストビルドを行き来しても
 `make clean` は要らない。
@@ -49,6 +61,17 @@ make tests-build  # 起動せずビルドだけ
 |---|---|---|
 | `make` | `build/kernel/` | `unixv6.iso` |
 | `make tests` | `build/tests/` | `unixv6-tests.iso` |
+| `make ONLY=<名前> tests` | `build/tests-<名前>/` | `unixv6-tests-<名前>.iso` |
+
+### CI
+
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) で、push / PR ごとに次の 3 つを走らせる。
+
+- **build** — `make iso` と `make TESTS=1 iso` を両方ビルドし、ログに error や
+  `-Wreturn-type` / `-Wuninitialized` が出ていたら落とす
+- **qemu** — テスト入り ISO を QEMU でヘッドレス起動し、終了コードで合否を見る
+  (33 = 成功、35 = テスト失敗、124 = タイムアウト、それ以外 = トリプルフォルト等でハーネスまで届いていない)
+- **format** — clang-format 14 で整形済みかを確認する (直すときは `make format`)
 
 ### デバッグ
 
@@ -73,11 +96,13 @@ gdb build/kernel/kernel.elf
 | パス | 中身 |
 | --- | --- |
 | [boot/](boot/) | Multiboot2 ヘッダ、32bit→64bit の移行、コンテキストスイッチ (`switch.asm`) |
-| [kernel/](kernel/) | `kernel_main`。各サブシステムの初期化と動作確認コードが並ぶ |
-| [include/](include/) | カーネル本体 (PMM / VMM / heap / GDT / IDT / PIC / process / syscall / driver …) |
+| [kernel/](kernel/) | `kernel_main`。各サブシステムの初期化だけを行う |
+| [include/](include/) | カーネル本体 (PMM / VMM / heap / GDT / IDT / PIC / process / syscall / PCI / virtio-blk / バッファキャッシュ / ファイルシステム …) |
 | [interrupt/](interrupt/) | ISR スタブとレジスタ退避のアセンブリ |
-| [syscall/](syscall/) | `syscall` 命令のエントリ、`fork` の子側の戻り口 |
+| [io/](io/) | ポート I/O のアセンブリ |
+| [syscall/](syscall/) | `syscall` 命令のエントリ (TrapFrame の積み下ろし)、`fork` の子側の戻り口 |
 | [user/](user/) | リング3 に降りるためのエントリ |
+| [tests/](tests/) | テストハーネスと各機能のテスト (`make tests` のときだけリンクされる) |
 
 ## 実装フェーズ
 
@@ -130,21 +155,26 @@ Multiboot2 のメモリマップから使える領域を求め、4KB ページ�
 ### phase6: システムコール
 
 `syscall` / `sysret` 命令を MSR (EFER.SCE / STAR / LSTAR / FMASK) で有効化し、
-Linux x86-64 と同じ番号で `read`(0) / `write`(1) / `exit`(60) を実装。
+Linux x86-64 と同じ番号で `read`(0) / `write`(1) / `fork`(57) / `exit`(60) / `wait`(61) を実装。
+syscall の入口でカーネルスタックに切り替え、レジスタ一式を `TrapFrame` として積む。
 `read` はキーボード入力を待つあいだ `sti; hlt` で寝る (lost-wakeup を避けるため sti の直後に hlt を置く)。
 
 ### phase7: ユーザランド
 
 GDT にユーザーセグメントと TSS を足し、`TSS.RSP0` を設定して `iretq` でリング3 へ降りる。
 リング3 のプログラムから `syscall` を撃って文字が出るところまで動く。
-`fork` / `exit` / `wait` も実装済みで、親子で戻り値を変える (子は `fork_ret.asm` 経由で 0 を返す)、
-`Zombie` を親の `wait()` が回収する、という流れが `kernel_main` の `parent_thread` で確認できる。
+`fork` / `exit` / `wait` も実装済みで、リング3 のプログラムから `fork` を呼べる。
+子は親の `TrapFrame` の複製を持ち、`fork_ret.asm` から syscall の出口へ着地して 0 を返す。
+ユーザーページはコピーするので親子でアドレス空間が分かれ、`exit` した子 (`Zombie`) は親の `wait()` が
+回収してカーネルスタック・ページテーブルまで解放する。
+確認はテストの `fork_wait` (カーネルスレッド版) / `fork_from_ring3` / `process_free` で行っている。
 
-### phase8: ファイルシステム 🚧 ← 2026-08-31 時点はここ
+### phase8: ファイルシステム 🚧 ← 2026-10-24 時点はここ
 
-**書きかけです。** 下から順に積んでいて、2026-08-31 時点では「ブロックが読み書きできてキャッシュに乗る」ところまで。
+**書きかけです。** 下から順に積んでいて、`main` には「ブロックが読み書きできてキャッシュに乗り、
+スーパーブロックとブロックビットマップでブロックを確保・解放できる」ところまで入っている。
 
-できているもの (ブランチ `feature/file-system-*` 上。2026-08-31 時点で `main` には入っていない):
+`main` に入っているもの:
 
 - **higher-half kernel への移行** — ファイルシステムの前提として、カーネルを
   `0xFFFFFFFF80000000` に置き、全物理メモリの direct map (PML4[256]) を張る形に作り替えた
@@ -153,27 +183,35 @@ GDT にユーザーセグメントと TSS を足し、`TSS.RSP0` を設定して
   完了待ちはポーリング
 - **バッファキャッシュ** — 512B × 30 ブロックの LRU キャッシュ。`read` / `mark_dirty` / `write` / `flush`。
   協調型スケジューラなのでロックは持たない (プリエンプティブにするなら xv6 同様バッファ単位の sleeplock が要る)
-- ドライバ確認用のテスト用ディスクイメージ `fs.img` (先頭に文字列を置いて読み書きを確かめるだけのもの。
-  2026-08-31 時点ではファイルシステムのイメージではない)
+- **ディスクレイアウトとブロック確保** — boot / super / inode / bitmap / data の xv6 風レイアウト
+  ([`include/file_system.hpp`](include/file_system.hpp) に図あり)。起動時にスーパーブロックを読み、
+  未フォーマットなら自分でフォーマットする。`allocate_block()` / `free_block()` はビットマップで管理。
+  ファイルシステムはブロックの読み書きを `IBlockStore` 越しに行うので、テストでは偽物に差し替えられる
+
+ブランチ上にあって `main` には入っていないもの:
+
+- `feature/create-inode` — inode 層 (`allocate_inode` / `get_inode` / `put_inode` / `block_map` /
+  `read_inode` / `write_inode`) とディレクトリ・path 解決 (`lookup_directory` / `link_directory` /
+  `resolve_path` / `resolve_parent`)。xv6 の略記ではなく説明的な名前にしている
 
 これからやること:
 
-- mkfs (ホスト側でイメージを作るツール) と、V6 の inode レイアウト
-  (スーパーブロック / inode / ビットマップ / データブロック)
-- inode 層 (`ialloc` / `iget` / `bmap` / `readi` / `writei`)
-- ディレクトリと path 解決
-- ファイルディスクリプタを作って `open` / `read` / `write` / `close` をシステムコールに接続
-  (2026-08-31 時点の `read` / `write` はコンソール直結、`exit` もプロセス管理と繋がずその場で停止している)
+- inode 層とディレクトリを `main` に取り込む
+- `File` 構造体とプロセスごとのファイルディスクリプタ表を作り、`open` / `read` / `write` / `close` を
+  システムコールに接続する (2026-10-24 時点の `read` / `write` はコンソール直結)
+- init プロセス (pid 1) を作り、孤児を引き取らせる
 
 ### phase9: シェル
 
 未着手。`exec` を作って、キーボード入力からコマンドを起動する最小の `sh` を動かすのが目標。
 
-## 制約 / TODO (2026-08-31 時点)
+## 制約 / TODO (2026-10-24 時点)
 
 - スケジューラが協調型。タイマ割り込みからのプリエンプションは入れていない
 - `exec` がないので、ユーザープログラムはカーネルに埋め込んで User ページとしてマップしている
+  (テスト用のリング3コードは `tests/` にあり、通常ビルドにはユーザープログラムが入っていない)
 - ファイルディスクリプタ層がなく、`read`/`write` はキーボードと VGA に直結
 - ロックが一切ない (シングル CPU + 協調型スケジューラという前提の上に乗っている)
-- higher-half 移行とファイルシステムが `main` にマージされていない
-- `kernel_main` に各フェーズの動作確認コードがコメントアウトで残っている
+- init プロセスがおらず、親が先に死んだ子を引き取る仕組み (reparent) がない
+- ユーザースタックの位置が固定
+- inode 層が `main` にマージされていない
