@@ -108,76 +108,69 @@ void virtio_block_read(IConsole *console)
         console->set_color(Color::LightGrey, Color::Black);
     }
 
-    // バッファキャッシュ層をこのドライバの上に載せる。
-    // 以降ブロックアクセスは BufferCache 経由で行い、上位層 (inode) からは
-    // どのドライバかを見えなくする。
-    // コンストラクタが初期化を行う。kernel_main は返らないので、この
-    // インスタンスは以降の全アクセスより長生きする。
-    BufferCache::Manager buffer_cache(BufferCache::BlockDevice{
-        .read_block  = &VirtIOBlock::read_block,
-        .write_block = &VirtIOBlock::write_block,
-    });
+    // バッファキャッシュ層はこのドライバの上に載っている。以降ブロックアクセスは
+    // BufferCache 経由で行い、上位層 (inode) からはどのドライバかを見えなくする。
+    //
+    // 初期化は kernel_main が済ませている (失敗していればそこで止まる)。
+    // ここで initialize() を呼び直すと、掴まれているバッファの refcnt と LRU リストが
+    // 初期値に戻って壊れるので、呼ばない。
+    console->set_color(Color::LightGreen, Color::Black);
+    console->puts("[BCACHE] ");
+    console->set_color(Color::LightGrey, Color::Black);
+    console->printf("initialized: %llu buffers x %llu bytes\n",
+                    static_cast<unsigned long long>(NBUF),
+                    static_cast<unsigned long long>(BLOCK_SIZE));
 
-    if (buffer_cache.valid())
+    // 1回目: キャッシュに無いのでデバイスを叩く (miss)
+    // BufferRef はスコープを抜けるときに自動で release() される
+    if (BufferCache::BufferRef block0 = BufferCache::acquire(0))
     {
         console->set_color(Color::LightGreen, Color::Black);
         console->puts("[BCACHE] ");
         console->set_color(Color::LightGrey, Color::Black);
-        console->printf("initialized: %llu buffers x %llu bytes\n",
-                        static_cast<unsigned long long>(NBUF),
-                        static_cast<unsigned long long>(BLOCK_SIZE));
+        console->puts("block 0:\n");
+        console->set_color(Color::LightCyan, Color::Black);
+        hexdump(console, block0->data.data(), block0->data.size());
+        console->set_color(Color::LightGrey, Color::Black);
+        block0.reset(); // 明示的に手放す (以降のスコープでも自動解放される)
 
-        // 1回目: キャッシュに無いのでデバイスを叩く (miss)
-        // BufferRef はスコープを抜けるときに自動で release() される
-        if (BufferCache::BufferRef block0 = BufferCache::acquire(0))
+        // 2回目: 同じブロックなのでデバイスを叩かない (hit)
         {
-            console->set_color(Color::LightGreen, Color::Black);
-            console->puts("[BCACHE] ");
-            console->set_color(Color::LightGrey, Color::Black);
-            console->puts("block 0:\n");
-            console->set_color(Color::LightCyan, Color::Black);
-            hexdump(console, block0->data.data(), block0->data.size());
-            console->set_color(Color::LightGrey, Color::Black);
-            block0.reset(); // 明示的に手放す (以降のスコープでも自動解放される)
-
-            // 2回目: 同じブロックなのでデバイスを叩かない (hit)
-            {
-                BufferCache::BufferRef again = BufferCache::acquire(0);
-            }
-
-            // RAII が効いていることの確認:
-            // release 漏れがあれば NBUF 個を超えた時点で acquire が失敗する
-            bool no_leak = true;
-            for (int i = 0; i < NBUF * 4; i++)
-            {
-                BufferCache::BufferRef probe = BufferCache::acquire(0);
-                if (!probe)
-                {
-                    no_leak = false;
-                    break;
-                }
-            }
-            console->set_color(Color::LightGreen, Color::Black);
-            console->puts("[BCACHE] ");
-            console->set_color(Color::LightGrey, Color::Black);
-            console->printf("BufferRef leak test: %s\n", no_leak ? "OK" : "LEAKED");
-
-            const BufferCache::Statistics stats = BufferCache::statistics();
-            console->set_color(Color::LightGreen, Color::Black);
-            console->puts("[BCACHE] ");
-            console->set_color(Color::LightGrey, Color::Black);
-            console->printf("hits=%llu misses=%llu evictions=%llu writebacks=%llu\n",
-                            static_cast<unsigned long long>(stats.hits),
-                            static_cast<unsigned long long>(stats.misses),
-                            static_cast<unsigned long long>(stats.evictions),
-                            static_cast<unsigned long long>(stats.writebacks));
+            BufferCache::BufferRef again = BufferCache::acquire(0);
         }
-        else
+
+        // RAII が効いていることの確認:
+        // release 漏れがあれば NBUF 個を超えた時点で acquire が失敗する
+        bool no_leak = true;
+        for (int i = 0; i < NBUF * 4; i++)
         {
-            console->set_color(Color::LightRed, Color::Black);
-            console->puts("[BCACHE] acquire(0) failed\n");
-            console->set_color(Color::LightGrey, Color::Black);
+            BufferCache::BufferRef probe = BufferCache::acquire(0);
+            if (!probe)
+            {
+                no_leak = false;
+                break;
+            }
         }
+        console->set_color(Color::LightGreen, Color::Black);
+        console->puts("[BCACHE] ");
+        console->set_color(Color::LightGrey, Color::Black);
+        console->printf("BufferRef leak test: %s\n", no_leak ? "OK" : "LEAKED");
+
+        const BufferCache::Statistics stats = BufferCache::statistics();
+        console->set_color(Color::LightGreen, Color::Black);
+        console->puts("[BCACHE] ");
+        console->set_color(Color::LightGrey, Color::Black);
+        console->printf("hits=%llu misses=%llu evictions=%llu writebacks=%llu\n",
+                        static_cast<unsigned long long>(stats.hits),
+                        static_cast<unsigned long long>(stats.misses),
+                        static_cast<unsigned long long>(stats.evictions),
+                        static_cast<unsigned long long>(stats.writebacks));
+    }
+    else
+    {
+        console->set_color(Color::LightRed, Color::Black);
+        console->puts("[BCACHE] acquire(0) failed\n");
+        console->set_color(Color::LightGrey, Color::Black);
     }
 }
 

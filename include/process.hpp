@@ -75,7 +75,7 @@ enum class ProcessState
     Zombie,
 };
 
-// ProcessManager はポインタとして受け取るだけなので、前方宣言で済ませる。
+// process::initialize() は参照として受け取るだけなので、前方宣言で済ませる。
 namespace heap
 {
 class Heap;
@@ -152,15 +152,11 @@ struct Process
 
 namespace process
 {
-// プロセス管理の初期化を担うクラス。
-// コンストラクタが従来の initialize() 相当 (プロセステーブルのクリアと
-// heap の登録) を行う。状態自体は process.cpp のモジュール内 static が持ち、
-// create_process()/yield() はフリー関数としてそれを操作する。
-class ProcessManager
-{
-  public:
-    explicit ProcessManager(heap::Heap *heap_ptr);
-};
+// プロセス管理の初期化 (プロセステーブルのクリアと heap の登録)。
+// 状態は process.cpp のモジュール内 static が持ち、create_process()/yield() は
+// フリー関数としてそれを操作する。この initialize() を他のどの関数より先に 1 回だけ呼ぶ。
+// heap はプロセスが生きている間ずっと使うので、呼び出し側が寿命を保証すること。
+void initialize(heap::Heap &heap);
 
 Process *create_process(EntryPoint entry, const char *name);
 void yield();

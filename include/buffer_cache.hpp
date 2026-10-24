@@ -58,33 +58,19 @@ struct BlockDevice
     std::function<bool(uint64_t blockno, const uint8_t *buffer)> write_block;
 };
 
-// バッファキャッシュの初期化を担うクラス。
-// コンストラクタが従来の initialize() 相当 (LRU リストの構築とデバイスの登録) を
-// 行う。状態自体は buffer_cache.cpp のモジュール内 static が持ち、acquire() /
-// release() などはフリー関数としてそれを操作する
-// (process::ProcessManager と同じ形)。
+// バッファキャッシュの初期化 (LRU リストの構築とデバイスの登録)。
+// 状態は buffer_cache.cpp のモジュール内 static が持ち、acquire() / release() など
+// はフリー関数としてそれを操作する (process.cpp と同じ形)。
 //
-// 実体は 1 バイトの空クラスで、15.9KiB のバッファ配列は .bss に置いたままなので
-// スタックに置いて構わない。インスタンスは以降の全アクセスより長生きさせること。
-class Manager final
-{
-  public:
-    explicit Manager(const BlockDevice &device);
-
-    // 初期化に成功したか。device の呼び出し先が揃っていなければ false。
-    // (コンストラクタは値を返せず、-fno-exceptions なので送出もできないため
-    //  この形で結果を受け取る)
-    //
-    // このフラグを見るのはここだけ。acquire()/write()/flush() は未初期化でも
-    // 安全に空振りするので、呼び出しごとの初期化済み判定は持たない。
-    bool valid() const
-    {
-        return valid_;
-    }
-
-  private:
-    bool valid_ = false;
-};
+// false を返すのは次の 2 つ。
+//   1. device の呼び出し先が揃っていない (何も登録せずに戻る)
+//   2. 2 回目以降の呼び出し
+// 2 を弾くのは、やり直すと refcnt と LRU リストが初期値に戻り、誰かが掴んでいる
+// バッファが同時に別のブロックとして再利用されて中身が壊れるため。
+//
+// 戻り値を見るのは呼び出し側の 1 回だけでよい。acquire()/write()/flush() は
+// 未初期化でも安全に空振りするので、呼び出しごとの初期化済み判定は持たない。
+[[nodiscard]] bool initialize(const BlockDevice &device);
 
 // ブロックを取得する。キャッシュに無ければデバイスから読み込む。
 // 戻り値は参照カウントを 1 増やした状態のバッファ。失敗時は nullptr。
@@ -176,20 +162,25 @@ class BufferRef final
 };
 
 // read() の RAII 版。失敗時は空の BufferRef (operator bool が false) を返す。
+//
+// NOTE: Buffer を直接触る低レベル側の口。上位層は BlockStore 経由の BlockRef を
+//       使うので、今これを使っているのはキャッシュ自体を調べる tests/virtio_test.cpp
+//       だけ。
 BufferRef acquire(uint32_t blockno);
 
 
+// 上位層 (ファイルシステム) への入口。IBlockStore の呼び出しを BufferCache の
+// フリー関数へ中継するだけの、状態を持たない変換役。
+//
+// デバイスは initialize() で登録済みのものを使うため、コンストラクタで受け取らない。
+// (受け取れる形にすると、インスタンスごとに別のデバイスを指定できるように見えて、
+//  実際は黙って無視される)
 class BlockStore final : public IBlockStore
 {
   public:
-    explicit BlockStore(const BlockDevice &device) : device_(device) { }
-
     BlockRef acquire(uint32_t blockno) override;
     bool write_back(uint32_t blockno) override;
     void release(uint32_t blockno) override;
-
-  private:
-    BlockDevice device_;
 };
 
 
