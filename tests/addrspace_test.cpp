@@ -36,7 +36,7 @@ void addrspace_thread_b()
 
 } // namespace
 
-void addrspace_separation(IConsole *console)
+bool addrspace_separation(IConsole *console)
 {
     Process *pa = process::create_process(addrspace_thread_a, "addr-a");
     Process *pb = process::create_process(addrspace_thread_b, "addr-b");
@@ -45,7 +45,7 @@ void addrspace_separation(IConsole *console)
         console->set_color(Color::LightRed, Color::Black);
         console->puts("[ADDR] failed to create test processes\n");
         console->set_color(Color::LightGrey, Color::Black);
-        return;
+        return false;
     }
 
     // 各プロセスの同一仮想アドレスに物理ページを別々にマップ
@@ -56,7 +56,7 @@ void addrspace_separation(IConsole *console)
         console->set_color(Color::LightRed, Color::Black);
         console->puts("[ADDR] failed to allocate test pages\n");
         console->set_color(Color::LightGrey, Color::Black);
-        return;
+        return false;
     }
     vmm::vmm_ptr->map_page_in(pa->pml4, kAddrTestVirt, phys_a, vmm::PageFlag::Present | vmm::PageFlag::Writable);
     vmm::vmm_ptr->map_page_in(pb->pml4, kAddrTestVirt, phys_b, vmm::PageFlag::Present | vmm::PageFlag::Writable);
@@ -71,6 +71,8 @@ void addrspace_separation(IConsole *console)
                     (unsigned)test_result_a,
                     (unsigned)test_result_b,
                     (test_result_a == 0xAAAA && test_result_b == 0xBBBB) ? "SEPARATED-OK" : "SHARED-FAIL");
+
+    return test_result_a == 0xAAAA && test_result_b == 0xBBBB;
 }
 
 } // namespace tests

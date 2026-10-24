@@ -12,6 +12,9 @@ namespace
 // スレッド関数は引数を取れないので、出力先はプロセスを作る前にここへ設定する。
 IConsole *free_console = nullptr;
 
+// fork+wait を繰り返すスレッドの判定 (テスト関数は yield から戻った後に見る)
+volatile bool fork_wait_ok = false;
+
 // fork + wait を繰り返す回数。MAX_PROCESSES より多くして、
 // 回収した枠 (ProcessState::Unused) が再利用されることも一緒に確かめる。
 constexpr int kForkCount = static_cast<int>(MAX_PROCESSES) + 36;
@@ -22,7 +25,7 @@ uint64_t free_pages()
 }
 
 // before と after の空きページ数が同じなら OK、違えば漏れた (または余分に返した) ページ数を出す。
-void report(const char *what, uint64_t before, uint64_t after)
+bool report(const char *what, uint64_t before, uint64_t after)
 {
     if (before == after)
     {
@@ -39,11 +42,12 @@ void report(const char *what, uint64_t before, uint64_t after)
                              static_cast<long>(before) - static_cast<long>(after));
     }
     free_console->set_color(Color::LightGrey, Color::Black);
+    return before == after;
 }
 
 // destroy_address_space() が、ユーザーページ・ページテーブル・PML4 をすべて返すことを確かめる。
 // PT / PD / PDPT のそれぞれが複数になるようにマップして、どの段の解放漏れも数に出るようにする。
-void destroy_returns_all_pages()
+bool destroy_returns_all_pages()
 {
     // 0x600000 と 0x601000 : 同じ PT
     // 0x800000             : 同じ PD の別の PT
@@ -56,7 +60,7 @@ void destroy_returns_all_pages()
     if (!pml4)
     {
         report("destroy_address_space (create failed)", before, free_pages());
-        return;
+        return false;
     }
     for (const PageVirtualAddress va : kPages)
     {
@@ -70,7 +74,7 @@ void destroy_returns_all_pages()
 
     vmm::vmm_ptr->destroy_address_space(pml4);
 
-    report("destroy_address_space", before, free_pages());
+    return report("destroy_address_space", before, free_pages());
 }
 
 // fork して子を終了させ、wait で回収する。回収した pid が子のものなら true。
@@ -107,19 +111,24 @@ void fork_wait_thread()
             return;
         }
     }
-    report("fork+wait loop", before, free_pages());
+    fork_wait_ok = report("fork+wait loop", before, free_pages());
 }
 
 } // namespace
 
-void process_free(IConsole *console)
+bool process_free(IConsole *console)
 {
     free_console = console;
 
-    destroy_returns_all_pages();
+    const bool destroy_ok = destroy_returns_all_pages();
 
-    process::create_process(fork_wait_thread, "free");
+    if (process::create_process(fork_wait_thread, "free") == nullptr)
+    {
+        return false;
+    }
     process::yield();
+
+    return destroy_ok && fork_wait_ok;
 }
 
 } // namespace tests

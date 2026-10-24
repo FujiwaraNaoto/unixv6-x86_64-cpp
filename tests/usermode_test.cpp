@@ -3,7 +3,6 @@
 #include "usermode.hpp"
 #include "pmm.hpp"
 #include "vmm.hpp"
-#include "gdt.hpp"
 #include "process.hpp"
 #include "user_syscall.hpp"
 
@@ -75,7 +74,8 @@ namespace
     const char ng[]    = "REG-NG\n";
     const char *result = regs_kept ? ok : ng;
     user_syscall(SyscallNo::kWrite, 1, reinterpret_cast<long>(result), 7);
-    user_syscall(SyscallNo::kExit, 0, 0, 0);
+    // 判定結果は exit の値で返す (0 = OK)。カーネル側のテストはプロセスの exit_status から読む。
+    user_syscall(SyscallNo::kExit, regs_kept ? 0 : 1, 0, 0);
 
     // 念のため
     while (1)
@@ -84,12 +84,61 @@ namespace
     }
 }
 
-[[noreturn]] void hang()
+constexpr PageVirtualAddress kUserStack{0x600000};
+
+IConsole *usermode_console = nullptr;
+
+void fail(const char *message)
 {
-    while (1)
+    usermode_console->set_color(Color::LightRed, Color::Black);
+    usermode_console->puts("[USER] ");
+    usermode_console->set_color(Color::LightGrey, Color::Black);
+    usermode_console->puts(message);
+}
+
+// プロセスのエントリ。このプロセスのアドレス空間に .user とユーザースタックをマップし、
+// リング3へ降りる。ここから戻らない。終了は exit システムコール (process::exit) 経由。
+void user_entry()
+{
+    Process *self = process::current_process();
+    if (self == nullptr || !self->pml4)
     {
-        asm volatile("hlt");
+        fail("no process context\n");
+        return;
     }
+
+    // .user セクション全体を User 許可でマップする (1 ページに収まらなくなっても動くように)
+    for (uint64_t va = reinterpret_cast<uint64_t>(__user_start) & PAGE_MASK;
+         va < reinterpret_cast<uint64_t>(__user_end);
+         va += PAGE_SIZE)
+    {
+        const PhysicalAddress phys = vmm::vmm_ptr->virtual_to_physical(PageVirtualAddress{va});
+        if (!phys)
+        {
+            fail("failed to resolve user_program physical address\n");
+            return;
+        }
+        vmm::vmm_ptr->map_page_in(self->pml4,
+                                  PageVirtualAddress{va},
+                                  phys,
+                                  vmm::PageFlag::Present | vmm::PageFlag::User);
+    }
+
+    // ユーザースタック
+    const PhysicalAddress stack_phys = pmm::pmm_ptr->allocate();
+    if (!stack_phys)
+    {
+        fail("failed to allocate user stack\n");
+        return;
+    }
+    vmm::vmm_ptr->map_page_in(self->pml4,
+                              kUserStack,
+                              stack_phys,
+                              vmm::PageFlag::Present | vmm::PageFlag::Writable | vmm::PageFlag::User);
+
+    // リング3へ遷移 (16バイト境界に揃える)。
+    // syscall で降りてくる先のカーネルスタックは schedule() が設定済み。
+    usermode::enter(reinterpret_cast<uint64_t>(&user_program), kUserStack.address + PAGE_SIZE - 16);
 }
 
 } // namespace
@@ -113,49 +162,23 @@ namespace
 //                : "=r"(ret)
 //                : "r"(msg), "r"((uint64_t)(sizeof(msg) - 1))
 //                : "rax", "rdi", "rsi", "rdx", "rcx", "r11", "memory");
-void usermode_ring3(IConsole *console)
+bool usermode_ring3(IConsole *console)
 {
-    // .user セクション全体を User 許可で貼り直す (1 ページに収まらなくなっても動くように)
-    for (uint64_t va = reinterpret_cast<uint64_t>(__user_start) & PAGE_MASK;
-         va < reinterpret_cast<uint64_t>(__user_end);
-         va += PAGE_SIZE)
+    usermode_console = console;
+
+    Process *proc = process::create_process(user_entry, "user");
+    if (proc == nullptr)
     {
-        const PageVirtualAddress code_page{va};
-        const auto code_phys = vmm::vmm_ptr->virtual_to_physical(code_page);
-        if (!code_phys)
-        {
-            console->set_color(Color::LightRed, Color::Black);
-            console->puts("[USER] failed to resolve user_program physical address\n");
-            console->set_color(Color::LightGrey, Color::Black);
-            hang();
-        }
-        vmm::vmm_ptr->map_page(code_page,
-                               code_phys,
-                               vmm::PageFlag::User | vmm::PageFlag::Present | vmm::PageFlag::Writable);
+        fail("create_process failed\n");
+        return false;
     }
 
-    // ユーザースタックを確保して User許可でマップ
-    const PhysicalAddress ustack_phys = pmm::pmm_ptr->allocate();
-    if (!ustack_phys)
-    {
-        console->set_color(Color::LightRed, Color::Black);
-        console->puts("[USER] failed to allocate user stack\n");
-        console->set_color(Color::LightGrey, Color::Black);
-        hang();
-    }
-    constexpr PageVirtualAddress ustack_virt{0x600000};
-    vmm::vmm_ptr->map_page(ustack_virt,
-                           ustack_phys,
-                           vmm::PageFlag::Present | vmm::PageFlag::Writable | vmm::PageFlag::User);
-    // syscall と割り込みで降りてくる先のカーネルスタックを用意する。
-    // ここはプロセスではなくカーネル初期文脈から降りるので、自分で設定しておく
-    // (プロセスから降りる場合は schedule() が設定する)。
-    static uint8_t user_kernel_stack[KERNEL_STACK_SIZE];
-    gdt::set_kernel_stack(reinterpret_cast<uint64_t>(user_kernel_stack) + sizeof(user_kernel_stack));
+    // プロセスが exit するまで戻らない
+    process::yield();
 
-
-    // リング3へ遷移 (16バイト境界に揃える)。ここから戻らない。
-    usermode::enter(reinterpret_cast<uint64_t>(&user_program), ustack_virt.address + PAGE_SIZE - 16);
+    // このプロセスは誰にも wait されないので、終了後も Zombie として exit_status が残る。
+    // リング3 側はレジスタ検査の結果を exit の値で返している (0 = OK)。
+    return proc->state == ProcessState::Zombie && proc->exit_status == 0;
 }
 
 } // namespace tests

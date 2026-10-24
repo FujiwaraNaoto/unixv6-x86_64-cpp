@@ -52,15 +52,18 @@ constexpr PageVirtualAddress kUserStack{0x600000};
     const long waited = user_syscall(SyscallNo::kWait, reinterpret_cast<long>(&status), 0, 0);
     user_write(mark, 7); // "SHARED" のはず
 
-    char result[10] = {'F', 'O', 'R', 'K', '-', 'N', 'G', '\n', 0, 0};
-    if (pid > 0 && waited == pid && status == 7)
+    char result[10]    = {'F', 'O', 'R', 'K', '-', 'N', 'G', '\n', 0, 0};
+    const bool fork_ok = pid > 0 && waited == pid && status == 7;
+    if (fork_ok)
     {
         result[5] = 'O';
         result[6] = 'K';
     }
     user_write(result, 8);
 
-    user_syscall(SyscallNo::kExit, 0, 0, 0);
+    // 判定結果は exit の値で返す (0 = OK)。カーネル側のテストはプロセスの
+    // exit_status からこれを読む。
+    user_syscall(SyscallNo::kExit, fork_ok ? 0 : 1, 0, 0);
 }
 
 // ─── カーネル側 (プロセスのエントリ) ─────────────────────────────
@@ -120,18 +123,23 @@ void user_fork_entry()
 
 } // namespace
 
-void fork_from_ring3(IConsole *console)
+bool fork_from_ring3(IConsole *console)
 {
     fork_user_console = console;
 
-    if (process::create_process(user_fork_entry, "ufork") == nullptr)
+    Process *proc = process::create_process(user_fork_entry, "ufork");
+    if (proc == nullptr)
     {
         fail("create_process failed\n");
-        return;
+        return false;
     }
 
     // プロセスが終わる (親子とも exit する) まで戻らない
     process::yield();
+
+    // このプロセスは誰にも wait されないので、終了後も Zombie として exit_status が残る。
+    // リング3 側は自分の判定を exit の値で返している (0 = OK)。
+    return proc->state == ProcessState::Zombie && proc->exit_status == 0;
 }
 
 } // namespace tests

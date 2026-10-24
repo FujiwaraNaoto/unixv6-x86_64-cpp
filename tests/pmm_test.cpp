@@ -5,7 +5,7 @@
 namespace tests
 {
 
-void pmm_alloc_free(IConsole *console)
+bool pmm_alloc_free(IConsole *console)
 {
     auto *pmm = pmm::pmm_ptr;
 
@@ -15,7 +15,7 @@ void pmm_alloc_free(IConsole *console)
     if (!a1 || !a2 || !a3)
     {
         console->puts("[PMM]  alloc test: out of memory\n");
-        return;
+        return false;
     }
     const uint64_t p1 = *a1.address;
     const uint64_t p2 = *a2.address;
@@ -34,7 +34,7 @@ void pmm_alloc_free(IConsole *console)
     if (!a4)
     {
         console->puts("[PMM]  free+realloc: out of memory\n");
-        return;
+        return false;
     }
     const uint64_t p4 = *a4.address;
     console->set_color(Color::LightGreen, Color::Black);
@@ -44,6 +44,8 @@ void pmm_alloc_free(IConsole *console)
                     static_cast<unsigned>(p2),
                     static_cast<unsigned>(p4),
                     p4 == p2 ? "OK" : "MISMATCH");
+
+    return p4 == p2;
 }
 
 } // namespace tests

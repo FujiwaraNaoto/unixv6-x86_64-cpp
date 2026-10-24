@@ -4,8 +4,9 @@ name: CI
 # ローカルの検証手順をそのまま CI に移したもの:
 #   1. make iso と make TESTS=1 iso を両方ビルドして、error と
 #      「ほぼ確実にバグ」な警告 (-Wreturn-type / -Wuninitialized) を弾く
-#   2. テスト入り ISO を QEMU で動かして、シリアル出力のマーカーと
-#      例外ログ (-d int,cpu_reset) を確認する
+#   2. テスト入り ISO を QEMU で動かして、終了コードを見る。
+#      合否はカーネル側のテストハーネス (tests/tests.cpp の run_all) が決め、
+#      isa-debug-exit で QEMU を終了させる。CI はテストの中身を知らない。
 on:
   push:
     branches: ['**']
@@ -57,7 +58,7 @@ jobs:
       - name: Gate on build log
         run: |
           pattern='(fatal )?error:|undefined reference|\*\*\*|\[-Wreturn-type\]|\[-Wuninitialized\]'
-          if grep -nE "$pattern" build-kernel.log build-tests.log; then
+          if grep -nE "$pattern" build-*.log; then
             echo "::error::ビルドログに error もしくは要注意の警告がある"
             exit 1
           fi
@@ -110,96 +111,37 @@ jobs:
           make fs.img
           ls -l fs.img
 
-      # カーネルは最後に hlt ループへ入って自分では終了しないので、
-      # 最終テストのマーカーが出た時点で QEMU を止める。
+      # 合否はカーネル側のテストハーネスが決め、isa-debug-exit 経由で QEMU を終了させる。
+      # QEMU の終了コードは (書いた値 << 1) | 1 なので、成功 0x10 -> 33 / 失敗 0x11 -> 35。
+      # それ以外は「ハーネスまで辿り着かなかった」ことを表す:
+      #   124 … timeout (どこかでハングした)
+      #   0   … -no-reboot でのリセット (トリプルフォルト等で CPU がリセットされた)
+      # シリアルと -d int のログは判定には使わず、落ちたときの調査用に残すだけ。
       # ランナーに /dev/kvm は無いので TCG (エミュレーション) で動く。
       - name: Run tests ISO in QEMU (headless)
         run: |
+          set +e
           timeout -s TERM 300 qemu-system-x86_64 \
             -cdrom unixv6-tests.iso -boot d -m 256M \
             -display none -no-reboot \
             -serial file:serial.log \
             -d int,cpu_reset -D qemu-int.log \
             -drive file=fs.img,format=raw,if=none,id=disk0 \
-            -device virtio-blk-pci,drive=disk0,disable-modern=on &
-          qemu_pid=$!
-
-          for _ in $(seq 1 300); do
-            if grep -q 'restore original: OK' serial.log 2>/dev/null; then
-              echo "最終マーカーを検出"
-              break
-            fi
-            if ! kill -0 "$qemu_pid" 2>/dev/null; then
-              echo "QEMU が自分で終了した"
-              break
-            fi
-            sleep 1
-          done
-
-          kill "$qemu_pid" 2>/dev/null || true
-          wait "$qemu_pid" 2>/dev/null || true
+            -device virtio-blk-pci,drive=disk0,disable-modern=on \
+            -device isa-debug-exit,iobase=0xf4,iosize=0x04
+          rc=$?
+          set -e
 
           echo '----- serial.log -----'
           cat serial.log || true
+          echo '----------------------'
 
-      - name: Check serial output
-        run: |
-          test -s serial.log || { echo "::error::serial.log が空 (起動していない)"; exit 1; }
-
-          # 各テストが「通ったときだけ出す」行。アドレスや pid は実行ごとに変わるので正規表現で。
-          required=(
-            '\[HIGH\] VGA via direct map OK'
-            '\[PMM\].*free\+realloc:.*OK'
-            '\[HEAP\].*reuse=OK'
-            '\[THREAD-B\] iteration 2'
-            'SEPARATED-OK'
-            'WOKE-OK'
-            '\[FORK\] parent: child [0-9]+ exited with code 42'
-            'FORK-OK'
-            '\[FREE\] destroy_address_space: OK'
-            '\[FREE\] fork\+wait loop: OK'
-            '\[BCACHE\] BufferRef leak test: OK'
-            '\[VIRTIO\] 1024 sequential reads: OK'
-            '\[VIRTIO\] write \+ read back: OK'
-            '\[VIRTIO\] restore original: OK'
-          )
-          missing=0
-          for re in "${required[@]}"; do
-            if grep -qE "$re" serial.log; then
-              echo "  OK      $re"
-            else
-              echo "::error::シリアル出力に出ていない: $re"
-              missing=1
-            fi
-          done
-
-          # 失敗を表す行 (NG / FAILED / ... failed / panic) が 1 行でもあれば落とす。
-          if grep -nE 'FAILED|[Ff]ailed|-NG|: NG|NG before=|[Pp]anic' serial.log; then
-            echo "::error::シリアル出力に失敗の行がある"
-            missing=1
-          fi
-
-          exit "$missing"
-
-      # v=00〜v=1f は CPU 例外。正常なら 1 つも出ない。
-      # CPU Reset は起動時の 2 回が正常 (3 回目以降はトリプルフォルト等)。
-      - name: Check CPU exception log
-        run: |
-          test -s qemu-int.log || { echo "::error::qemu-int.log が無い"; exit 1; }
-          exceptions=$(grep -cE 'v=[0-1][0-9a-f] ' qemu-int.log || true)
-          resets=$(grep -c 'CPU Reset' qemu-int.log || true)
-          echo "CPU 例外: ${exceptions} / CPU Reset: ${resets}"
-          rc=0
-          if [ "$exceptions" -ne 0 ]; then
-            grep -nE 'v=[0-1][0-9a-f] ' qemu-int.log | head -20
-            echo "::error::CPU 例外が ${exceptions} 件出ている"
-            rc=1
-          fi
-          if [ "$resets" -gt 2 ]; then
-            echo "::error::CPU Reset が ${resets} 回 (正常は起動時の 2 回)"
-            rc=1
-          fi
-          exit "$rc"
+          case "$rc" in
+            33)  echo "テスト成功 (QEMU 終了コード 33)" ;;
+            35)  echo "::error::テストが失敗した (QEMU 終了コード 35)。どれが落ちたかは serial.log の [TEST] 行を参照"; exit 1 ;;
+            124) echo "::error::タイムアウト。ハーネスが結果を返す前にハングした"; exit 1 ;;
+            *)   echo "::error::予期しない QEMU 終了コード ${rc} (リセット/トリプルフォルト等でハーネスまで到達していない)"; exit 1 ;;
+          esac
 
       - name: Upload QEMU logs
         if: always()
