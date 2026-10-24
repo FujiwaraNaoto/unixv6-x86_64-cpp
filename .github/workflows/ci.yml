@@ -30,28 +30,28 @@ jobs:
 
       # grub-mkrescue は grub-common、BIOS 用モジュールは grub-pc-bin、
       # ISO 作成に xorriso と mtools が必要。
-      - name: ツールチェインを入れる
+      - name: Install toolchain
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             g++ binutils nasm grub-common grub-pc-bin xorriso mtools
 
-      - name: バージョン確認
+      - name: Show tool versions
         run: |
           g++ --version | head -1
           nasm -v
           grub-mkrescue --version
 
-      - name: 通常カーネル (make iso)
+      - name: Build kernel ISO (make iso)
         run: make iso 2>&1 | tee build-kernel.log
 
-      - name: テスト入り (make TESTS=1 iso)
+      - name: Build tests ISO (make TESTS=1 iso)
         run: make TESTS=1 iso 2>&1 | tee build-tests.log
 
       # "error:" だけを見ると fatal error: やリンクエラーを取りこぼす。
       # -Wreturn-type / -Wuninitialized は Makefile 側で -Werror= 指定済みだが、
       # 指定が外れたときに素通りしないよう、ここでも error と同じ扱いで弾く。
-      - name: ビルドログのゲート
+      - name: Gate on build log
         run: |
           pattern='(fatal )?error:|undefined reference|\*\*\*|\[-Wreturn-type\]|\[-Wuninitialized\]'
           if grep -nE "$pattern" build-kernel.log build-tests.log; then
@@ -60,21 +60,21 @@ jobs:
           fi
           echo "ビルドログに error / 要注意の警告は無し"
 
-      - name: ISO ができているか
+      - name: Check ISO artifacts exist
         run: |
           test -s unixv6.iso
           test -s unixv6-tests.iso
           ls -l unixv6.iso unixv6-tests.iso
           size build/kernel/kernel.elf build/tests/kernel.elf
 
-      - name: テスト入り ISO を次のジョブへ渡す
+      - name: Upload tests ISO for next job
         uses: actions/upload-artifact@v4
         with:
           name: unixv6-tests-iso
           path: unixv6-tests.iso
           retention-days: 7
 
-      - name: ビルドログを残す
+      - name: Upload build logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -89,20 +89,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4 # fs.img を Makefile のルールで作るため
 
-      - name: QEMU を入れる
+      - name: Install QEMU
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends qemu-system-x86
           qemu-system-x86_64 --version | head -1
 
-      - name: テスト入り ISO を取得
+      - name: Download tests ISO
         uses: actions/download-artifact@v4
         with:
           name: unixv6-tests-iso
 
       # fs.img は生成物。未フォーマットの状態から起動すると、カーネルが
       # 自分で [FS] not formatted → format する (そこも含めて検証になる)。
-      - name: fs.img を作る
+      - name: Create fs.img
         run: |
           make fs.img
           ls -l fs.img
@@ -110,7 +110,7 @@ jobs:
       # カーネルは最後に hlt ループへ入って自分では終了しないので、
       # 最終テストのマーカーが出た時点で QEMU を止める。
       # ランナーに /dev/kvm は無いので TCG (エミュレーション) で動く。
-      - name: QEMU ヘッドレス実行
+      - name: Run tests ISO in QEMU (headless)
         run: |
           timeout -s TERM 300 qemu-system-x86_64 \
             -cdrom unixv6-tests.iso -boot d -m 256M \
@@ -139,7 +139,7 @@ jobs:
           echo '----- serial.log -----'
           cat serial.log || true
 
-      - name: シリアル出力を判定
+      - name: Check serial output
         run: |
           test -s serial.log || { echo "::error::serial.log が空 (起動していない)"; exit 1; }
 
@@ -180,7 +180,7 @@ jobs:
 
       # v=00〜v=1f は CPU 例外。正常なら 1 つも出ない。
       # CPU Reset は起動時の 2 回が正常 (3 回目以降はトリプルフォルト等)。
-      - name: 例外ログを判定
+      - name: Check CPU exception log
         run: |
           test -s qemu-int.log || { echo "::error::qemu-int.log が無い"; exit 1; }
           exceptions=$(grep -cE 'v=[0-1][0-9a-f] ' qemu-int.log || true)
@@ -198,7 +198,7 @@ jobs:
           fi
           exit "$rc"
 
-      - name: 実行ログを残す
+      - name: Upload QEMU logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -218,7 +218,7 @@ jobs:
       # 14 系とは整形結果が違う (この設定ファイル自体 14 で使えない項目を外してある)。
       # ローカル (Ubuntu 22.04 の 14.0.0) と揃えるため、pip の wheel で固定する。
       # Ubuntu 24.04 は PEP 668 で system 全体への pip install を拒むので venv に入れる。
-      - name: clang-format 14 を入れる
+      - name: Install clang-format 14
         run: |
           python3 -m venv .cfvenv
           ./.cfvenv/bin/pip install --quiet clang-format==14.0.6
@@ -226,7 +226,7 @@ jobs:
 
       # make format は find . なので build/ や未追跡ファイルまで拾う。
       # CI では git 管理下のソースだけを対象にする (対象の拡張子は make format と同じ)。
-      - name: 整形差分が無いか
+      - name: Check formatting
         run: |
           mapfile -d '' files < <(git ls-files -z -- '*.c' '*.cpp' '*.h' '*.hpp')
           echo "対象 ${#files[@]} ファイル"
@@ -242,7 +242,7 @@ jobs:
           echo "::error::clang-format の整形差分がある (make format を実行して commit してください)"
           exit 1
 
-      - name: 整形差分を残す
+      - name: Upload formatting diff
         if: failure()
         uses: actions/upload-artifact@v4
         with:
