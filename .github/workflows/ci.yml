@@ -1,0 +1,255 @@
+name: CI
+
+# ビルド (通常 / テスト入りの両方) と、テスト入り ISO の QEMU ヘッドレス実行。
+# ローカルの検証手順をそのまま CI に移したもの:
+#   1. make iso と make TESTS=1 iso を両方ビルドして、error と
+#      「ほぼ確実にバグ」な警告 (-Wreturn-type / -Wuninitialized) を弾く
+#   2. テスト入り ISO を QEMU で動かして、シリアル出力のマーカーと
+#      例外ログ (-d int,cpu_reset) を確認する
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+# 同じブランチへ連続 push したら古い実行は止める。
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash # 既定の bash -e と違い pipefail が付く (make 2>&1 | tee の rc を拾うため)
+
+jobs:
+  build:
+    name: build (kernel / tests)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      # grub-mkrescue は grub-common、BIOS 用モジュールは grub-pc-bin、
+      # ISO 作成に xorriso と mtools が必要。
+      # コンパイラは Makefile が CC = g++-13 で固定しているので、ランナー既定の
+      # g++ ではなくバージョン付きの g++-13 を入れる。こうしておけば、ランナー
+      # イメージの既定が将来 14 に変わっても CI と手元のビルドが食い違わない。
+      - name: Install toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            g++-13 binutils nasm grub-common grub-pc-bin xorriso mtools
+
+      - name: Show tool versions
+        run: |
+          g++-13 --version | head -1
+          nasm -v
+          grub-mkrescue --version
+
+      - name: Build kernel ISO (make iso)
+        run: make iso 2>&1 | tee build-kernel.log
+
+      - name: Build tests ISO (make TESTS=1 iso)
+        run: make TESTS=1 iso 2>&1 | tee build-tests.log
+
+      # "error:" だけを見ると fatal error: やリンクエラーを取りこぼす。
+      # -Wreturn-type / -Wuninitialized は Makefile 側で -Werror= 指定済みだが、
+      # 指定が外れたときに素通りしないよう、ここでも error と同じ扱いで弾く。
+      - name: Gate on build log
+        run: |
+          pattern='(fatal )?error:|undefined reference|\*\*\*|\[-Wreturn-type\]|\[-Wuninitialized\]'
+          if grep -nE "$pattern" build-kernel.log build-tests.log; then
+            echo "::error::ビルドログに error もしくは要注意の警告がある"
+            exit 1
+          fi
+          echo "ビルドログに error / 要注意の警告は無し"
+
+      - name: Check ISO artifacts exist
+        run: |
+          test -s unixv6.iso
+          test -s unixv6-tests.iso
+          ls -l unixv6.iso unixv6-tests.iso
+          size build/kernel/kernel.elf build/tests/kernel.elf
+
+      - name: Upload tests ISO for next job
+        uses: actions/upload-artifact@v4
+        with:
+          name: unixv6-tests-iso
+          path: unixv6-tests.iso
+          retention-days: 7
+
+      - name: Upload build logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs
+          path: build-*.log
+          retention-days: 7
+
+  qemu-tests:
+    name: qemu (tests ISO)
+    needs: build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4 # fs.img を Makefile のルールで作るため
+
+      - name: Install QEMU
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends qemu-system-x86
+          qemu-system-x86_64 --version | head -1
+
+      - name: Download tests ISO
+        uses: actions/download-artifact@v4
+        with:
+          name: unixv6-tests-iso
+
+      # fs.img は生成物。未フォーマットの状態から起動すると、カーネルが
+      # 自分で [FS] not formatted → format する (そこも含めて検証になる)。
+      - name: Create fs.img
+        run: |
+          make fs.img
+          ls -l fs.img
+
+      # カーネルは最後に hlt ループへ入って自分では終了しないので、
+      # 最終テストのマーカーが出た時点で QEMU を止める。
+      # ランナーに /dev/kvm は無いので TCG (エミュレーション) で動く。
+      - name: Run tests ISO in QEMU (headless)
+        run: |
+          timeout -s TERM 300 qemu-system-x86_64 \
+            -cdrom unixv6-tests.iso -boot d -m 256M \
+            -display none -no-reboot \
+            -serial file:serial.log \
+            -d int,cpu_reset -D qemu-int.log \
+            -drive file=fs.img,format=raw,if=none,id=disk0 \
+            -device virtio-blk-pci,drive=disk0,disable-modern=on &
+          qemu_pid=$!
+
+          for _ in $(seq 1 300); do
+            if grep -q 'restore original: OK' serial.log 2>/dev/null; then
+              echo "最終マーカーを検出"
+              break
+            fi
+            if ! kill -0 "$qemu_pid" 2>/dev/null; then
+              echo "QEMU が自分で終了した"
+              break
+            fi
+            sleep 1
+          done
+
+          kill "$qemu_pid" 2>/dev/null || true
+          wait "$qemu_pid" 2>/dev/null || true
+
+          echo '----- serial.log -----'
+          cat serial.log || true
+
+      - name: Check serial output
+        run: |
+          test -s serial.log || { echo "::error::serial.log が空 (起動していない)"; exit 1; }
+
+          # 各テストが「通ったときだけ出す」行。アドレスや pid は実行ごとに変わるので正規表現で。
+          required=(
+            '\[HIGH\] VGA via direct map OK'
+            '\[PMM\].*free\+realloc:.*OK'
+            '\[HEAP\].*reuse=OK'
+            '\[THREAD-B\] iteration 2'
+            'SEPARATED-OK'
+            'WOKE-OK'
+            '\[FORK\] parent: child [0-9]+ exited with code 42'
+            'FORK-OK'
+            '\[FREE\] destroy_address_space: OK'
+            '\[FREE\] fork\+wait loop: OK'
+            '\[BCACHE\] BufferRef leak test: OK'
+            '\[VIRTIO\] 1024 sequential reads: OK'
+            '\[VIRTIO\] write \+ read back: OK'
+            '\[VIRTIO\] restore original: OK'
+          )
+          missing=0
+          for re in "${required[@]}"; do
+            if grep -qE "$re" serial.log; then
+              echo "  OK      $re"
+            else
+              echo "::error::シリアル出力に出ていない: $re"
+              missing=1
+            fi
+          done
+
+          # 失敗を表す行 (NG / FAILED / ... failed / panic) が 1 行でもあれば落とす。
+          if grep -nE 'FAILED|[Ff]ailed|-NG|: NG|NG before=|[Pp]anic' serial.log; then
+            echo "::error::シリアル出力に失敗の行がある"
+            missing=1
+          fi
+
+          exit "$missing"
+
+      # v=00〜v=1f は CPU 例外。正常なら 1 つも出ない。
+      # CPU Reset は起動時の 2 回が正常 (3 回目以降はトリプルフォルト等)。
+      - name: Check CPU exception log
+        run: |
+          test -s qemu-int.log || { echo "::error::qemu-int.log が無い"; exit 1; }
+          exceptions=$(grep -cE 'v=[0-1][0-9a-f] ' qemu-int.log || true)
+          resets=$(grep -c 'CPU Reset' qemu-int.log || true)
+          echo "CPU 例外: ${exceptions} / CPU Reset: ${resets}"
+          rc=0
+          if [ "$exceptions" -ne 0 ]; then
+            grep -nE 'v=[0-1][0-9a-f] ' qemu-int.log | head -20
+            echo "::error::CPU 例外が ${exceptions} 件出ている"
+            rc=1
+          fi
+          if [ "$resets" -gt 2 ]; then
+            echo "::error::CPU Reset が ${resets} 回 (正常は起動時の 2 回)"
+            rc=1
+          fi
+          exit "$rc"
+
+      - name: Upload QEMU logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qemu-logs
+          path: |
+            serial.log
+            qemu-int.log
+          retention-days: 7
+
+  format:
+    name: format (clang-format 14)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      # ランナー既定の clang-format は 18 系で、.clang-format が前提にしている
+      # 14 系とは整形結果が違う (この設定ファイル自体 14 で使えない項目を外してある)。
+      # ローカル (Ubuntu 22.04 の 14.0.0) と揃えるため、pip の wheel で固定する。
+      # Ubuntu 24.04 は PEP 668 で system 全体への pip install を拒むので venv に入れる。
+      - name: Install clang-format 14
+        run: |
+          python3 -m venv .cfvenv
+          ./.cfvenv/bin/pip install --quiet clang-format==14.0.6
+          ./.cfvenv/bin/clang-format --version
+
+      # make format は find . なので build/ や未追跡ファイルまで拾う。
+      # CI では git 管理下のソースだけを対象にする (対象の拡張子は make format と同じ)。
+      - name: Check formatting
+        run: |
+          mapfile -d '' files < <(git ls-files -z -- '*.c' '*.cpp' '*.h' '*.hpp')
+          echo "対象 ${#files[@]} ファイル"
+          if ./.cfvenv/bin/clang-format --dry-run -Werror "${files[@]}"; then
+            echo "整形済み"
+            exit 0
+          fi
+          # 直し方が分かるように、実際に整形した差分を出して artifact にも残す。
+          ./.cfvenv/bin/clang-format -i "${files[@]}"
+          git diff > clang-format.diff
+          echo '----- 必要な整形差分 (git apply clang-format.diff で当てられる) -----'
+          cat clang-format.diff
+          echo "::error::clang-format の整形差分がある (make format を実行して commit してください)"
+          exit 1
+
+      - name: Upload formatting diff
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: clang-format-diff
+          path: clang-format.diff
+          retention-days: 7
+          if-no-files-found: ignore
