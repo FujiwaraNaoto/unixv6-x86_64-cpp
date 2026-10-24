@@ -24,21 +24,49 @@ extern "C" void fork_return();
 
 namespace process
 {
-static std::array<Process, MAX_PROCESSES> process_table_;
-static int next_pid_                      = 1;
-static Process *current_proc_             = nullptr;
-static ProcessContext *scheduler_context_ = nullptr;
-static heap::Heap *heap_ptr_              = nullptr;
-
-ProcessManager::ProcessManager(heap::Heap *heap_ptr)
+namespace
 {
-    for (size_t idx = 0; idx < process_table_.size(); ++idx)
+
+// Global state for managing processes.
+struct ProcessTable
+{
+    std::array<Process, MAX_PROCESSES> procs;
+    int next_pid     = 1;
+    heap::Heap *heap = nullptr;
+    bool initialized = false;
+};
+
+// State that each CPU must have its own copy of.
+// TODO: make this an array when going SMP.
+struct Cpu
+{
+    Process *current                  = nullptr;
+    ProcessContext *scheduler_context = nullptr;
+};
+
+ProcessTable ptable;
+Cpu cpu;
+
+} // namespace
+
+void initialize(heap::Heap &heap)
+{
+    // 2 回目の initialize() はプロセステーブルを黙って消して、走っているプロセスの
+    // スロットを Unused に戻してしまうので、進まずに止める。
+    if (ptable.initialized)
     {
-        process_table_[idx].state         = ProcessState::Unused;
-        process_table_[idx].sleep_channel = nullptr;
+        while (1)
+            asm volatile("hlt");
     }
-    current_proc_ = nullptr;
-    heap_ptr_     = heap_ptr;
+
+    for (Process &p : ptable.procs)
+    {
+        p.state         = ProcessState::Unused;
+        p.sleep_channel = nullptr;
+    }
+    cpu.current        = nullptr;
+    ptable.heap        = &heap;
+    ptable.initialized = true;
 }
 
 
@@ -46,7 +74,7 @@ ProcessManager::ProcessManager(heap::Heap *heap_ptr)
 // ProcessContext の rip に設定される
 static void trampoline()
 {
-    Process *proc = current_proc_;
+    Process *proc = cpu.current;
     if (proc && proc->entry)
     {
         proc->entry();
@@ -62,48 +90,47 @@ static void trampoline()
 
 static void schedule(Process *prev_proc)
 {
-    size_t start = prev_proc ? (prev_proc - &process_table_[0]) : -1;
-    for (size_t off = 1; off <= process_table_.size(); ++off)
+    size_t start = prev_proc ? (prev_proc - &ptable.procs[0]) : -1;
+    for (size_t off = 1; off <= ptable.procs.size(); ++off)
     {
-        int idx = (start + off) % process_table_.size();
-        if (process_table_[idx].state != ProcessState::Runnable)
+        int idx = (start + off) % ptable.procs.size();
+        if (ptable.procs[idx].state != ProcessState::Runnable)
             continue;
 
 
-        current_proc_        = &process_table_[idx];
-        current_proc_->state = ProcessState::Running;
+        cpu.current        = &ptable.procs[idx];
+        cpu.current->state = ProcessState::Running;
 
         // 選ばれたのが今動いていたプロセス自身なら切り替え不要。
         // ここで switch_context(&self->context, self->context) をやると
         // 既に破棄された古いコンテキストへ ret して暴走するため、そのまま続行する。
-        if (current_proc_ == prev_proc)
+        if (cpu.current == prev_proc)
             return;
 
-        if (current_proc_->pml4)
+        if (cpu.current->pml4)
         {
-            vmm::vmm_ptr->switch_address_space(current_proc_->pml4); // step1: CR3を子の空間へ
+            vmm::vmm_ptr->switch_address_space(cpu.current->pml4); // step1: CR3を子の空間へ
         }
 
         // step2: TSS.rsp0と syscall_kernel_rsp
         // set TSS's RSP0 to the top of the current process's kernel stack, so that when an interrupt occurs, the
         // CPU will switch to this stack.
-        gdt::set_kernel_stack(reinterpret_cast<uint64_t>(current_proc_->kernel_stack.top()));
+        gdt::set_kernel_stack(reinterpret_cast<uint64_t>(cpu.current->kernel_stack.top()));
 
         // prev がプロセスならそのコンテキストへ、kernel_main (スケジューラ) からの
-        // 呼び出しなら scheduler_context_ へ保存する。後者は Runnable が尽きたときの
+        // 呼び出しなら cpu.scheduler_context へ保存する。後者は Runnable が尽きたときの
         // 復帰先になる
-        ProcessContext **old_ctx = prev_proc ? &prev_proc->context
-                                             : reinterpret_cast<ProcessContext **>(&scheduler_context_);
+        ProcessContext **old_ctx = prev_proc ? &prev_proc->context : &cpu.scheduler_context;
 
         // step2: rspを子のフレームへ
-        switch_context(old_ctx, current_proc_->context);
+        switch_context(old_ctx, cpu.current->context);
         return;
     }
 
     if (prev_proc)
     {
-        current_proc_ = nullptr;
-        switch_context(&prev_proc->context, scheduler_context_);
+        cpu.current = nullptr;
+        switch_context(&prev_proc->context, cpu.scheduler_context);
     }
 }
 
@@ -114,7 +141,7 @@ static void schedule(Process *prev_proc)
 Process *allocate_process()
 {
     Process *proc = nullptr;
-    for (Process &p : process_table_)
+    for (Process &p : ptable.procs)
     {
         if (p.state == ProcessState::Unused)
         {
@@ -127,7 +154,7 @@ Process *allocate_process()
         return nullptr; // プロセステーブルが満杯
     }
 
-    proc->pid           = next_pid_++;
+    proc->pid           = ptable.next_pid++;
     proc->state         = ProcessState::Embryo;
     proc->parent        = nullptr;
     proc->sleep_channel = nullptr;
@@ -137,7 +164,7 @@ Process *allocate_process()
     proc->kernel_stack = KernelStack{};
     proc->pml4         = PhysicalAddress{};
 
-    void *stack = heap_ptr_->alloc(KERNEL_STACK_SIZE);
+    void *stack = ptable.heap->alloc(KERNEL_STACK_SIZE);
     if (stack == nullptr)
     {
         free_process_resources(proc);
@@ -197,14 +224,14 @@ Process *create_process(EntryPoint entry, const char *name)
 
 Process *current_process()
 {
-    return current_proc_;
+    return cpu.current;
 }
 
 
 // Switch to the next process in the “Runnable” state using round-robin scheduling
 void yield()
 {
-    Process *prev_proc = current_proc_;
+    Process *prev_proc = cpu.current;
     if (prev_proc && prev_proc->state == ProcessState::Running)
     {
         prev_proc->state = ProcessState::Runnable; // Running -> Runnable
@@ -221,7 +248,7 @@ void yield()
 //
 void sleep(void *chan)
 {
-    Process *p = current_proc_;
+    Process *p = cpu.current;
     if (!p)
         return; // カーネル初期文脈では sleep しない
     // lost wakeup 対策: 状態変更中は割り込みを止める
@@ -244,11 +271,11 @@ void sleep(void *chan)
 //
 void wakeup(void *chan)
 {
-    for (size_t i = 0; i < process_table_.size(); ++i)
+    for (size_t i = 0; i < ptable.procs.size(); ++i)
     {
-        if (process_table_[i].state == ProcessState::Sleeping && process_table_[i].sleep_channel == chan)
+        if (ptable.procs[i].state == ProcessState::Sleeping && ptable.procs[i].sleep_channel == chan)
         {
-            process_table_[i].state = ProcessState::Runnable;
+            ptable.procs[i].state = ProcessState::Runnable;
         }
     }
 }
@@ -256,34 +283,34 @@ void wakeup(void *chan)
 // zombie になったプロセスのコンテキストを破棄して、別プロセスへ切り替える。
 static void schedule_from_zombie(ProcessContext **discard_context)
 {
-    Process *prev_proc = current_proc_;
-    int start          = prev_proc ? (prev_proc - &process_table_[0]) : -1;
-    for (size_t off = 1; off <= process_table_.size(); ++off)
+    Process *prev_proc = cpu.current;
+    int start          = prev_proc ? (prev_proc - &ptable.procs[0]) : -1;
+    for (size_t off = 1; off <= ptable.procs.size(); ++off)
     {
-        int idx = (start + off) % process_table_.size();
-        if (process_table_[idx].state != ProcessState::Runnable)
+        int idx = (start + off) % ptable.procs.size();
+        if (ptable.procs[idx].state != ProcessState::Runnable)
             continue;
 
-        current_proc_        = &process_table_[idx];
-        current_proc_->state = ProcessState::Running;
-        if (current_proc_->pml4)
+        cpu.current        = &ptable.procs[idx];
+        cpu.current->state = ProcessState::Running;
+        if (cpu.current->pml4)
         {
-            vmm::vmm_ptr->switch_address_space(current_proc_->pml4);
+            vmm::vmm_ptr->switch_address_space(cpu.current->pml4);
         }
-        gdt::set_kernel_stack(reinterpret_cast<uint64_t>(current_proc_->kernel_stack.top()));
-        switch_context(discard_context, current_proc_->context);
+        gdt::set_kernel_stack(reinterpret_cast<uint64_t>(cpu.current->kernel_stack.top()));
+        switch_context(discard_context, cpu.current->context);
         return;
     }
 
     // Runnable なプロセスがない場合は、カーネル初期文脈に戻す
-    current_proc_ = nullptr;
-    switch_context(discard_context, scheduler_context_);
+    cpu.current = nullptr;
+    switch_context(discard_context, cpu.scheduler_context);
 }
 
 
 [[noreturn]] void exit(int status)
 {
-    Process *p = current_proc_;
+    Process *p = cpu.current;
     if (!p)
         return; // カーネル初期文脈では exit しない
 
@@ -324,7 +351,7 @@ void free_process_resources(Process *proc)
 {
     if (proc->kernel_stack)
     {
-        process::heap_ptr_->free(proc->kernel_stack.base);
+        ptable.heap->free(proc->kernel_stack.base);
         proc->kernel_stack = KernelStack{};
     }
 
@@ -342,15 +369,15 @@ void free_process_resources(Process *proc)
 
 std::optional<ProcessId> wait(int *exit_code_out)
 {
-    Process *p = current_proc_;
+    Process *p = cpu.current;
 
     while (1)
     {
         bool has_child = false;
 
-        for (size_t i = 0; i < process_table_.size(); ++i)
+        for (size_t i = 0; i < ptable.procs.size(); ++i)
         {
-            Process *child = &process_table_[i];
+            Process *child = &ptable.procs[i];
             // 未使用のスロットは子ではない。fork が途中で失敗した場合、state だけ Unused に
             // 戻されて parent が残るので、ここで弾かないと「居ない子」を待って永久に寝る。
             if (child->state == ProcessState::Unused)
@@ -509,12 +536,12 @@ int fork_kernel(Process *parent, Process *child, uint8_t *child_stack)
     uint64_t caller_rsp = fork_capture(&snap);
 
     // ★ fork_capture() は setjmp と同じく 2 回戻ってくる。
-    //   1 回目: 親が普通に戻る。current_proc_ == parent なので素通りする。
+    //   1 回目: 親が普通に戻る。cpu.current == parent なので素通りする。
     //   2 回目: 子がスケジュールされ、switch_context の ret でここに着地する。
     //           リング0のまま、複製したスタックの上で動いている。
-    //           yield() が先に current_proc_ = child にしているので 0 を返し、
+    //           yield() が先に cpu.current = child にしているので 0 を返し、
     //           あとは複製された fork() のフレームを通って呼び出し元へ戻っていく。
-    if (current_proc_ == child)
+    if (cpu.current == child)
     {
         return 0; // 子: fork() は 0 を返す
     }
@@ -535,7 +562,7 @@ int fork_kernel(Process *parent, Process *child, uint8_t *child_stack)
 
 int fork()
 {
-    Process *parent = current_proc_;
+    Process *parent = cpu.current;
     if (!parent)
     {
         return -1; // カーネル初期文脈では fork しない

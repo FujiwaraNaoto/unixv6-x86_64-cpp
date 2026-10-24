@@ -115,7 +115,7 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, uint32_t mb_addr
     static uint8_t kernel_stack[8192]; // 8KB のカーネルスタック
     gdt::set_kernel_stack(reinterpret_cast<uint64_t>(kernel_stack + sizeof(kernel_stack)));
 
-    process::ProcessManager process_manager(heap::heap_ptr);
+    process::initialize(heap_instance);
 
     // 仮想 → 物理の変換方法はカーネル側の関心事なので、ドライバには関数として渡す。
     // (キャプチャなしラムダは関数ポインタへ暗黙変換される)

@@ -62,7 +62,7 @@ struct BlockDevice
 // コンストラクタが従来の initialize() 相当 (LRU リストの構築とデバイスの登録) を
 // 行う。状態自体は buffer_cache.cpp のモジュール内 static が持ち、acquire() /
 // release() などはフリー関数としてそれを操作する
-// (process::ProcessManager と同じ形)。
+// (process.cpp と同じ形)。
 //
 // 実体は 1 バイトの空クラスで、15.9KiB のバッファ配列は .bss に置いたままなので
 // スタックに置いて構わない。インスタンスは以降の全アクセスより長生きさせること。
