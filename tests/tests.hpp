@@ -30,9 +30,9 @@ bool pmm_alloc_free(IConsole *console);
 // ヒープ: sbrk によるページ拡張と alloc/free のブロック再利用を確認する。
 bool heap_sbrk_alloc(IConsole *console);
 
-// 例外: 意図的に 0 除算 (#DE) を起こして isr_common_handler を確認する。
-// NOTE: ハンドラが復帰しない実装なら、以降のテストには進まない。
-void division_by_zero(IConsole *console);
+// 例外: IDT の 0 番が isr_stub_0 を指していることと、0 除算で #DE が起きることを確認する。
+// 本番のハンドラは戻らないので、テストの間だけ IDT の 0 番をテスト用ハンドラに差し替える。
+bool division_by_zero(IConsole *console);
 
 // スケジューラ: 2 スレッドが yield で協調的に切り替わることを確認する。
 bool scheduler_yield(IConsole *console);
@@ -53,9 +53,9 @@ bool fork_from_ring3(IConsole *console);
 bool process_free(IConsole *console);
 
 
-// リング3: ユーザーページへ遷移し、syscall で write/exit を呼ぶ。
-// NOTE: usermode::enter() は戻らないため、このテストからは復帰しない。
-[[noreturn]] void usermode_ring3(IConsole *console);
+// リング3: プロセスからユーザーページへ遷移し、syscall で write/exit を呼ぶ。
+// syscall をまたいで callee-saved レジスタが保たれるかも確認する。
+bool usermode_ring3(IConsole *console);
 
 // キーボード: 入力をそのままエコーする。無限ループなので戻らない。
 [[noreturn]] void keyboard_echo(IConsole *console);

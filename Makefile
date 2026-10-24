@@ -47,8 +47,8 @@ endif
 # run_all() に入れられない「呼ぶと戻ってこない」テスト を 1 つだけ走らせるための構成。
 # tests.cpp を書き換えずに起動できるので、手元と CI で同じ手順になる。
 #
-#   make ONLY=division_by_zero tests   … そのテストだけ入った ISO を起動
-#   make ONLY=usermode_ring3 iso       … ISO を作るだけ
+#   make ONLY=keyboard_echo tests      … そのテストだけ入った ISO を起動
+#   make ONLY=keyboard_echo iso        … ISO を作るだけ
 #
 # ONLY を付けた時点でテスト入りビルドになるので TESTS=1 は不要。出力先と ISO 名も
 # テストごとに分かれるため、通常構成やテスト構成と .o が混ざらない。
