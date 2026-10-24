@@ -4,7 +4,6 @@
 #include <array>
 #include <cstdint>
 #include <cstddef>
-#include <functional>
 #include "block_store.hpp"
 
 // ─── バッファキャッシュ層 ────────────────────────────────────────
@@ -38,24 +37,28 @@ namespace BufferCache
 // 下位のブロックデバイス。特定のドライバに依存しないよう関数で受け取る。
 // (VirtIOBlock::read_block / write_block をそのまま渡せる形にしてある)
 //
-// 生の関数ポインタではなく std::function にしてあるのは、テストから状態を持つ
-// 偽デバイス (RAM ディスク等) を差し込めるようにするため。実 virtio-blk 無しで
-// ヒット率や eviction を検証できる。
+// std::function ではなく関数ポインタにしている理由 (process.hpp の EntryPoint と同じ):
+//   1. std::function はキャプチャが 16 バイト (libstdc++ の内部バッファ) を超えると
+//      operator new でヒープから確保するが、このカーネルには実体が無く
+//      リンクエラーになる。
+//   2. g++ 13 以降の libstdc++ は、そもそも <functional> の中身を
+//      #if _GLIBCXX_HOSTED で囲っている。-ffreestanding では __STDC_HOSTED__ == 0
+//      なので std::function は宣言されず、「does not name a template type」になる。
+//      (_GLIBCXX_HOSTED は c++config.h が定義し直すので -D では上書きできない)
 //
-//   uint8_t disk[NBLOCK][BLOCK_SIZE];
+// テストから状態を持つ偽デバイス (RAM ディスク等) を差し込むことは、関数ポインタでも
+// 変わらずできる。状態は TU 内の static に置き、キャプチャ無しのラムダを渡す
+// (キャプチャ有りのラムダは関数ポインタへ変換できない)。
+//
+//   static uint8_t disk[NBLOCK][BLOCK_SIZE];
 //   BufferCache::BlockDevice{
-//       .read_block = [&disk](uint64_t n, uint8_t *dst) { ... },
+//       .read_block = [](uint64_t n, uint8_t *dst) { ... disk[n] ... },
 //       ...
 //   }
-//
-// 注意: キャプチャは 16 バイト以内に収めること。これを超えると std::function が
-//       グローバル operator new を要求するが、このカーネルには実体が無く
-//       リンクエラーになる (crt_stubs.cpp の operator delete も空実装のまま)。
-//       配列そのものではなくポインタや参照 1 個をキャプチャすれば足りる。
 struct BlockDevice
 {
-    std::function<bool(uint64_t blockno, uint8_t *buffer)> read_block;
-    std::function<bool(uint64_t blockno, const uint8_t *buffer)> write_block;
+    bool (*read_block)(uint64_t blockno, uint8_t *buffer);
+    bool (*write_block)(uint64_t blockno, const uint8_t *buffer);
 };
 
 // バッファキャッシュの初期化 (LRU リストの構築とデバイスの登録)。
