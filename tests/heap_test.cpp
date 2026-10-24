@@ -6,7 +6,7 @@
 namespace tests
 {
 
-void heap_sbrk_alloc(IConsole *console)
+bool heap_sbrk_alloc(IConsole *console)
 {
     auto *heap = heap::heap_ptr;
 
@@ -35,6 +35,8 @@ void heap_sbrk_alloc(IConsole *console)
                     reinterpret_cast<uintptr_t>(p3),
                     reinterpret_cast<uintptr_t>(p4),
                     p4 == p2 ? "OK" : "MISMATCH");
+
+    return p4 == p2;
 }
 
 } // namespace tests

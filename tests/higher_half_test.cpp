@@ -4,7 +4,7 @@
 namespace tests
 {
 
-void higher_half_check(IConsole *console)
+bool higher_half_check(IConsole *console)
 {
     uint64_t rip;
     asm volatile("lea (%%rip), %0" : "=r"(rip));
@@ -19,6 +19,8 @@ void higher_half_check(IConsole *console)
     console->puts("[HIGH] ");
     console->set_color(Color::LightGrey, Color::Black);
     console->puts("VGA via direct map OK\n");
+
+    return rip >= 0xFFFFFFFF80000000ULL;
 }
 
 } // namespace tests

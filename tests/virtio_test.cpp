@@ -48,12 +48,13 @@ void hexdump(IConsole *console, const uint8_t *data, size_t size)
 constexpr size_t SECTOR_BYTES = 512;
 
 // "[VIRTIO] <name>: OK" / "FAILED" を 1 行で表示する
-void report(IConsole *console, const char *name, bool ok)
+bool report(IConsole *console, const char *name, bool ok)
 {
     console->set_color(ok ? Color::LightGreen : Color::LightRed, Color::Black);
     console->puts("[VIRTIO] ");
     console->set_color(Color::LightGrey, Color::Black);
     console->printf("%s: %s\n", name, ok ? "OK" : "FAILED");
+    return ok;
 }
 
 // 2 つのセクタの中身が同じか。
@@ -70,7 +71,7 @@ bool same_sector(const std::array<uint8_t, SECTOR_BYTES> &a, const std::array<ui
 
 } // namespace
 
-void virtio_block_read(IConsole *console)
+bool virtio_block_read(IConsole *console)
 {
     // 仮想 → 物理の変換方法はカーネル側の関心事なので、ドライバには関数として渡す。
     // (キャプチャなしラムダは関数ポインタへ暗黙変換される)
@@ -89,7 +90,7 @@ void virtio_block_read(IConsole *console)
         console->set_color(Color::LightRed, Color::Black);
         console->puts("[VIRTIO] VirtIO Block Device initialization failed\n");
         console->set_color(Color::LightGrey, Color::Black);
-        return;
+        return false;
     }
 
     console->set_color(Color::LightGreen, Color::Black);
@@ -97,7 +98,8 @@ void virtio_block_read(IConsole *console)
     console->set_color(Color::LightGrey, Color::Black);
 
     static std::array<uint8_t, 512> buffer;
-    if (VirtIOBlock::read_block(0, buffer.data()))
+    const bool read0_ok = VirtIOBlock::read_block(0, buffer.data());
+    if (read0_ok)
     {
         console->set_color(Color::LightGreen, Color::Black);
         console->puts("[VIRTIO] Read block 0 successfully\n");
@@ -155,6 +157,10 @@ void virtio_block_read(IConsole *console)
         console->puts("[BCACHE] ");
         console->set_color(Color::LightGrey, Color::Black);
         console->printf("BufferRef leak test: %s\n", no_leak ? "OK" : "LEAKED");
+        if (!no_leak)
+        {
+            return false;
+        }
 
         const BufferCache::Statistics stats = BufferCache::statistics();
         console->set_color(Color::LightGreen, Color::Black);
@@ -171,16 +177,18 @@ void virtio_block_read(IConsole *console)
         console->set_color(Color::LightRed, Color::Black);
         console->puts("[BCACHE] acquire(0) failed\n");
         console->set_color(Color::LightGrey, Color::Black);
+        return false;
     }
+
+    return read0_ok;
 }
 
-void virtio_block_read_write(IConsole *console)
+bool virtio_block_read_write(IConsole *console)
 {
     const uint64_t capacity = VirtIOBlock::capacity();
     if (capacity == 0)
     {
-        report(console, "read/write test (device not initialized)", false);
-        return;
+        return report(console, "read/write test (device not initialized)", false);
     }
 
     // 1. 連続した読み込み
@@ -211,8 +219,7 @@ void virtio_block_read_write(IConsole *console)
 
     if (!VirtIOBlock::read_block(sector, original.data()))
     {
-        report(console, "read last sector", false);
-        return;
+        return report(console, "read last sector", false);
     }
 
     // 元の中身と必ず違う値にする (同じだと書き込めていなくても一致してしまう)
@@ -231,6 +238,8 @@ void virtio_block_read_write(IConsole *console)
     const bool restore_ok = VirtIOBlock::write_block(sector, original.data()) &&
                             VirtIOBlock::read_block(sector, readback.data()) && same_sector(readback, original);
     report(console, "restore original", restore_ok);
+
+    return reads_ok && write_ok && restore_ok;
 }
 
 } // namespace tests

@@ -11,6 +11,9 @@ namespace
 // (fork した子もカーネル空間を共有しているので、同じポインタをそのまま使える)
 IConsole *thread_console = nullptr;
 
+// 親スレッドが子の終了コードを回収できたか (テスト関数は yield から戻った後に見る)
+volatile bool child_collected = false;
+
 // fork/exit/wait デモ用スレッド
 void parent_thread()
 {
@@ -42,6 +45,7 @@ void parent_thread()
             thread_console->printf("[FORK] parent: child %u exited with code %u\n",
                                    (unsigned)wpid->value,
                                    (unsigned)code);
+            child_collected = (wpid->value == static_cast<uint64_t>(pid) && code == 42);
         }
         else
         {
@@ -53,12 +57,17 @@ void parent_thread()
 
 } // namespace
 
-void fork_wait(IConsole *console)
+bool fork_wait(IConsole *console)
 {
     thread_console = console;
 
-    process::create_process(parent_thread, "parent");
+    if (process::create_process(parent_thread, "parent") == nullptr)
+    {
+        return false;
+    }
     process::yield();
+
+    return child_collected;
 }
 
 } // namespace tests

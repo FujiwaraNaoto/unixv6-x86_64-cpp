@@ -43,7 +43,7 @@ void waker_thread()
 
 } // namespace
 
-void sleep_wakeup(IConsole *console)
+bool sleep_wakeup(IConsole *console)
 {
     thread_console = console;
 
@@ -55,6 +55,8 @@ void sleep_wakeup(IConsole *console)
     console->puts("[SLEEP] ");
     console->set_color(Color::LightGrey, Color::Black);
     console->printf("result: sleeper %s\n", sleeper_woke ? "WOKE-OK" : "STILL-SLEEPING-FAIL");
+
+    return sleeper_woke;
 }
 
 } // namespace tests
