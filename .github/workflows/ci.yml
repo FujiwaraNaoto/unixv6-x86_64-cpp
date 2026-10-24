@@ -57,24 +57,37 @@ jobs:
       - name: Gate on build log
         run: |
           pattern='(fatal )?error:|undefined reference|\*\*\*|\[-Wreturn-type\]|\[-Wuninitialized\]'
-          if grep -nE "$pattern" build-kernel.log build-tests.log; then
+          if grep -nE "$pattern" build-*.log; then
             echo "::error::ビルドログに error もしくは要注意の警告がある"
             exit 1
           fi
           echo "ビルドログに error / 要注意の警告は無し"
 
+      # run_all() に入れられない「呼ぶと戻ってこない」テストは、ONLY=<テスト名> で
+      # そのテストだけ入った ISO を作って個別に起動する (Makefile の ONLY 構成)。
+      - name: Build single-test ISOs (make ONLY=...)
+        run: |
+          for t in division_by_zero usermode_ring3; do
+            make ONLY="$t" iso 2>&1 | tee -a build-single.log
+          done
+
       - name: Check ISO artifacts exist
         run: |
           test -s unixv6.iso
           test -s unixv6-tests.iso
-          ls -l unixv6.iso unixv6-tests.iso
+          test -s unixv6-tests-division_by_zero.iso
+          test -s unixv6-tests-usermode_ring3.iso
+          ls -l unixv6*.iso
           size build/kernel/kernel.elf build/tests/kernel.elf
 
-      - name: Upload tests ISO for next job
+      - name: Upload tests ISOs for next jobs
         uses: actions/upload-artifact@v4
         with:
           name: unixv6-tests-iso
-          path: unixv6-tests.iso
+          path: |
+            unixv6-tests.iso
+            unixv6-tests-division_by_zero.iso
+            unixv6-tests-usermode_ring3.iso
           retention-days: 7
 
       - name: Upload build logs
@@ -206,6 +219,135 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: qemu-logs
+          path: |
+            serial.log
+            qemu-int.log
+          retention-days: 7
+
+  qemu-single-tests:
+    name: qemu (${{ matrix.test }})
+    needs: build
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false # 片方が落ちても、もう片方の結果は知りたい
+      matrix:
+        include:
+          # 待ち受けるマーカーと判定基準はテストごとに違う (下の Check で分岐)。
+          - test: division_by_zero
+            wait: 'Division By Zero'
+          - test: usermode_ring3
+            wait: 'REG-OK'
+    steps:
+      - uses: actions/checkout@v4 # fs.img を Makefile のルールで作るため
+
+      - name: Install QEMU
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends qemu-system-x86
+
+      - name: Download tests ISOs
+        uses: actions/download-artifact@v4
+        with:
+          name: unixv6-tests-iso
+
+      - name: Create fs.img
+        run: make fs.img # カーネルは起動時に virtio-blk とファイルシステムを初期化する
+
+      # これらのテストは戻ってこない (ハンドラや usermode::enter() で止まる) ので、
+      # 目印が出た時点で QEMU を止める。通常テストと同じ作りにしてある。
+      - name: Run ${{ matrix.test }} in QEMU (headless)
+        run: |
+          timeout -s TERM 300 qemu-system-x86_64 \
+            -cdrom "unixv6-tests-${{ matrix.test }}.iso" -boot d -m 256M \
+            -display none -no-reboot \
+            -serial file:serial.log \
+            -d int,cpu_reset -D qemu-int.log \
+            -drive file=fs.img,format=raw,if=none,id=disk0 \
+            -device virtio-blk-pci,drive=disk0,disable-modern=on &
+          qemu_pid=$!
+
+          for _ in $(seq 1 300); do
+            if grep -qF '${{ matrix.wait }}' serial.log 2>/dev/null; then
+              echo "マーカーを検出"
+              break
+            fi
+            if ! kill -0 "$qemu_pid" 2>/dev/null; then
+              echo "QEMU が自分で終了した"
+              break
+            fi
+            sleep 1
+          done
+
+          kill "$qemu_pid" 2>/dev/null || true
+          wait "$qemu_pid" 2>/dev/null || true
+
+          echo '----- serial.log -----'
+          cat serial.log || true
+
+      - name: Check ${{ matrix.test }}
+        run: |
+          test -s serial.log || { echo "::error::serial.log が空 (起動していない)"; exit 1; }
+          rc=0
+          exceptions=$(grep -cE 'v=[0-1][0-9a-f] ' qemu-int.log || true)
+          de=$(grep -cE 'v=00 ' qemu-int.log || true)
+          resets=$(grep -c 'CPU Reset' qemu-int.log || true)
+          echo "CPU 例外: ${exceptions} (うち #DE: ${de}) / CPU Reset: ${resets}"
+
+          case '${{ matrix.test }}' in
+            division_by_zero)
+              # 0 除算を起こして isr_common_handler が走ることの確認なので、
+              # #DE が「1 件だけ」起きるのが正常。例外が 0 件なら、div 命令が
+              # 最適化で消えてテストが空振りしている (g++ 13 で実際に起きた)。
+              if ! grep -qF '**Exception **: Division By Zero' serial.log; then
+                echo "::error::ハンドラの表示 (**Exception **: Division By Zero) が出ていない"
+                rc=1
+              fi
+              if ! grep -q 'INT=0' serial.log; then
+                echo "::error::ハンドラが受けた割り込み番号が 0 ではない"
+                rc=1
+              fi
+              if [ "$de" -ne 1 ]; then
+                echo "::error::#DE が ${de} 件 (正常は 1 件。0 件なら div 命令が消えている)"
+                rc=1
+              fi
+              if [ "$exceptions" -ne "$de" ]; then
+                echo "::error::#DE 以外の CPU 例外が出ている"
+                rc=1
+              fi
+              ;;
+            usermode_ring3)
+              # リング3へ降りて syscall で write/exit できることの確認。
+              # REG-NG はリング3往復でレジスタが壊れている場合に出る。
+              if ! grep -qF 'REG-OK' serial.log; then
+                echo "::error::REG-OK が出ていない"
+                rc=1
+              fi
+              if grep -qF 'REG-NG' serial.log; then
+                echo "::error::REG-NG (リング3往復でレジスタが保存されていない)"
+                rc=1
+              fi
+              if ! grep -q 'exit(0) called' serial.log; then
+                echo "::error::exit システムコールが呼ばれていない"
+                rc=1
+              fi
+              if [ "$exceptions" -ne 0 ]; then
+                echo "::error::CPU 例外が ${exceptions} 件出ている"
+                rc=1
+              fi
+              ;;
+          esac
+
+          if [ "$resets" -gt 2 ]; then
+            echo "::error::CPU Reset が ${resets} 回 (正常は起動時の 2 回)"
+            rc=1
+          fi
+          exit "$rc"
+
+      - name: Upload QEMU logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qemu-logs-${{ matrix.test }}
           path: |
             serial.log
             qemu-int.log
