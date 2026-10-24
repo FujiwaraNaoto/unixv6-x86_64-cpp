@@ -3,14 +3,6 @@
 #include <cstdint>
 #include <cstring>
 
-// file_system.hpp で extern 宣言している変数の実体。
-// Manager のコンストラクタが差し替え、各関数はここから読む。
-namespace FileSystem
-{
-IBlockStore *block_store = nullptr;
-IConsole *console        = nullptr;
-} // namespace FileSystem
-
 namespace
 {
 using FileSystem::internal::bitmap_block;
@@ -33,7 +25,7 @@ bool add_root_entry(DiskInode &root, uint32_t inum, const char *name)
         root.addrs[0] = root_address;
     }
 
-    auto block = FileSystem::block_store->acquire(root_address);
+    auto block = FileSystem::internal::fs.block_store->acquire(root_address);
     if (!block)
         return false;
 
@@ -95,7 +87,7 @@ bool format(uint32_t total_blocks, IConsole *console)
 
     // write superblock to block 1. 0 is boot block, so skip it.
     {
-        auto block = FileSystem::block_store->acquire(1); // superblock
+        auto block = FileSystem::internal::fs.block_store->acquire(1); // superblock
         if (!block)
             return false;
         std::memset(block.data(), 0, FSBLOCK_SIZE);
@@ -136,8 +128,8 @@ namespace FileSystem
 
 bool initialize(uint32_t total_blocks, IBlockStore *block_store, IConsole *console)
 {
-    FileSystem::block_store = block_store ? block_store : null_block_store;
-    FileSystem::console     = console ? console : null_console;
+    FileSystem::internal::fs.block_store = block_store ? block_store : null_block_store;
+    FileSystem::internal::fs.console     = console ? console : null_console;
 
     if (internal::load_superblock())
     {
@@ -145,7 +137,7 @@ bool initialize(uint32_t total_blocks, IBlockStore *block_store, IConsole *conso
     }
 
     // if the magic number is not matched, the disk is not formatted yet. format it.
-    FileSystem::console->puts("[FS]   not formatted, creating filesystem...\n");
+    FileSystem::internal::fs.console->puts("[FS]   not formatted, creating filesystem...\n");
 
     if (!format(total_blocks, console))
     {
@@ -160,7 +152,7 @@ std::optional<uint32_t> allocate_block()
 
     for (uint32_t base = 0; base < superblock.size; base += BLOCKS_PER_BITMAP_BLOCK)
     {
-        auto block = FileSystem::block_store->acquire(bitmap_block(base));
+        auto block = FileSystem::internal::fs.block_store->acquire(bitmap_block(base));
         if (!block)
             return std::nullopt;
         auto *bitmap = block.data();
@@ -191,7 +183,7 @@ std::optional<uint32_t> allocate_block()
 
 void free_block(uint32_t blockno)
 {
-    auto block = block_store->acquire(bitmap_block(blockno));
+    auto block = FileSystem::internal::fs.block_store->acquire(bitmap_block(blockno));
     if (!block)
     {
         return;

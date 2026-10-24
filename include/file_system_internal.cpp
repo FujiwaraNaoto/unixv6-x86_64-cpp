@@ -1,21 +1,16 @@
 #include "file_system_internal.hpp"
 #include <cstring>
 
-namespace FileSystem
+namespace FileSystem::internal
 {
-extern IBlockStore *block_store;
-extern IConsole *console;
-} // namespace FileSystem
+State fs;
+} // namespace FileSystem::internal
 
 namespace
 {
-// メモリ上のスーパーブロック。file_system.cpp からは mutable_superblock() 経由で使う。
-SuperBlock superblock_state;
-
-
 uint32_t inode_block(uint32_t inum)
 {
-    return superblock_state.inode_start + inum / INODES_PER_BLOCK;
+    return FileSystem::internal::fs.superblock.inode_start + inum / INODES_PER_BLOCK;
 }
 
 
@@ -36,24 +31,24 @@ namespace FileSystem::internal
 {
 uint32_t bitmap_block(uint32_t blockno)
 {
-    return superblock_state.bitmap_start + blockno / BLOCKS_PER_BITMAP_BLOCK;
+    return fs.superblock.bitmap_start + blockno / BLOCKS_PER_BITMAP_BLOCK;
 }
 
 SuperBlock &mutable_superblock()
 {
-    return superblock_state;
+    return fs.superblock;
 }
 bool load_superblock()
 {
-    auto block = block_store->acquire(1); // superblock
+    auto block = fs.block_store->acquire(1); // superblock
     if (!block)
         return false;
-    superblock_state = *reinterpret_cast<const SuperBlock *>(block.data());
-    return superblock_state.magic == FS_MAGIC;
+    fs.superblock = *reinterpret_cast<const SuperBlock *>(block.data());
+    return fs.superblock.magic == FS_MAGIC;
 }
 bool zero_block(uint32_t blockno)
 {
-    auto block = block_store->acquire(blockno);
+    auto block = fs.block_store->acquire(blockno);
     if (!block)
         return false;
     std::memset(block.data(), 0, FSBLOCK_SIZE);
@@ -61,7 +56,7 @@ bool zero_block(uint32_t blockno)
 }
 bool mark_block_used(uint32_t blockno)
 {
-    auto block = block_store->acquire(bitmap_block(blockno));
+    auto block = fs.block_store->acquire(bitmap_block(blockno));
     if (!block)
         return false;
     uint32_t bit_index  = blockno % BLOCKS_PER_BITMAP_BLOCK;
@@ -72,7 +67,7 @@ bool mark_block_used(uint32_t blockno)
 }
 bool write_inode(uint32_t inum, const DiskInode &inode)
 {
-    auto block = block_store->acquire(inode_block(inum));
+    auto block = fs.block_store->acquire(inode_block(inum));
     if (!block)
         return false;
     auto *entries                    = reinterpret_cast<DiskInode *>(block.data());
@@ -82,7 +77,7 @@ bool write_inode(uint32_t inum, const DiskInode &inode)
 
 std::optional<DiskInode> read_inode(uint32_t inum)
 {
-    auto block = block_store->acquire(inode_block(inum));
+    auto block = fs.block_store->acquire(inode_block(inum));
     if (!block)
         return std::nullopt;
     auto *entries = reinterpret_cast<DiskInode *>(block.data());

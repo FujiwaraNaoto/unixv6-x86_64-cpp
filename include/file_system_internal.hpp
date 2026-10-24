@@ -8,6 +8,19 @@
 // 外部からは file_system.hpp の const アクセサだけを見せる。
 namespace FileSystem::internal
 {
+
+struct State
+{
+    // 下のブロック記憶域。initialize() が設定する差し替えの境目。
+    // nullptr のまま使われないよう、既定は何もしない null_block_store。
+    IBlockStore *block_store = nullptr;
+    IConsole *console        = nullptr; // ログ出力先
+    SuperBlock superblock{};            // メモリ上のスーパーブロック
+};
+
+// 実体は file_system_internal.cpp。すべてゼロなので .bss に置かれる。
+extern State fs;
+
 SuperBlock &mutable_superblock();
 bool load_superblock();
 // ビットマップのうち、blockno のビットが入っているブロック番号
