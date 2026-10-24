@@ -163,7 +163,7 @@ class BufferRef final
 
 // read() の RAII 版。失敗時は空の BufferRef (operator bool が false) を返す。
 //
-// NOTE: Buffer を直接触る低レベル側の口。上位層は block_store() 経由の BlockRef を
+// NOTE: Buffer を直接触る低レベル側の口。上位層は BlockStore 経由の BlockRef を
 //       使うので、今これを使っているのはキャッシュ自体を調べる tests/virtio_test.cpp
 //       だけ。
 BufferRef acquire(uint32_t blockno);
@@ -182,12 +182,6 @@ class BlockStore final : public IBlockStore
     bool write_back(uint32_t blockno) override;
     void release(uint32_t blockno) override;
 };
-
-// 実体は kernel_main が作り、ファイルシステムへ注入する。状態を持たないので、
-// どのインスタンスも同じキャッシュと同じデバイスを指す。
-//
-// ファイルシステム側は IBlockStore を注入で受け取るので、テストでは偽の
-// IBlockStore (RAM ディスク等) を渡して BufferCache 無しで動かせる。
 
 
 // キャッシュの効き具合を確認するための統計。
