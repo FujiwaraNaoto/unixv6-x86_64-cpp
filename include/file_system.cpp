@@ -99,8 +99,11 @@ bool format(uint32_t total_blocks, IConsole *console)
 
     DiskInode root_inode{
         .type  = InodeType::kDirectory,
+        .major = 0,
+        .minor = 0,
         .nlink = 1,
         .size  = 0,
+        .addrs = {},
     };
 
     if (!add_root_entry(root_inode, ROOT_INODE, "."))
