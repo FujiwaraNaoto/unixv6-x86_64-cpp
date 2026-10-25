@@ -312,7 +312,12 @@ static void schedule_from_zombie(ProcessContext **discard_context)
 {
     Process *p = cpu.current;
     if (!p)
-        return; // カーネル初期文脈では exit しない
+    {
+        // カーネル初期文脈から exit() されるのは呼び出し側のバグ。
+        // noreturn なので return はできない (呼び出し側は後ろのコードが無い前提で最適化される)
+        while (1)
+            asm volatile("cli; hlt");
+    }
 
     asm volatile("cli"); // 状態変更中は割り込みを止める
 

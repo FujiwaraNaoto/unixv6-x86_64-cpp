@@ -45,8 +45,8 @@ enum class Icw4 : uint8_t
     SpecialFullyNested = 0x10, // 多段カスケード用。2 個構成では不要
 };
 
-void enable_bitmask_enum(Icw1);
-void enable_bitmask_enum(Icw4);
+void enable_bitmask_enum(Icw1) { }
+[[maybe_unused]] void enable_bitmask_enum(Icw4) { }
 
 // ICW3: カスケードの結線を伝える。マスタとスレーブで値の意味が違う。
 //   マスタ  : スレーブが繋がっている IRQ 線のビットマスク

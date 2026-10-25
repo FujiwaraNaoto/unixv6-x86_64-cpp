@@ -51,7 +51,7 @@ bool add_root_entry(DiskInode &root, uint32_t inum, const char *name)
 }
 
 
-bool format(uint32_t total_blocks, IConsole *console)
+bool format(uint32_t total_blocks)
 {
     SuperBlock &superblock_state  = FileSystem::internal::mutable_superblock();
     constexpr uint32_t NUM_INODES = 200; // 適当な値。xv6 は 200 で固定している。
@@ -99,8 +99,11 @@ bool format(uint32_t total_blocks, IConsole *console)
 
     DiskInode root_inode{
         .type  = InodeType::kDirectory,
+        .major = 0,
+        .minor = 0,
         .nlink = 1,
         .size  = 0,
+        .addrs = {},
     };
 
     if (!add_root_entry(root_inode, ROOT_INODE, "."))
@@ -139,7 +142,7 @@ bool initialize(uint32_t total_blocks, IBlockStore *block_store, IConsole *conso
     // if the magic number is not matched, the disk is not formatted yet. format it.
     FileSystem::internal::fs.console->puts("[FS]   not formatted, creating filesystem...\n");
 
-    if (!format(total_blocks, console))
+    if (!format(total_blocks))
     {
         return false;
     }
