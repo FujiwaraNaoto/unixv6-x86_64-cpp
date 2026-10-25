@@ -190,19 +190,6 @@ GDT にユーザーセグメントと TSS を足し、`TSS.RSP0` を設定して
   未フォーマットなら自分でフォーマットする。`allocate_block()` / `free_block()` はビットマップで管理。
   ファイルシステムはブロックの読み書きを `IBlockStore` 越しに行うので、テストでは偽物に差し替えられる
 
-ブランチ上にあって `main` には入っていないもの:
-
-- `feature/create-inode` — inode 層 (`allocate_inode` / `get_inode` / `put_inode` / `block_map` /
-  `read_inode` / `write_inode`) とディレクトリ・path 解決 (`lookup_directory` / `link_directory` /
-  `resolve_path` / `resolve_parent`)。xv6 の略記ではなく説明的な名前にしている
-
-これからやること:
-
-- inode 層とディレクトリを `main` に取り込む
-- `File` 構造体とプロセスごとのファイルディスクリプタ表を作り、`open` / `read` / `write` / `close` を
-  システムコールに接続する (2026-10-24 時点の `read` / `write` はコンソール直結)
-- init プロセス (pid 1) を作り、孤児を引き取らせる
-
 ### phase9: シェル
 
 未着手。`exec` を作って、キーボード入力からコマンドを起動する最小の `sh` を動かすのが目標。
