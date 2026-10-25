@@ -248,6 +248,12 @@ bool initialize(PhysicalAddressResolver resolve_physical)
     // The subset of Device Feature Bits understood by the driver is written to the device.
     // DMA バッファを先に解決しておく。キューの位置をデバイスに教えるのは
     // virtq_init() の最後なので、どちらで失敗してもデバイスに中途半端な設定は残らない。
+    // https://ozlabs.org/~rusty/virtio-spec/virtio-0.9.5.pdf
+    // Write the virtqueue index (first queue is 0) to the Queue Select field.
+    // Read the virtqueue size from the Queue Size field, which is always a power of 2. This controls how big the
+    // virtqueue is (see below). If this field is 0, the virtqueue does not exist. Allocate and zero virtqueue in
+    // contiguous physical memory, on a 4096 byte alignment. Write the physical address, divided by 4096 to the Queue
+    // Address field.
     if (!resolve_dma_buffers(resolve_physical))
         return false;
     if (!virtq_init(resolve_physical))
