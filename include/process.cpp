@@ -37,7 +37,7 @@ struct ProcessTable
 };
 
 // State that each CPU must have its own copy of.
-// TODO: make this an array when going SMP.
+// TODO: make this an array when going SMP(=Symmetric Multiprocessing).
 struct Cpu
 {
     Process *current                  = nullptr;
@@ -183,7 +183,7 @@ Process *allocate_process()
 }
 
 
-// カーネルスレッドを作る。entry は trampoline() 経由で呼ばれる。
+// リング0で動くカーネルスレッドを作る。entry は trampoline() 経由で呼ばれる。
 //
 //   高  ┌────────────────┐ ← kernel_stack.top()
 //       │ ProcessContext │   rbp..r15 = 0, rip = trampoline
