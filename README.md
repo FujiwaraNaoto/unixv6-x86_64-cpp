@@ -169,7 +169,7 @@ GDT にユーザーセグメントと TSS を足し、`TSS.RSP0` を設定して
 子は親の `TrapFrame` の複製を持ち、`fork_ret.asm` から syscall の出口へ着地して 0 を返す。
 ユーザーページはコピーするので親子でアドレス空間が分かれ、`exit` した子 (`Zombie`) は親の `wait()` が
 回収してカーネルスタック・ページテーブルまで解放する。
-確認はテストの `fork_wait` (カーネルスレッド版) / `fork_from_ring3` / `process_free` で行っている。
+確認はテストの `fork_from_kernel` (カーネルスレッド版) / `fork_from_ring3` / `process_free` で行っている。
 
 ### phase8: ファイルシステム 🚧 ← 2026-10-24 時点はここ
 

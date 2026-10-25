@@ -43,8 +43,8 @@ bool addrspace_separation(IConsole *console);
 // sleep / wakeup: チャネル待ちで寝たプロセスが起こされることを確認する。
 bool sleep_wakeup(IConsole *console);
 
-// fork / exit / wait: 子プロセスの生成と終了ステータスの回収を確認する。
-bool fork_wait(IConsole *console);
+// fork / exit / wait: カーネルスレッドから fork し、子プロセスの生成と終了ステータスの回収を確認する。
+bool fork_from_kernel(IConsole *console);
 
 // fork / exit / wait: リング3のユーザーページに降りて、syscall で write/exit を呼ぶ。
 bool fork_from_ring3(IConsole *console);

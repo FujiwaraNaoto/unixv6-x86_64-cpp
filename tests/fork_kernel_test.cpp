@@ -57,7 +57,7 @@ void parent_thread()
 
 } // namespace
 
-bool fork_wait(IConsole *console)
+bool fork_from_kernel(IConsole *console)
 {
     thread_console = console;
 

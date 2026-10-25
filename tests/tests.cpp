@@ -38,7 +38,7 @@ constexpr std::array kTests{
     TestCase{"addrspace_separation", addrspace_separation},
     TestCase{"sleep_wakeup", sleep_wakeup},
     TestCase{"usermode_ring3", usermode_ring3},
-    TestCase{"fork_wait", fork_wait},
+    TestCase{"fork_from_kernel", fork_from_kernel},
     TestCase{"fork_from_ring3", fork_from_ring3},
     TestCase{"process_free", process_free},
     TestCase{"virtio_block_read", virtio_block_read},
