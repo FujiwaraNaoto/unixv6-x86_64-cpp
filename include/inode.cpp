@@ -1,30 +1,22 @@
 #include "inode.hpp"
 #include "file_system.hpp"
+#include "file_system_internal.hpp"
 #include <cstdint>
 #include <optional>
 
-namespace FileSystem::Inode{
+namespace FileSystem{
+
+    // ヘッダに置くと include した翻訳単位ごとに実体ができるので、ここに置く
+    std::array<Inode,NUM_INODE> inode_table;
 
     void copy_from_disk(Inode &inode, const DiskInode &disk){
-        inode.type = disk.type;
-        inode.major = disk.major;
-        inode.minor = disk.minor;
-        inode.nlink = disk.nlink;
-        inode.size = disk.size;
-        inode.addrs = disk.addrs;   
+        inode.disk = disk;
     }
 
 
     DiskInode to_disk(const Inode &inode)
     {
-        DiskInode disk{};
-        disk.type  = inode.type;
-        disk.major = inode.major;
-        disk.minor = inode.minor;
-        disk.nlink = inode.nlink;
-        disk.size  = inode.size;
-        disk.addrs = inode.addrs;
-        return disk;
+        return inode.disk;
     }
 
 
@@ -69,9 +61,14 @@ InodeRef allocate_inode(InodeType type){
     return InodeRef{};
 }
 
+void put_inode(Inode *inode)
+{
+    if(inode->refcnt>0) inode->refcnt--;
+}
+
 std::optional<uint32_t> write_data(Inode &inode,const uint8_t *source, uint32_t offset, uint32_t count)
 {
-    return nullopt;
+    return std::nullopt;
 }
 
 }

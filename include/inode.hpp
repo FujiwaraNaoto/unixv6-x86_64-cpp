@@ -13,6 +13,28 @@ struct [[gnu::packed]] Inode
 };
 
 
+class InodeRef;
+
+namespace FileSystem{
+
+    const int NUM_INODE = 10;
+
+    void copy_from_disk(Inode &inode, const DiskInode &disk);
+
+    DiskInode to_disk(const Inode &inode);
+
+    // inode番号inode_numのinodeを取得する
+    // テーブルに載っていればそれを共有してrefcntを増やす
+    InodeRef get_inode(uint32_t inode_num);
+
+    //ディスクの空きinode(typeがkUnused)を確保してtypeを設定する。
+    InodeRef allocate_inode(InodeType type);
+
+    // refcnt を減らす。InodeRef のデストラクタから呼ばれる。
+    void put_inode(Inode *inode);
+}
+
+
 class InodeRef final
 {
 public:
@@ -44,7 +66,7 @@ public:
     void reset()
     {
         if(inode_!=nullptr){
-            put_inode(inode_);
+            FileSystem::put_inode(inode_);
             inode_ = nullptr;
         }
     }
@@ -54,22 +76,7 @@ private:
 };
 
 
-namespace FileSystem::Inode{
 
-    const int NUM_INODE = 10;
-    std::array<Inode,NUM_INODE> inode_table;
-
-    void copy_from_disk(Inode &inode, const DiskInode &disk);
-
-    DiskInode to_disk(const Inode &inode);
-
-    // inode番号inode_numのinodeを取得する
-    // テーブルに載っていればそれを共有してrefcntを増やす
-    InodeRef get_inode(uint32_t inode_num);
-
-    //ディスクの空きinode(typeがkUnused)を確保してtypeを設定する。
-    InodeRef allocate_inode(InodeType type);
-}
 
 
 #endif //INODE_HPP
