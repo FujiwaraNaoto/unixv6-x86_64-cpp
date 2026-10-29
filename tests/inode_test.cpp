@@ -5,7 +5,8 @@
 namespace tests
 {
 
-namespace{
+namespace
+{
 
 bool report(IConsole *console, const char *name, bool ok)
 {
@@ -16,10 +17,11 @@ bool report(IConsole *console, const char *name, bool ok)
     return ok;
 }
 
-bool root_directory(IConsole *console){
+bool root_directory(IConsole *console)
+{
     InodeRef root = FileSystem::get_inode(ROOT_INODE);
     const bool ok = root && root->disk.type == InodeType::kDirectory;
-    
+
     console->printf("[INODE]:first_inode_is_root_directory");
 
     return ok;
@@ -60,9 +62,9 @@ bool allocate_writes_type(IConsole *console)
 
     return report(console, "allocate_inode(kFile)", ok);
 }
-    
 
-}
+
+} // namespace
 
 bool inode_basic(IConsole *console)
 {
@@ -73,4 +75,4 @@ bool inode_basic(IConsole *console)
     return ok;
 }
 
-}
+} // namespace tests

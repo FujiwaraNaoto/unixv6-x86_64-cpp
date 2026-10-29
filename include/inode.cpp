@@ -28,12 +28,12 @@ InodeRef get_inode(uint32_t inode_num)
     Inode *empty = nullptr;
     for (Inode &inode : inode_table)
     {
-        if(inode.refcnt > 0 and inode.inode_num == inode_num)
+        if (inode.refcnt > 0 and inode.inode_num == inode_num)
         {
             inode.refcnt++;
             return InodeRef{&inode};
         }
-        if(empty==nullptr and inode.refcnt==0)
+        if (empty == nullptr and inode.refcnt == 0)
         {
             empty = &inode;
             break;

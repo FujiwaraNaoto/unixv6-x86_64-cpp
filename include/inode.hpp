@@ -85,7 +85,8 @@ class InodeRef final
         return inode_;
     }
 
-    Inode *get()const{
+    Inode *get() const
+    {
         return inode_;
     }
 
