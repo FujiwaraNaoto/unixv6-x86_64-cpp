@@ -68,8 +68,12 @@ bool virtio_block_read(IConsole *console);
 // デバイスを初期化済みの状態 (virtio_block_read() の後) で呼ぶこと。
 bool virtio_block_read_write(IConsole *console);
 
+bool inode_basic(IConsole *console);
+
+
 // 有効化しているテストをまとめて実行する。
 // どのテストを走らせるかは tests.cpp 側で切り替える。
 void run_all(IConsole *console);
+
 
 } // namespace tests
