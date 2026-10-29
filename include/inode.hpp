@@ -74,6 +74,17 @@ class InodeRef final
         }
     }
 
+    //取得に成功したかどうか
+    explicit operator bool() const
+    {
+        return inode_ != nullptr;
+    }
+
+    Inode *operator->() const
+    {
+        return inode_;
+    }
+
   private:
     Inode *inode_ = nullptr;
 };
