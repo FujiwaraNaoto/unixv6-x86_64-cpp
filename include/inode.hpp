@@ -2,6 +2,7 @@
 #define INODE_HPP
 
 #include "file_system.hpp"
+#include <array>
 
 struct [[gnu::packed]] Inode
 {
@@ -16,7 +17,7 @@ class InodeRef final
 {
 public:
     InodeRef() = default;
-    exlicit InodeRef(Inode *inode): inode_(inode){};
+    explicit InodeRef(Inode *inode): inode_(inode){};
     
     ~InodeRef(){reset();}
 
@@ -49,8 +50,8 @@ public:
     }
 
 private:
-    Inode *inode = nullptr;
-}
+    Inode *inode_ = nullptr;
+};
 
 
 namespace FileSystem::Inode{

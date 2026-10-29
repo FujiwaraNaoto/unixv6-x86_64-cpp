@@ -1,5 +1,7 @@
 #include "inode.hpp"
+#include "file_system.hpp"
 #include <cstdint>
+#include <optional>
 
 namespace FileSystem::Inode{
 
@@ -30,7 +32,7 @@ InodeRef get_inode(uint32_t inode_num)
 {
     Inode* empty = nullptr;
     for(Inode &inode: inode_table){
-
+        
     }
 
     if(empty==nullptr){
