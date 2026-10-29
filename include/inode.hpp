@@ -85,6 +85,10 @@ class InodeRef final
         return inode_;
     }
 
+    Inode *get()const{
+        return inode_;
+    }
+
   private:
     Inode *inode_ = nullptr;
 };

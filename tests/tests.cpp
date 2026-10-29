@@ -43,6 +43,10 @@ constexpr std::array kTests{
     TestCase{"process_free", process_free},
     TestCase{"virtio_block_read", virtio_block_read},
     TestCase{"virtio_block_read_write", virtio_block_read_write},
+    TestCase{"Inode_first_inode",first_inode_is_root_directory},
+    TestCase{"Inode_refcount_works",inode_refcount},
+    TestCase{"Inode_write_disk",inode_write_disk},
+
 };
 
 } // namespace
