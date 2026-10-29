@@ -4,60 +4,62 @@
 #include "file_system.hpp"
 #include <array>
 
-struct [[gnu::packed]] Inode
+struct Inode
 {
     uint32_t inode_num;
-    int refcnt; //0なら空きスロット
-    bool valid; //　ディスクから読み込み済みか?
+    int refcnt;     // 0なら空きスロット
+    bool valid;     //　ディスクから読み込み済みか?
     DiskInode disk; // ディスク上の内容そのもの
 };
 
 
 class InodeRef;
 
-namespace FileSystem{
+namespace FileSystem
+{
 
-    const int NUM_INODE = 10;
+constexpr int NUM_INODE = 10;
 
-    void copy_from_disk(Inode &inode, const DiskInode &disk);
+// inode番号inode_numのinodeを取得する
+// テーブルに載っていればそれを共有してrefcntを増やす
+InodeRef get_inode(uint32_t inode_num);
 
-    DiskInode to_disk(const Inode &inode);
+//ディスクの空きinode(typeがkUnused)を確保してtypeを設定する。
+InodeRef allocate_inode(InodeType type);
 
-    // inode番号inode_numのinodeを取得する
-    // テーブルに載っていればそれを共有してrefcntを増やす
-    InodeRef get_inode(uint32_t inode_num);
+// refcnt を減らす。InodeRef のデストラクタから呼ばれる。
+void put_inode(Inode *inode);
 
-    //ディスクの空きinode(typeがkUnused)を確保してtypeを設定する。
-    InodeRef allocate_inode(InodeType type);
-
-    // refcnt を減らす。InodeRef のデストラクタから呼ばれる。
-    void put_inode(Inode *inode);
-}
+void update_inode(const Inode &);
+} // namespace FileSystem
 
 
 class InodeRef final
 {
-public:
+  public:
     InodeRef() = default;
-    explicit InodeRef(Inode *inode): inode_(inode){};
-    
-    ~InodeRef(){reset();}
+    explicit InodeRef(Inode *inode) : inode_(inode){};
 
-    InodeRef(const InodeRef&)=delete;// copyさせない
-    InodeRef &operator=(const InodeRef &)=delete;
+    ~InodeRef()
+    {
+        reset();
+    }
 
-    InodeRef(InodeRef &&other) noexcept: inode_(other.inode_)
+    InodeRef(const InodeRef &)            = delete; // copyさせない
+    InodeRef &operator=(const InodeRef &) = delete;
+
+    InodeRef(InodeRef &&other) noexcept : inode_(other.inode_)
     {
         other.inode_ = nullptr;
     }
 
     InodeRef &operator=(InodeRef &&other) noexcept
     {
-        if(this!=&other)
+        if (this != &other)
         {
             reset();
-            inode_ = other.inode_;
-            other.inode_=nullptr;
+            inode_       = other.inode_;
+            other.inode_ = nullptr;
         }
         return *this;
     }
@@ -65,18 +67,16 @@ public:
 
     void reset()
     {
-        if(inode_!=nullptr){
+        if (inode_ != nullptr)
+        {
             FileSystem::put_inode(inode_);
             inode_ = nullptr;
         }
     }
 
-private:
+  private:
     Inode *inode_ = nullptr;
 };
 
 
-
-
-
-#endif //INODE_HPP
+#endif // INODE_HPP
