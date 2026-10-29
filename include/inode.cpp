@@ -12,15 +12,16 @@ namespace
 std::array<Inode, NUM_INODE> inode_table;
 } // namespace
 
-    void copy_from_disk(Inode &inode, const DiskInode &disk){
-        inode.disk = disk;
-    }
+void copy_from_disk(Inode &inode, const DiskInode &disk)
+{
+    inode.disk = disk;
+}
 
 
-    DiskInode to_disk(const Inode &inode)
-    {
-        return inode.disk;
-    }
+DiskInode to_disk(const Inode &inode)
+{
+    return inode.disk;
+}
 
 InodeRef get_inode(uint32_t inode_num)
 {
