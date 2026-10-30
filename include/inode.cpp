@@ -92,9 +92,10 @@ void put_inode(Inode *inode)
 }
 
 // ファイル内の logical 番目のブロックが、ディスクの何番ブロックかを返す。
-// 未割当なら確保する。addrs を書き換えるので、呼び出し側で update_inode すること。
+// 未割当のとき、alloc なら確保し (addrs を書き換えるので、呼び出し側で update_inode すること)、
+// そうでなければ失敗する。
 // 論理ブロック番号を物理ブロック番号に変換する
-std::optional<uint32_t> map_block(Inode &inode, uint32_t logical)
+std::optional<uint32_t> map_block(Inode &inode, uint32_t logical, bool alloc)
 {
     auto &addrs = inode.disk.addrs;
 
@@ -102,6 +103,8 @@ std::optional<uint32_t> map_block(Inode &inode, uint32_t logical)
     {
         if (addrs[logical] == 0)
         {
+            if (!alloc)
+                return std::nullopt;
             auto b = FileSystem::allocate_block();
             if (!b) return std::nullopt;
             addrs[logical] = *b;
@@ -114,6 +117,8 @@ std::optional<uint32_t> map_block(Inode &inode, uint32_t logical)
 
     if (addrs[NDIRECT] == 0)
     {
+        if (!alloc)
+            return std::nullopt;
         auto b = FileSystem::allocate_block(); // 0 埋めされて返るので中身は全部「未割当」
         if (!b) return std::nullopt;
         addrs[NDIRECT] = *b;
@@ -124,6 +129,8 @@ std::optional<uint32_t> map_block(Inode &inode, uint32_t logical)
     auto *table = reinterpret_cast<uint32_t *>(block.data());
     if (table[logical] == 0)
     {
+        if (!alloc)
+            return std::nullopt;
         auto b = FileSystem::allocate_block();
         if (!b) return std::nullopt;
         table[logical] = *b;
@@ -134,6 +141,7 @@ std::optional<uint32_t> map_block(Inode &inode, uint32_t logical)
 
 // offset から最大 count バイトを dest に読む。読んだバイト数を返す。
 // ファイル末尾 (disk.size) より先は読まない。offset が末尾より先なら失敗。
+// 読み込みではブロックを確保しない。write_data は穴を作らないので、size 以内で未割当なら失敗する。
 std::optional<uint32_t> read_data(Inode &inode, uint8_t *dest, uint32_t offset, uint32_t count)
 {
     const uint32_t size = inode.disk.size;
@@ -146,7 +154,7 @@ std::optional<uint32_t> read_data(Inode &inode, uint8_t *dest, uint32_t offset, 
     while (done < count)
     {
         const uint32_t pos = offset + done;
-        auto blockno       = map_block(inode, pos / FSBLOCK_SIZE);
+        auto blockno       = map_block(inode, pos / FSBLOCK_SIZE, false);
         if (!blockno)
             return std::nullopt;
         auto block = internal::fs.block_store->acquire(*blockno);
@@ -178,7 +186,7 @@ std::optional<uint32_t> write_data(Inode &inode, const uint8_t *source, uint32_t
     while (done < count)
     {
         const uint32_t pos = offset + done;
-        auto blockno       = map_block(inode, pos / FSBLOCK_SIZE);
+        auto blockno       = map_block(inode, pos / FSBLOCK_SIZE, true);
         if (!blockno)
             break;
         auto block = internal::fs.block_store->acquire(*blockno);
