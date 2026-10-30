@@ -3,6 +3,7 @@
 
 #include "file_system.hpp"
 #include <array>
+#include <optional>
 
 struct Inode
 {
@@ -31,6 +32,12 @@ InodeRef allocate_inode(InodeType type);
 void put_inode(Inode *inode);
 
 void update_inode(const Inode &);
+
+// offset から最大 count バイトを dest に読む。読んだバイト数を返す (末尾で切り詰める)。
+std::optional<uint32_t> read_data(Inode &inode, uint8_t *dest, uint32_t offset, uint32_t count);
+
+// source の count バイトを offset に書き、size と inode をディスクに反映する。書けたバイト数を返す。
+std::optional<uint32_t> write_data(Inode &inode, const uint8_t *source, uint32_t offset, uint32_t count);
 } // namespace FileSystem
 
 
