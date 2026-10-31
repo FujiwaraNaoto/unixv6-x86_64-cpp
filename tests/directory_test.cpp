@@ -119,7 +119,7 @@ bool directory_basic(IConsole *console)
     set_numbered_name(name, kManyEntries - 1);
     all &= report(console,
                   "grow past one block",
-                  ok && root->disk.size > FSBLOCK_SIZE && root->disk.addrs[1] != 0 &&
+                  ok && root->disk.size > FSBLOCK_SIZE && root->disk.addrs[1].value != 0 &&
                       FileSystem::directory_lookup(*root.get(), name));
 
     // 後片付け: エントリと inode を空きに戻す (fs.img は次回も使われる)。

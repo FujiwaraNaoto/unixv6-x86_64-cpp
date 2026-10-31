@@ -92,13 +92,13 @@ void put_inode(Inode *inode)
 
 // ファイル内の logical 番目のブロックが、ディスクの何番ブロックかを返す (論理ブロック番号 → 物理ブロック番号)。
 // 未割当なら失敗する。ブロックは確保しない。
-std::optional<uint32_t> find_block(const Inode &inode, uint32_t logical)
+std::optional<BlockNumber> find_block(const Inode &inode, uint32_t logical)
 {
     const auto &addrs = inode.disk.addrs;
 
     if (logical < NDIRECT)
     {
-        if (addrs[logical] == 0)
+        if (addrs[logical].value == 0)
             return std::nullopt;
         return addrs[logical];
     }
@@ -107,27 +107,27 @@ std::optional<uint32_t> find_block(const Inode &inode, uint32_t logical)
     if (logical >= NINDIRECT)
         return std::nullopt; // MAXFILE 超え
 
-    if (addrs[INDIRECT_INDEX] == 0)
+    if (addrs[INDIRECT_INDEX].value == 0)
         return std::nullopt;
 
     auto block = internal::fs.block_store->acquire(addrs[INDIRECT_INDEX]);
     if (!block)
         return std::nullopt;
-    const auto *table = reinterpret_cast<const uint32_t *>(block.data());
-    if (table[logical] == 0)
+    const auto *table = reinterpret_cast<const BlockNumber *>(block.data());
+    if (table[logical].value == 0)
         return std::nullopt;
     return table[logical];
 }
 
 // find_block と同じだが、未割当なら確保する。
 // addrs を書き換えるので、呼び出し側で update_inode すること。
-std::optional<uint32_t> allocate_or_find_block(Inode &inode, uint32_t logical)
+std::optional<BlockNumber> allocate_or_find_block(Inode &inode, uint32_t logical)
 {
     auto &addrs = inode.disk.addrs;
 
     if (logical < NDIRECT)
     {
-        if (addrs[logical] == 0)
+        if (addrs[logical].value == 0)
         {
             auto b = FileSystem::allocate_block();
             if (!b)
@@ -141,7 +141,7 @@ std::optional<uint32_t> allocate_or_find_block(Inode &inode, uint32_t logical)
     if (logical >= NINDIRECT)
         return std::nullopt; // MAXFILE 超え
 
-    if (addrs[INDIRECT_INDEX] == 0)
+    if (addrs[INDIRECT_INDEX].value == 0)
     {
         auto b = FileSystem::allocate_block(); // 0 埋めされて返るので中身は全部「未割当」
         if (!b)
@@ -152,8 +152,8 @@ std::optional<uint32_t> allocate_or_find_block(Inode &inode, uint32_t logical)
     auto block = internal::fs.block_store->acquire(addrs[INDIRECT_INDEX]);
     if (!block)
         return std::nullopt;
-    auto *table = reinterpret_cast<uint32_t *>(block.data());
-    if (table[logical] == 0)
+    auto *table = reinterpret_cast<BlockNumber *>(block.data());
+    if (table[logical].value == 0)
     {
         auto b = FileSystem::allocate_block();
         if (!b)
@@ -180,10 +180,10 @@ std::optional<uint32_t> read_data(const Inode &inode, uint8_t *dest, uint32_t of
     while (done < count)
     {
         const uint32_t pos = offset + done;
-        auto blockno       = find_block(inode, pos / FSBLOCK_SIZE);
-        if (!blockno)
+        auto block_number  = find_block(inode, pos / FSBLOCK_SIZE);
+        if (!block_number)
             return std::nullopt;
-        auto block = internal::fs.block_store->acquire(*blockno);
+        auto block = internal::fs.block_store->acquire(*block_number);
         if (!block)
             return std::nullopt;
 
@@ -212,10 +212,10 @@ std::optional<uint32_t> write_data(Inode &inode, const uint8_t *source, uint32_t
     while (done < count)
     {
         const uint32_t pos = offset + done;
-        auto blockno       = allocate_or_find_block(inode, pos / FSBLOCK_SIZE);
-        if (!blockno)
+        auto block_number  = allocate_or_find_block(inode, pos / FSBLOCK_SIZE);
+        if (!block_number)
             break;
-        auto block = internal::fs.block_store->acquire(*blockno);
+        auto block = internal::fs.block_store->acquire(*block_number);
         if (!block)
             break;
 

@@ -29,11 +29,11 @@ constexpr InodeNumber ROOT_INODE{1}; // ルートの inode 番号
 // xv6 の 0x10203040と同じ値にしておく。リトルエンディアンとビックエンディアンの両方で同じ値にならないように
 constexpr uint32_t FS_MAGIC       = 0x10203040;
 constexpr uint32_t FSBLOCK_SIZE   = 512;
-constexpr int NDIRECT             = 12;                              // 直接ブロック数
-constexpr int INDIRECT_INDEX      = NDIRECT;                         // addrs 内の間接ブロックの位置
-constexpr int NINDIRECT           = FSBLOCK_SIZE / sizeof(uint32_t); // 128
-constexpr int MAXFILE             = NDIRECT + NINDIRECT;             // 140ブロック
-constexpr int DIRECTORY_NAME_SIZE = 14;                              // ファイル名長 (V6と同じ)
+constexpr int NDIRECT             = 12;                                 // 直接ブロック数
+constexpr int INDIRECT_INDEX      = NDIRECT;                            // addrs 内の間接ブロックの位置
+constexpr int NINDIRECT           = FSBLOCK_SIZE / sizeof(BlockNumber); // 128
+constexpr int MAXFILE             = NDIRECT + NINDIRECT;                // 140ブロック
+constexpr int DIRECTORY_NAME_SIZE = 14;                                 // ファイル名長 (V6と同じ)
 
 
 // block 0        1         2 ...            bitmap_start ...      data_start ...
@@ -90,12 +90,13 @@ enum class InodeType : uint16_t
 struct SuperBlock
 {
     uint32_t magic;
-    uint32_t size;         // 全ブロック数
-    uint32_t nblocks;      // データブロック数
-    uint32_t ninodes;      // inode 数
-    uint32_t inode_start;  // inode 領域の開始ブロック
-    uint32_t bitmap_start; // ビットマップの開始ブロック
+    uint32_t size;            // 全ブロック数
+    uint32_t nblocks;         // データブロック数
+    uint32_t ninodes;         // inode 数
+    BlockNumber inode_start;  // inode 領域の開始ブロック
+    BlockNumber bitmap_start; // ビットマップの開始ブロック
 };
+static_assert(sizeof(SuperBlock) == 24, "SuperBlock must be 24 bytes");
 // ─── ディスク上の inode (64バイト) ───────────────────────────────
 struct DiskInode
 {
@@ -104,7 +105,7 @@ struct DiskInode
     uint16_t minor;
     uint16_t nlink;
     uint32_t size;
-    std::array<uint32_t, NDIRECT + 1> addrs; // 直接12 + 間接1
+    std::array<BlockNumber, NDIRECT + 1> addrs; // 直接12 + 間接1
 };
 static_assert(sizeof(DiskInode) == 64, "DiskInode must be 64 bytes");
 
@@ -125,15 +126,15 @@ static_assert(sizeof(DirectoryEntry) == 16, "DirectoryEntry must be 16 bytes");
 class NullBlockStore final : public IBlockStore
 {
   public:
-    BlockRef acquire(uint32_t) override
+    BlockRef acquire(BlockNumber) override
     {
         return BlockRef{};
     }
-    bool write_back(uint32_t) override
+    bool write_back(BlockNumber) override
     {
         return false;
     }
-    void release(uint32_t) override { }
+    void release(BlockNumber) override { }
 };
 
 // 実体は kernel_main が作り、このポインタに設定する。
@@ -159,8 +160,8 @@ namespace FileSystem
 
 const SuperBlock &superblock();
 
-std::optional<uint32_t> allocate_block();
-void free_block(uint32_t blockno);
+std::optional<BlockNumber> allocate_block();
+void free_block(BlockNumber block_number);
 
 } // namespace FileSystem
 

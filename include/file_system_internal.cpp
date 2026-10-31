@@ -8,9 +8,9 @@ State fs;
 
 namespace
 {
-uint32_t inode_block(InodeNumber inode_number)
+BlockNumber inode_block(InodeNumber inode_number)
 {
-    return FileSystem::internal::fs.superblock.inode_start + inode_number.value / INODES_PER_BLOCK;
+    return BlockNumber{FileSystem::internal::fs.superblock.inode_start.value + inode_number.value / INODES_PER_BLOCK};
 }
 
 
@@ -29,9 +29,9 @@ const SuperBlock &superblock()
 
 namespace FileSystem::internal
 {
-uint32_t bitmap_block(uint32_t blockno)
+BlockNumber bitmap_block(BlockNumber block_number)
 {
-    return fs.superblock.bitmap_start + blockno / BLOCKS_PER_BITMAP_BLOCK;
+    return BlockNumber{fs.superblock.bitmap_start.value + block_number.value / BLOCKS_PER_BITMAP_BLOCK};
 }
 
 SuperBlock &mutable_superblock()
@@ -40,26 +40,26 @@ SuperBlock &mutable_superblock()
 }
 bool load_superblock()
 {
-    auto block = fs.block_store->acquire(1); // superblock
+    auto block = fs.block_store->acquire(BlockNumber{1}); // superblock
     if (!block)
         return false;
     fs.superblock = *reinterpret_cast<const SuperBlock *>(block.data());
     return fs.superblock.magic == FS_MAGIC;
 }
-bool zero_block(uint32_t blockno)
+bool zero_block(BlockNumber block_number)
 {
-    auto block = fs.block_store->acquire(blockno);
+    auto block = fs.block_store->acquire(block_number);
     if (!block)
         return false;
     std::memset(block.data(), 0, FSBLOCK_SIZE);
     return block.write_back();
 }
-bool mark_block_used(uint32_t blockno)
+bool mark_block_used(BlockNumber block_number)
 {
-    auto block = fs.block_store->acquire(bitmap_block(blockno));
+    auto block = fs.block_store->acquire(bitmap_block(block_number));
     if (!block)
         return false;
-    uint32_t bit_index  = blockno % BLOCKS_PER_BITMAP_BLOCK;
+    uint32_t bit_index  = block_number.value % BLOCKS_PER_BITMAP_BLOCK;
     uint32_t byte_index = bit_index / BITS_PER_BYTE;
     uint8_t bit_mask    = 1 << (bit_index % BITS_PER_BYTE);
     block.data()[byte_index] |= bit_mask;

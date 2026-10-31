@@ -115,21 +115,21 @@ void release_file(InodeNumber inode_number)
     if (!disk)
         return;
 
-    if (disk->addrs[NDIRECT] != 0)
+    if (disk->addrs[NDIRECT].value != 0)
     {
         auto block = FileSystem::internal::fs.block_store->acquire(disk->addrs[NDIRECT]);
         if (!block)
             return;
-        const auto *table = reinterpret_cast<const uint32_t *>(block.data());
+        const auto *table = reinterpret_cast<const BlockNumber *>(block.data());
         for (int i = 0; i < NINDIRECT; i++)
         {
-            if (table[i] != 0)
+            if (table[i].value != 0)
                 FileSystem::free_block(table[i]);
         }
     }
-    for (uint32_t address : disk->addrs)
+    for (BlockNumber address : disk->addrs)
     {
-        if (address != 0)
+        if (address.value != 0)
             FileSystem::free_block(address);
     }
     FileSystem::internal::write_inode(inode_number, DiskInode{});
@@ -156,7 +156,7 @@ bool write_and_read_back(IConsole *console)
     // メモリ上のコピーを捨てて、size と addrs もディスクから読み直す
     file.reset();
     file = FileSystem::get_inode(inode_number);
-    ok   = ok && file && file->disk.size == kFileSize && file->disk.addrs[NDIRECT] != 0;
+    ok   = ok && file && file->disk.size == kFileSize && file->disk.addrs[NDIRECT].value != 0;
 
     if (ok)
     {
@@ -195,7 +195,7 @@ bool read_does_not_allocate(IConsole *console)
 
     bool ok = !FileSystem::read_data(*file.get(), read_buffer.data(), 0, 1);
     ok      = ok && !FileSystem::read_data(*file.get(), read_buffer.data(), NDIRECT * FSBLOCK_SIZE, 1);
-    ok      = ok && file->disk.addrs[0] == 0 && file->disk.addrs[NDIRECT] == 0;
+    ok      = ok && file->disk.addrs[0].value == 0 && file->disk.addrs[NDIRECT].value == 0;
 
     file.reset();
     release_file(inode_number);
