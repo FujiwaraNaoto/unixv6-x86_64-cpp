@@ -23,7 +23,7 @@ constexpr int NBUF            = 30; // キャッシュ数
 
 struct Buffer
 {
-    uint32_t blockno;                     // ブロック番号
+    BlockNumber block_number;             // ブロック番号
     bool valid;                           // ディスクから読み込み済みか
     bool dirty;                           // 変更されたか (書き戻しが必要)
     int refcnt;                           // 参照カウント (使用中の数)
@@ -57,8 +57,8 @@ namespace BufferCache
 //   }
 struct BlockDevice
 {
-    bool (*read_block)(uint64_t blockno, uint8_t *buffer);
-    bool (*write_block)(uint64_t blockno, const uint8_t *buffer);
+    bool (*read_block)(uint64_t block_number, uint8_t *buffer);
+    bool (*write_block)(uint64_t block_number, const uint8_t *buffer);
 };
 
 // バッファキャッシュの初期化 (LRU リストの構築とデバイスの登録)。
@@ -78,7 +78,7 @@ struct BlockDevice
 // ブロックを取得する。キャッシュに無ければデバイスから読み込む。
 // 戻り値は参照カウントを 1 増やした状態のバッファ。失敗時は nullptr。
 // 使い終わったら必ず release() すること。
-Buffer *read(uint32_t blockno);
+Buffer *read(BlockNumber block_number);
 
 // buffer->data を書き換えた後に呼ぶ。実際の書き戻しは write() / flush() で行う。
 void mark_dirty(Buffer *buffer);
@@ -169,7 +169,7 @@ class BufferRef final
 // NOTE: Buffer を直接触る低レベル側の口。上位層は BlockStore 経由の BlockRef を
 //       使うので、今これを使っているのはキャッシュ自体を調べる tests/virtio_test.cpp
 //       だけ。
-BufferRef acquire(uint32_t blockno);
+BufferRef acquire(BlockNumber block_number);
 
 
 // 上位層 (ファイルシステム) への入口。IBlockStore の呼び出しを BufferCache の
@@ -181,9 +181,9 @@ BufferRef acquire(uint32_t blockno);
 class BlockStore final : public IBlockStore
 {
   public:
-    BlockRef acquire(uint32_t blockno) override;
-    bool write_back(uint32_t blockno) override;
-    void release(uint32_t blockno) override;
+    BlockRef acquire(BlockNumber block_number) override;
+    bool write_back(BlockNumber block_number) override;
+    void release(BlockNumber block_number) override;
 };
 
 

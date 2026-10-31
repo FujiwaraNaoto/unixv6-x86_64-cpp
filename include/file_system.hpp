@@ -7,14 +7,33 @@
 #include "block_store.hpp"
 
 
+// inode 番号。ブロック番号やバイト数などの普通の整数と取り違えないよう、型で区別する。
+// 0 は「inode を指していない」を表す (ディレクトリエントリの空きスロットの印でもある)。
+struct InodeNumber
+{
+    uint32_t value = 0;
+
+    constexpr InodeNumber() = default;
+    constexpr explicit InodeNumber(uint32_t number) : value(number) { }
+
+    explicit operator bool() const
+    {
+        return value != 0;
+    }
+
+    bool operator==(const InodeNumber &) const = default;
+};
+
+constexpr InodeNumber ROOT_INODE{1}; // ルートの inode 番号
+
 // xv6 の 0x10203040と同じ値にしておく。リトルエンディアンとビックエンディアンの両方で同じ値にならないように
-constexpr uint32_t FS_MAGIC     = 0x10203040;
-constexpr uint32_t FSBLOCK_SIZE = 512;
-constexpr int NDIRECT           = 12;                              // 直接ブロック数
-constexpr int NINDIRECT         = FSBLOCK_SIZE / sizeof(uint32_t); // 128
-constexpr int MAXFILE           = NDIRECT + NINDIRECT;             // 140ブロック
-constexpr int DIRSIZ            = 14;                              // ファイル名長 (V6と同じ)
-constexpr uint32_t ROOT_INODE   = 1;                               // ルートの inode 番号
+constexpr uint32_t FS_MAGIC       = 0x10203040;
+constexpr uint32_t FSBLOCK_SIZE   = 512;
+constexpr int NDIRECT             = 12;                                 // 直接ブロック数
+constexpr int INDIRECT_INDEX      = NDIRECT;                            // addrs 内の間接ブロックの位置
+constexpr int NINDIRECT           = FSBLOCK_SIZE / sizeof(BlockNumber); // 128
+constexpr int MAXFILE             = NDIRECT + NINDIRECT;                // 140ブロック
+constexpr int DIRECTORY_NAME_SIZE = 14;                                 // ファイル名長 (V6と同じ)
 
 
 // block 0        1         2 ...            bitmap_start ...      data_start ...
@@ -35,8 +54,8 @@ constexpr uint32_t ROOT_INODE   = 1;                               // ルート�
 //   inode blocks (inode_start から inode_blocks 個)
 //     DiskInode を 1 ブロックに INODES_PER_BLOCK (8) 個ずつ並べる。
 //     inode_start は 2 固定、inode_blocks = ceil(ninodes / INODES_PER_BLOCK)。
-//     inode 番号 inum は、inode_start + inum / INODES_PER_BLOCK 番目のブロックの
-//     inum % INODES_PER_BLOCK 番目に入っている。
+//     inode 番号 inode_number は、inode_start + inode_number / INODES_PER_BLOCK 番目のブロックの
+//     inode_number % INODES_PER_BLOCK 番目に入っている。
 //   bitmap       (bitmap_start から bitmap_blocks 個)
 //     ブロックの使用状況を 1 ブロック = 1 ビットで記録する (1 = 使用中)。
 //     データ領域だけでなく block 0 からの全ブロックが対象なので
@@ -71,12 +90,13 @@ enum class InodeType : uint16_t
 struct SuperBlock
 {
     uint32_t magic;
-    uint32_t size;         // 全ブロック数
-    uint32_t nblocks;      // データブロック数
-    uint32_t ninodes;      // inode 数
-    uint32_t inode_start;  // inode 領域の開始ブロック
-    uint32_t bitmap_start; // ビットマップの開始ブロック
+    uint32_t size;            // 全ブロック数
+    uint32_t nblocks;         // データブロック数
+    uint32_t ninodes;         // inode 数
+    BlockNumber inode_start;  // inode 領域の開始ブロック
+    BlockNumber bitmap_start; // ビットマップの開始ブロック
 };
+static_assert(sizeof(SuperBlock) == 24, "SuperBlock must be 24 bytes");
 // ─── ディスク上の inode (64バイト) ───────────────────────────────
 struct DiskInode
 {
@@ -85,7 +105,7 @@ struct DiskInode
     uint16_t minor;
     uint16_t nlink;
     uint32_t size;
-    std::array<uint32_t, NDIRECT + 1> addrs; // 直接12 + 間接1
+    std::array<BlockNumber, NDIRECT + 1> addrs; // 直接12 + 間接1
 };
 static_assert(sizeof(DiskInode) == 64, "DiskInode must be 64 bytes");
 
@@ -97,8 +117,8 @@ constexpr int BLOCKS_PER_BITMAP_BLOCK = FSBLOCK_SIZE * BITS_PER_BYTE; // 4096ブ
 // ─── ディレクトリエントリ (16バイト) ─────────────────────────────
 struct [[gnu::packed]] DirectoryEntry
 {
-    uint16_t inum;
-    char name[DIRSIZ];
+    uint16_t inode_number;
+    char name[DIRECTORY_NAME_SIZE];
 };
 static_assert(sizeof(DirectoryEntry) == 16, "DirectoryEntry must be 16 bytes");
 
@@ -106,15 +126,15 @@ static_assert(sizeof(DirectoryEntry) == 16, "DirectoryEntry must be 16 bytes");
 class NullBlockStore final : public IBlockStore
 {
   public:
-    BlockRef acquire(uint32_t) override
+    BlockRef acquire(BlockNumber) override
     {
         return BlockRef{};
     }
-    bool write_back(uint32_t) override
+    bool write_back(BlockNumber) override
     {
         return false;
     }
-    void release(uint32_t) override { }
+    void release(BlockNumber) override { }
 };
 
 // 実体は kernel_main が作り、このポインタに設定する。
@@ -140,8 +160,8 @@ namespace FileSystem
 
 const SuperBlock &superblock();
 
-std::optional<uint32_t> allocate_block();
-void free_block(uint32_t blockno);
+std::optional<BlockNumber> allocate_block();
+void free_block(BlockNumber block_number);
 
 } // namespace FileSystem
 

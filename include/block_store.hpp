@@ -3,15 +3,29 @@
 #include <cstdint>
 
 
+// ブロック番号。inode 番号やバイト数などの普通の整数と取り違えないよう、型で区別する。
+// ブロック 0 も実在するので (ブート用)、0 かどうかの判定は operator bool にせず、
+// 「未割当」の印として使う場所 (DiskInode::addrs など) が .value == 0 で明示する。
+struct BlockNumber
+{
+    uint32_t value = 0;
+
+    constexpr BlockNumber() = default;
+    constexpr explicit BlockNumber(uint32_t number) : value(number) { }
+
+    bool operator==(const BlockNumber &) const = default;
+};
+static_assert(sizeof(BlockNumber) == 4, "BlockNumber is stored on disk as 32 bits");
+
 class BlockRef;
 
 class IBlockStore
 {
   public:
-    virtual BlockRef acquire(uint32_t blockno) = 0;
-    virtual bool write_back(uint32_t blockno)  = 0;
-    virtual void release(uint32_t blockno)     = 0;
-    virtual ~IBlockStore()                     = default;
+    virtual BlockRef acquire(BlockNumber block_number) = 0;
+    virtual bool write_back(BlockNumber block_number)  = 0;
+    virtual void release(BlockNumber block_number)     = 0;
+    virtual ~IBlockStore()                             = default;
 };
 
 // ─── ブロック記憶域への口 ────────────────────────────────────────
@@ -23,8 +37,8 @@ class BlockRef final
 {
   public:
     BlockRef() = default;
-    explicit BlockRef(uint32_t blockno, IBlockStore *store = nullptr, uint8_t *data = nullptr)
-        : blockno_(blockno), store_(store), data_(data)
+    explicit BlockRef(BlockNumber block_number, IBlockStore *store = nullptr, uint8_t *data = nullptr)
+        : block_number_(block_number), store_(store), data_(data)
     {
     }
 
@@ -32,7 +46,7 @@ class BlockRef final
     BlockRef &operator=(const BlockRef &) = delete;
 
     // 所有権は 1 つだけ。ムーブ元は「何も持っていない」状態にする。
-    BlockRef(BlockRef &&other) noexcept : blockno_(other.blockno_), store_(other.store_), data_(other.data_)
+    BlockRef(BlockRef &&other) noexcept : block_number_(other.block_number_), store_(other.store_), data_(other.data_)
     {
         other.store_ = nullptr;
         other.data_  = nullptr;
@@ -42,11 +56,11 @@ class BlockRef final
         if (this != &other)
         {
             reset(); // 今持っているものを先に返す
-            blockno_     = other.blockno_;
-            store_       = other.store_;
-            data_        = other.data_;
-            other.store_ = nullptr;
-            other.data_  = nullptr;
+            block_number_ = other.block_number_;
+            store_        = other.store_;
+            data_         = other.data_;
+            other.store_  = nullptr;
+            other.data_   = nullptr;
         }
         return *this;
     }
@@ -55,9 +69,9 @@ class BlockRef final
     {
         reset();
     }
-    uint32_t blockno() const
+    BlockNumber block_number() const
     {
-        return blockno_;
+        return block_number_;
     }
     IBlockStore *store() const
     {
@@ -80,21 +94,21 @@ class BlockRef final
             return false;
         if (data_ == nullptr)
             return false;
-        return store_->write_back(blockno_);
+        return store_->write_back(block_number_);
     }
 
     void reset()
     {
         if (store_ != nullptr and data_ != nullptr)
         {
-            store_->release(blockno_);
+            store_->release(block_number_);
             store_ = nullptr;
             data_  = nullptr;
         }
     }
 
   private:
-    uint32_t blockno_   = 0;
+    BlockNumber block_number_{};
     IBlockStore *store_ = nullptr;
     uint8_t *data_      = nullptr;
 };

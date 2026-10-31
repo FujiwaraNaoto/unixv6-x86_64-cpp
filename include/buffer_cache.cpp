@@ -3,7 +3,7 @@
 namespace
 {
 
-std::array<Buffer, NBUF> buffers;
+std::array<Buffer, NBUF> buffers{};
 
 // LRU リストの番兵。
 //   head.next … 最近使ったバッファ (MRU)
@@ -15,13 +15,13 @@ std::array<Buffer, NBUF> buffers;
 // 返るだけで済む。各関数で初期化済みフラグを見る必要が無くなる。
 // (自身のアドレスは定数式なので .init_array ではなく .data に畳まれる)
 Buffer head = {
-    .blockno = 0,
-    .valid   = false,
-    .dirty   = false,
-    .refcnt  = 0,
-    .prev    = &head,
-    .next    = &head,
-    .data    = {},
+    .block_number = BlockNumber{},
+    .valid        = false,
+    .dirty        = false,
+    .refcnt       = 0,
+    .prev         = &head,
+    .next         = &head,
+    .data         = {},
 };
 
 BufferCache::BlockDevice device{}; // 未初期化状態では両方とも nullptr
@@ -47,7 +47,7 @@ void link_as_most_recent(Buffer *buffer)
 // デバイスへ書き戻す。成功したら dirty を下ろす。
 bool write_back(Buffer *buffer)
 {
-    if (!device.write_block(buffer->blockno, buffer->data.data()))
+    if (!device.write_block(buffer->block_number.value, buffer->data.data()))
     {
         return false;
     }
@@ -56,15 +56,15 @@ bool write_back(Buffer *buffer)
     return true;
 }
 
-// blockno が既にキャッシュに載っているかを調べるだけの関数。
+// block_number が既にキャッシュに載っているかを調べるだけの関数。
 // refcnt は増やさず、バッファの再利用も行わない。載っていなければ nullptr。
 // 「掴む」意図が無い問い合わせ (write_back / release) はこちらを使う。
-Buffer *lookup(uint32_t blockno)
+Buffer *lookup(BlockNumber block_number)
 {
     // MRU 側から探す
     for (Buffer *b = head.next; b != &head; b = b->next)
     {
-        if (b->valid && b->blockno == blockno)
+        if (b->valid && b->block_number == block_number)
         {
             return b;
         }
@@ -72,14 +72,14 @@ Buffer *lookup(uint32_t blockno)
     return nullptr;
 }
 
-// blockno に対応するバッファを確保する (xv6 の bget 相当)。
+// block_number に対応するバッファを確保する (xv6 の bget 相当)。
 // キャッシュに有ればそれを、無ければ LRU 側の未使用バッファを再利用する。
 // 戻り値は refcnt を 1 増やした状態。再利用した場合は valid=false で返るので、
 // 呼び出し側がデバイスから読み込む責任を持つ。
-Buffer *find_cached(uint32_t blockno)
+Buffer *find_cached(BlockNumber block_number)
 {
     // 1. 既にキャッシュに載っているか
-    if (Buffer *cached = lookup(blockno); cached != nullptr)
+    if (Buffer *cached = lookup(block_number); cached != nullptr)
     {
         cached->refcnt++;
         return cached;
@@ -101,10 +101,10 @@ Buffer *find_cached(uint32_t blockno)
         {
             stats.evictions++;
         }
-        b->blockno = blockno;
-        b->valid   = false;
-        b->dirty   = false;
-        b->refcnt  = 1;
+        b->block_number = block_number;
+        b->valid        = false;
+        b->dirty        = false;
+        b->refcnt       = 1;
         return b;
     }
 
@@ -137,10 +137,10 @@ bool initialize(const BlockDevice &block_device)
     head.prev = &head;
     for (Buffer &buffer : buffers)
     {
-        buffer.blockno = 0;
-        buffer.valid   = false;
-        buffer.dirty   = false;
-        buffer.refcnt  = 0;
+        buffer.block_number = BlockNumber{};
+        buffer.valid        = false;
+        buffer.dirty        = false;
+        buffer.refcnt       = 0;
         link_as_most_recent(&buffer);
     }
 
@@ -149,9 +149,9 @@ bool initialize(const BlockDevice &block_device)
     return true;
 }
 
-Buffer *read(uint32_t blockno)
+Buffer *read(BlockNumber block_number)
 {
-    Buffer *buffer = find_cached(blockno);
+    Buffer *buffer = find_cached(block_number);
     if (buffer == nullptr)
     {
         return nullptr;
@@ -165,7 +165,7 @@ Buffer *read(uint32_t blockno)
 
     // 再利用したバッファなので、ここで初めてデバイスを叩く
     stats.misses++;
-    if (!device.read_block(blockno, buffer->data.data()))
+    if (!device.read_block(block_number.value, buffer->data.data()))
     {
         release(buffer); // 中身が無いまま掴ませない
         return nullptr;
@@ -221,9 +221,9 @@ void release(Buffer *buffer)
     link_as_most_recent(buffer);
 }
 
-BufferRef acquire(uint32_t blockno)
+BufferRef acquire(BlockNumber block_number)
 {
-    return BufferRef{read(blockno)};
+    return BufferRef{read(block_number)};
 }
 
 Statistics statistics()
@@ -231,24 +231,24 @@ Statistics statistics()
     return stats;
 }
 
-BlockRef BlockStore::acquire(uint32_t blockno)
+BlockRef BlockStore::acquire(BlockNumber block_number)
 {
-    Buffer *buffer = BufferCache::read(blockno);
+    Buffer *buffer = BufferCache::read(block_number);
     if (buffer == nullptr)
     {
-        return BlockRef(blockno, this, nullptr);
+        return BlockRef(block_number, this, nullptr);
     }
-    return BlockRef(blockno, this, buffer->data.data());
+    return BlockRef(block_number, this, buffer->data.data());
 }
 
-bool BlockStore::write_back(uint32_t blockno)
+bool BlockStore::write_back(BlockNumber block_number)
 {
-    return BufferCache::write(lookup(blockno));
+    return BufferCache::write(lookup(block_number));
 }
 
-void BlockStore::release(uint32_t blockno)
+void BlockStore::release(BlockNumber block_number)
 {
-    BufferCache::release(lookup(blockno));
+    BufferCache::release(lookup(block_number));
 }
 
 

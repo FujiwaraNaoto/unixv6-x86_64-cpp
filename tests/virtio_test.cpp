@@ -125,7 +125,7 @@ bool virtio_block_read(IConsole *console)
 
     // 1回目: キャッシュに無いのでデバイスを叩く (miss)
     // BufferRef はスコープを抜けるときに自動で release() される
-    if (BufferCache::BufferRef block0 = BufferCache::acquire(0))
+    if (BufferCache::BufferRef block0 = BufferCache::acquire(BlockNumber{0}))
     {
         console->set_color(Color::LightGreen, Color::Black);
         console->puts("[BCACHE] ");
@@ -138,7 +138,7 @@ bool virtio_block_read(IConsole *console)
 
         // 2回目: 同じブロックなのでデバイスを叩かない (hit)
         {
-            BufferCache::BufferRef again = BufferCache::acquire(0);
+            BufferCache::BufferRef again = BufferCache::acquire(BlockNumber{0});
         }
 
         // RAII が効いていることの確認:
@@ -146,7 +146,7 @@ bool virtio_block_read(IConsole *console)
         bool no_leak = true;
         for (int i = 0; i < NBUF * 4; i++)
         {
-            BufferCache::BufferRef probe = BufferCache::acquire(0);
+            BufferCache::BufferRef probe = BufferCache::acquire(BlockNumber{0});
             if (!probe)
             {
                 no_leak = false;

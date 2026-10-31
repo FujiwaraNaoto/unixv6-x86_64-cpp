@@ -23,12 +23,12 @@ extern State fs;
 
 SuperBlock &mutable_superblock();
 bool load_superblock();
-// ビットマップのうち、blockno のビットが入っているブロック番号
-uint32_t bitmap_block(uint32_t blockno);
-bool zero_block(uint32_t blockno);
-bool mark_block_used(uint32_t blockno);
-bool write_inode(uint32_t inum, const DiskInode &inode);
-std::optional<DiskInode> read_inode(uint32_t inum);
+// ビットマップのうち、block_number のビットが入っているブロック番号
+BlockNumber bitmap_block(BlockNumber block_number);
+bool zero_block(BlockNumber block_number);
+bool mark_block_used(BlockNumber block_number);
+bool write_inode(InodeNumber inode_number, const DiskInode &inode);
+std::optional<DiskInode> read_inode(InodeNumber inode_number);
 } // namespace FileSystem::internal
 
 

@@ -11,10 +11,10 @@ using FileSystem::internal::write_inode;
 using FileSystem::internal::zero_block;
 
 
-bool add_root_entry(DiskInode &root, uint32_t inum, const char *name)
+bool add_root_entry(DiskInode &root, InodeNumber inode_number, const char *name)
 {
-    int root_address = root.addrs[0];
-    if (root_address == 0)
+    BlockNumber root_address = root.addrs[0];
+    if (root_address.value == 0)
     {
         auto block_number = FileSystem::allocate_block();
         if (!block_number)
@@ -34,11 +34,11 @@ bool add_root_entry(DiskInode &root, uint32_t inum, const char *name)
 
     for (int i = 0; i < capacity; i++)
     {
-        if (entries[i].inum != 0)
+        if (entries[i].inode_number != 0)
             continue;
 
-        entries[i].inum = inum;
-        std::strncpy(entries[i].name, name, DIRSIZ);
+        entries[i].inode_number = static_cast<uint16_t>(inode_number.value);
+        std::strncpy(entries[i].name, name, DIRECTORY_NAME_SIZE);
         if (!block.write_back())
         {
             return false;
@@ -61,14 +61,14 @@ bool format(uint32_t total_blocks)
     superblock_state.magic        = FS_MAGIC;
     superblock_state.size         = total_blocks;
     superblock_state.ninodes      = NUM_INODES;
-    superblock_state.inode_start  = 2; // 0=boot, 1=super
-    superblock_state.bitmap_start = superblock_state.inode_start + inode_blocks;
+    superblock_state.inode_start  = BlockNumber{2}; // 0=boot, 1=super
+    superblock_state.bitmap_start = BlockNumber{superblock_state.inode_start.value + inode_blocks};
 
 
-    uint32_t data_start      = superblock_state.bitmap_start + bitmap_blocks;
+    uint32_t data_start      = superblock_state.bitmap_start.value + bitmap_blocks;
     superblock_state.nblocks = total_blocks - data_start;
 
-    for (uint32_t b = superblock_state.inode_start; b < data_start; b++)
+    for (BlockNumber b = superblock_state.inode_start; b.value < data_start; b.value++)
     {
         if (!zero_block(b))
         {
@@ -77,7 +77,7 @@ bool format(uint32_t total_blocks)
     }
 
     // make meta blocks used (0〜data_start-1)
-    for (uint32_t b = 0; b < data_start; b++)
+    for (BlockNumber b{0}; b.value < data_start; b.value++)
     {
         if (!mark_block_used(b))
         {
@@ -87,7 +87,7 @@ bool format(uint32_t total_blocks)
 
     // write superblock to block 1. 0 is boot block, so skip it.
     {
-        auto block = FileSystem::internal::fs.block_store->acquire(1); // superblock
+        auto block = FileSystem::internal::fs.block_store->acquire(BlockNumber{1}); // superblock
         if (!block)
             return false;
         std::memset(block.data(), 0, FSBLOCK_SIZE);
@@ -149,17 +149,17 @@ bool initialize(uint32_t total_blocks, IBlockStore *block_store, IConsole *conso
     return internal::load_superblock();
 }
 
-std::optional<uint32_t> allocate_block()
+std::optional<BlockNumber> allocate_block()
 {
     const SuperBlock &superblock = FileSystem::superblock();
 
-    for (uint32_t base = 0; base < superblock.size; base += BLOCKS_PER_BITMAP_BLOCK)
+    for (BlockNumber base{0}; base.value < superblock.size; base.value += BLOCKS_PER_BITMAP_BLOCK)
     {
         auto block = FileSystem::internal::fs.block_store->acquire(bitmap_block(base));
         if (!block)
             return std::nullopt;
         auto *bitmap = block.data();
-        for (uint32_t offset = 0; offset < BLOCKS_PER_BITMAP_BLOCK && base + offset < superblock.size; offset++)
+        for (uint32_t offset = 0; offset < BLOCKS_PER_BITMAP_BLOCK && base.value + offset < superblock.size; offset++)
         {
             uint32_t byte_index = offset / BITS_PER_BYTE;
             uint8_t bit_mask    = 1 << (offset % BITS_PER_BYTE);
@@ -172,7 +172,7 @@ std::optional<uint32_t> allocate_block()
                     return std::nullopt;
                 }
                 block.reset();
-                uint32_t block_number = base + offset;
+                BlockNumber block_number{base.value + offset};
                 if (!zero_block(block_number))
                 {
                     return std::nullopt;
@@ -184,14 +184,14 @@ std::optional<uint32_t> allocate_block()
     return std::nullopt;
 }
 
-void free_block(uint32_t blockno)
+void free_block(BlockNumber block_number)
 {
-    auto block = FileSystem::internal::fs.block_store->acquire(bitmap_block(blockno));
+    auto block = FileSystem::internal::fs.block_store->acquire(bitmap_block(block_number));
     if (!block)
     {
         return;
     }
-    uint32_t bit_index = blockno % BLOCKS_PER_BITMAP_BLOCK;
+    uint32_t bit_index = block_number.value % BLOCKS_PER_BITMAP_BLOCK;
     block.data()[bit_index / BITS_PER_BYTE] &= static_cast<uint8_t>(~(1u << (bit_index % BITS_PER_BYTE)));
     block.write_back();
 }
