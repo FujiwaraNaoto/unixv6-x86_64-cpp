@@ -56,15 +56,15 @@ bool directory_basic(IConsole *console)
     auto dotdot = FileSystem::directory_lookup(*root.get(), "..");
     all &= report(console,
                   "lookup . and ..",
-                  dot && dot->inode_num == ROOT_INODE && dot->offset == 0 && dotdot &&
-                      dotdot->inode_num == ROOT_INODE && dotdot->offset == sizeof(DirectoryEntry));
+                  dot && dot->inode_number == ROOT_INODE && dot->offset == 0 && dotdot &&
+                      dotdot->inode_number == ROOT_INODE && dotdot->offset == sizeof(DirectoryEntry));
 
     all &= report(console, "lookup missing", !FileSystem::directory_lookup(*root.get(), "nothing"));
 
     InodeRef file = FileSystem::allocate_inode(InodeType::kFile);
     if (!file)
         return report(console, "allocate file", false);
-    const uint32_t inode_number = file->inode_num;
+    const uint32_t inode_number = file->inode_number;
 
     // ディレクトリでない inode には使えない
     all &= report(console,
@@ -74,7 +74,7 @@ bool directory_basic(IConsole *console)
 
     bool ok    = FileSystem::directory_link(*root.get(), "hello", inode_number);
     auto found = FileSystem::directory_lookup(*root.get(), "hello");
-    all &= report(console, "link then lookup", ok && found && found->inode_num == inode_number);
+    all &= report(console, "link then lookup", ok && found && found->inode_number == inode_number);
 
     // メモリ上の inode を捨てて、ディスクから読み直しても見つかるか
     root.reset();
@@ -82,7 +82,7 @@ bool directory_basic(IConsole *console)
     if (!root)
         return report(console, "get root again", false);
     auto reloaded = FileSystem::directory_lookup(*root.get(), "hello");
-    all &= report(console, "lookup after reload", reloaded && reloaded->inode_num == inode_number);
+    all &= report(console, "lookup after reload", reloaded && reloaded->inode_number == inode_number);
 
     all &= report(console, "reject duplicate", !FileSystem::directory_link(*root.get(), "hello", inode_number));
     all &= report(console,

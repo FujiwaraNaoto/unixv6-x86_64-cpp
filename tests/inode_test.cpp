@@ -52,23 +52,23 @@ bool shared_after_earlier_slot_freed(IConsole *console)
     bool ok         = first && second;
     if (ok)
     {
-        const uint32_t first_inum = first->inode_num;
+        const uint32_t first_inum = first->inode_number;
         first.reset(); // second より手前のスロットが空く
-        InodeRef again = FileSystem::get_inode(second->inode_num);
+        InodeRef again = FileSystem::get_inode(second->inode_number);
         ok             = again && again.get() == second.get() && second->refcnt == 2;
         FileSystem::internal::write_inode(first_inum, DiskInode{});
     }
     if (second)
-        FileSystem::internal::write_inode(second->inode_num, DiskInode{});
+        FileSystem::internal::write_inode(second->inode_number, DiskInode{});
     return report(console, "shared slot after earlier slot freed", ok);
 }
 
 bool allocate_writes_type(IConsole *console)
 {
     InodeRef file = FileSystem::allocate_inode(InodeType::kFile);
-    bool ok       = file && file->inode_num >= 2;
+    bool ok       = file && file->inode_number >= 2;
 
-    uint32_t inode_number = ok ? file->inode_num : 0;
+    uint32_t inode_number = ok ? file->inode_number : 0;
     if (ok)
     {
         // メモリ上のコピーではなく、ディスクから読み直して確かめる
@@ -141,7 +141,7 @@ bool write_and_read_back(IConsole *console)
     InodeRef file = FileSystem::allocate_inode(InodeType::kFile);
     if (!file)
         return report(console, "write/read across indirect block", false);
-    const uint32_t inode_number = file->inode_num;
+    const uint32_t inode_number = file->inode_number;
 
     for (uint32_t i = 0; i < kFileSize; i++)
         source_data[i] = pattern(i);
@@ -188,7 +188,7 @@ bool read_does_not_allocate(IConsole *console)
     InodeRef file = FileSystem::allocate_inode(InodeType::kFile);
     if (!file)
         return report(console, "read does not allocate", false);
-    const uint32_t inode_number = file->inode_num;
+    const uint32_t inode_number = file->inode_number;
 
     // ブロックを持たないまま、メモリ上の size だけ伸ばす (ディスクには書かない)
     file->disk.size = (NDIRECT + 1) * FSBLOCK_SIZE;

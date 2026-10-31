@@ -25,12 +25,12 @@ DiskInode to_disk(const Inode &inode)
     return inode.disk;
 }
 
-InodeRef get_inode(uint32_t inode_num)
+InodeRef get_inode(uint32_t inode_number)
 {
     Inode *empty = nullptr;
     for (Inode &inode : inode_table)
     {
-        if (inode.refcnt > 0 and inode.inode_num == inode_num)
+        if (inode.refcnt > 0 and inode.inode_number == inode_number)
         {
             inode.refcnt++;
             return InodeRef{&inode};
@@ -45,12 +45,12 @@ InodeRef get_inode(uint32_t inode_num)
     {
         return InodeRef{};
     }
-    auto disk = internal::read_inode(inode_num);
+    auto disk = internal::read_inode(inode_number);
     if (!disk)
         return InodeRef{};
-    empty->inode_num = inode_num;
-    empty->refcnt    = 1;
-    empty->valid     = true;
+    empty->inode_number = inode_number;
+    empty->refcnt       = 1;
+    empty->valid        = true;
     copy_from_disk(*empty, disk.value());
     return InodeRef{empty};
 }
@@ -239,7 +239,7 @@ std::optional<uint32_t> write_data(Inode &inode, const uint8_t *source, uint32_t
 
 bool update_inode(const Inode &inode)
 {
-    return internal::write_inode(inode.inode_num, inode.disk);
+    return internal::write_inode(inode.inode_number, inode.disk);
 }
 
 } // namespace FileSystem
