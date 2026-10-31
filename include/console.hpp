@@ -37,7 +37,7 @@ class IConsole
     virtual ~IConsole()                         = default;
 
     // 以降の出力の色を変える。既定では何もしない (シリアルなど色を持たない出力先)。
-    virtual void set_color(Color, Color) { }
+    virtual void set_color(Color foreground, Color background) { }
 
     void putchar(char c)
     {
