@@ -46,6 +46,7 @@ constexpr std::array kTests{
     TestCase{"inode_basic", inode_basic},
     TestCase{"directory_basic", directory_basic},
     TestCase{"path_basic", path_basic},
+    TestCase{"file_basic", file_basic},
 
 };
 

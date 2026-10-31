@@ -76,6 +76,9 @@ bool directory_basic(IConsole *console);
 // パス解決: resolve_path / resolve_parent を確認する。
 bool path_basic(IConsole *console);
 
+// ファイル層: File の確保・offset・共有と、プロセスの fd 表 (fork / exit / syscall) を確認する。
+bool file_basic(IConsole *console);
+
 
 // 有効化しているテストをまとめて実行する。
 // どのテストを走らせるかは tests.cpp 側で切り替える。
