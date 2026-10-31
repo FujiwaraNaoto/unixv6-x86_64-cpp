@@ -2,3 +2,4 @@ build/*
 serial.log
 *.iso
 iso/
+*_ref.md
