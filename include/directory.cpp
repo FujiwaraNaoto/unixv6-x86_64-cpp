@@ -52,7 +52,7 @@ bool read_entry(Inode &directory, uint32_t offset, DirectoryEntry &entry)
 namespace FileSystem
 {
 
-std::optional<DirectoryLookup> dir_lookup(Inode &directory, std::string_view name)
+std::optional<DirectoryLookup> directory_lookup(Inode &directory, std::string_view name)
 {
     if (directory.disk.type != InodeType::kDirectory || !is_valid_name(name))
         return std::nullopt;
@@ -75,7 +75,7 @@ std::optional<DirectoryLookup> dir_lookup(Inode &directory, std::string_view nam
     return std::nullopt;
 }
 
-bool dir_link(Inode &directory, std::string_view name, uint32_t inode_num)
+bool directory_link(Inode &directory, std::string_view name, uint32_t inode_num)
 {
     if (directory.disk.type != InodeType::kDirectory || !is_valid_name(name))
         return false;

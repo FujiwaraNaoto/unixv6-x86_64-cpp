@@ -70,7 +70,7 @@ bool virtio_block_read_write(IConsole *console);
 
 bool inode_basic(IConsole *console);
 
-// ディレクトリ: dir_lookup / dir_link の検索・追加・空きスロットの再利用・ブロック越えを確認する。
+// ディレクトリ: directory_lookup / directory_link の検索・追加・空きスロットの再利用・ブロック越えを確認する。
 bool directory_basic(IConsole *console);
 
 
