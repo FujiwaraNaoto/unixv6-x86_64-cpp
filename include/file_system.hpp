@@ -78,7 +78,7 @@ struct SuperBlock
     uint32_t bitmap_start; // ビットマップの開始ブロック
 };
 // ─── ディスク上の inode (64バイト) ───────────────────────────────
-struct [[gnu::packed]] DiskInode
+struct DiskInode
 {
     InodeType type;
     uint16_t major;
