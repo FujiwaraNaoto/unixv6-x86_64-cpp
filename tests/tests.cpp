@@ -44,6 +44,7 @@ constexpr std::array kTests{
     TestCase{"virtio_block_read", virtio_block_read},
     TestCase{"virtio_block_read_write", virtio_block_read_write},
     TestCase{"inode_basic", inode_basic},
+    TestCase{"directory_basic", directory_basic},
 
 };
 

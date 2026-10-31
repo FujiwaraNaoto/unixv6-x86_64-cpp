@@ -44,6 +44,25 @@ bool same_inode_is_shared(IConsole *console)
 }
 
 
+// 手前のスロットが空いていても、後ろのスロットに載っている inode を二重に載せないか
+bool shared_after_earlier_slot_freed(IConsole *console)
+{
+    InodeRef first  = FileSystem::allocate_inode(InodeType::kFile);
+    InodeRef second = FileSystem::allocate_inode(InodeType::kFile);
+    bool ok         = first && second;
+    if (ok)
+    {
+        const uint32_t first_inum = first->inode_num;
+        first.reset(); // second より手前のスロットが空く
+        InodeRef again = FileSystem::get_inode(second->inode_num);
+        ok             = again && again.get() == second.get() && second->refcnt == 2;
+        FileSystem::internal::write_inode(first_inum, DiskInode{});
+    }
+    if (second)
+        FileSystem::internal::write_inode(second->inode_num, DiskInode{});
+    return report(console, "shared slot after earlier slot freed", ok);
+}
+
 bool allocate_writes_type(IConsole *console)
 {
     InodeRef file = FileSystem::allocate_inode(InodeType::kFile);
@@ -191,6 +210,7 @@ bool inode_basic(IConsole *console)
     bool ok = true;
     ok &= root_directory(console);
     ok &= same_inode_is_shared(console);
+    ok &= shared_after_earlier_slot_freed(console);
     ok &= allocate_writes_type(console);
     ok &= write_and_read_back(console);
     ok &= read_does_not_allocate(console);

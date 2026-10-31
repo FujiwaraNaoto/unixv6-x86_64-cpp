@@ -70,6 +70,9 @@ bool virtio_block_read_write(IConsole *console);
 
 bool inode_basic(IConsole *console);
 
+// ディレクトリ: dir_lookup / dir_link の検索・追加・空きスロットの再利用・ブロック越えを確認する。
+bool directory_basic(IConsole *console);
+
 
 // 有効化しているテストをまとめて実行する。
 // どのテストを走らせるかは tests.cpp 側で切り替える。
