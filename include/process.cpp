@@ -5,6 +5,7 @@
 #include "vmm.hpp"
 #include "address.hpp"
 #include "gdt.hpp"
+#include "file.hpp"
 
 extern "C" void switch_context(ProcessContext **old_ctx, ProcessContext *new_ctx);
 
@@ -70,6 +71,27 @@ void initialize(heap::Heap &heap)
 }
 
 
+// fd 表の File をすべて閉じる。閉じた fd は nullptr にするので、2 回呼んでも問題ない。
+static void close_all_files(Process *proc)
+{
+    for (File *&file : proc->files)
+    {
+        FileSystem::file_close(file);
+        file = nullptr;
+    }
+}
+
+// fd 0/1/2 をコンソールにつなぐ。失敗したら false (開けた分は呼び出し側が free_process_resources で閉じる)。
+static bool open_console_files(Process *proc)
+{
+    proc->files[0] = FileSystem::file_open_console(true, false);
+    proc->files[1] = FileSystem::file_open_console(false, true);
+    if (proc->files[0] == nullptr || proc->files[1] == nullptr)
+        return false;
+    proc->files[2] = FileSystem::file_dup(proc->files[1]);
+    return true;
+}
+
 // A function called when a new process is executed for the first time
 // ProcessContext の rip に設定される
 static void trampoline()
@@ -79,6 +101,7 @@ static void trampoline()
     {
         proc->entry();
     }
+    close_all_files(proc);
     proc->state = ProcessState::Zombie;
     yield();
 
@@ -163,6 +186,7 @@ Process *allocate_process()
     // 解放しようとしないよう、空の状態から始める。
     proc->kernel_stack = KernelStack{};
     proc->pml4         = PhysicalAddress{};
+    proc->files        = {};
 
     void *stack = ptable.heap->alloc(KERNEL_STACK_SIZE);
     if (stack == nullptr)
@@ -199,6 +223,11 @@ Process *create_process(EntryPoint entry, const char *name)
     if (proc == nullptr)
     {
         return nullptr; // The process table is full.
+    }
+    if (!open_console_files(proc))
+    {
+        free_process_resources(proc);
+        return nullptr;
     }
     proc->entry = entry;
     proc->name  = name; // kstring が容量超過分を切り捨てて null 終端する
@@ -319,6 +348,8 @@ static void schedule_from_zombie(ProcessContext **discard_context)
             asm volatile("cli; hlt");
     }
 
+    close_all_files(p);
+
     asm volatile("cli"); // 状態変更中は割り込みを止める
 
     p->exit_status = status;
@@ -354,6 +385,8 @@ static void schedule_from_zombie(ProcessContext **discard_context)
 
 void free_process_resources(Process *proc)
 {
+    close_all_files(proc);
+
     if (proc->kernel_stack)
     {
         ptable.heap->free(proc->kernel_stack.base);
@@ -582,6 +615,12 @@ int fork()
     child->entry  = parent->entry;
     child->name   = parent->name;
     child->parent = parent;
+
+    // fd 表を複製する。親子は同じ File を指すので offset を共有する
+    for (size_t fd = 0; fd < parent->files.size(); fd++)
+    {
+        child->files[fd] = FileSystem::file_dup(parent->files[fd]);
+    }
 
     // カーネルスタックは allocate_process() が確保済み。
     auto *child_stack = child->kernel_stack.base;
