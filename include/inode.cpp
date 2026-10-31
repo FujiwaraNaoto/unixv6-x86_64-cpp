@@ -1,7 +1,9 @@
 #include "inode.hpp"
 #include "file_system.hpp"
 #include "file_system_internal.hpp"
+#include <algorithm>
 #include <cstdint>
+#include <cstring>
 #include <optional>
 
 namespace FileSystem
@@ -89,9 +91,128 @@ void put_inode(Inode *inode)
         inode->refcnt--;
 }
 
+// ファイル内の logical 番目のブロックが、ディスクの何番ブロックかを返す。
+// 未割当のとき、allocation_flag なら確保し (addrs を書き換えるので、呼び出し側で update_inode すること)、
+// そうでなければ失敗する。
+// 論理ブロック番号を物理ブロック番号に変換する
+std::optional<uint32_t> map_block(Inode &inode, uint32_t logical, bool allocation_flag)
+{
+    auto &addrs = inode.disk.addrs;
+
+    if (logical < NDIRECT)
+    {
+        if (addrs[logical] == 0)
+        {
+            if (!allocation_flag)
+                return std::nullopt;
+            auto b = FileSystem::allocate_block();
+            if (!b)
+                return std::nullopt;
+            addrs[logical] = *b;
+        }
+        return addrs[logical];
+    }
+
+    logical -= NDIRECT;
+    if (logical >= NINDIRECT)
+        return std::nullopt; // MAXFILE 超え
+
+    if (addrs[NDIRECT] == 0)
+    {
+        if (!allocation_flag)
+            return std::nullopt;
+        auto b = FileSystem::allocate_block(); // 0 埋めされて返るので中身は全部「未割当」
+        if (!b)
+            return std::nullopt;
+        addrs[NDIRECT] = *b;
+    }
+
+    auto block = internal::fs.block_store->acquire(addrs[NDIRECT]);
+    if (!block)
+        return std::nullopt;
+    auto *table = reinterpret_cast<uint32_t *>(block.data());
+    if (table[logical] == 0)
+    {
+        if (!allocation_flag)
+            return std::nullopt;
+        auto b = FileSystem::allocate_block();
+        if (!b)
+            return std::nullopt;
+        table[logical] = *b;
+        if (!block.write_back())
+            return std::nullopt;
+    }
+    return table[logical];
+}
+
+// offset から最大 count バイトを dest に読む。読んだバイト数を返す。
+// ファイル末尾 (disk.size) より先は読まない。offset が末尾より先なら失敗。
+// 読み込みではブロックを確保しない。write_data は穴を作らないので、size 以内で未割当なら失敗する。
+std::optional<uint32_t> read_data(Inode &inode, uint8_t *dest, uint32_t offset, uint32_t count)
+{
+    const uint32_t size = inode.disk.size;
+    if (offset > size)
+        return std::nullopt;
+    if (count > size - offset)
+        count = size - offset;
+
+    uint32_t done = 0;
+    while (done < count)
+    {
+        const uint32_t pos = offset + done;
+        auto blockno       = map_block(inode, pos / FSBLOCK_SIZE, false);
+        if (!blockno)
+            return std::nullopt;
+        auto block = internal::fs.block_store->acquire(*blockno);
+        if (!block)
+            return std::nullopt;
+
+        // このブロックの中で読める分だけ (ブロック境界か残りの少ない方)
+        const uint32_t in_block = pos % FSBLOCK_SIZE;
+        const uint32_t left     = count - done;
+        const uint32_t chunk    = std::min(left, FSBLOCK_SIZE - in_block);
+        std::memcpy(dest + done, block.data() + in_block, chunk);
+        done += chunk;
+    }
+    return done;
+}
+
+// source の count バイトを offset に書く。書けたバイト数を返す。
+// 穴を作らないよう、offset が末尾より先なら失敗。MAXFILE を超える書き込みも失敗。
+// 途中でブロックが尽きたら、そこまで書いた分を返す (size もそこまで伸ばす)。
 std::optional<uint32_t> write_data(Inode &inode, const uint8_t *source, uint32_t offset, uint32_t count)
 {
-    return std::nullopt;
+    constexpr uint32_t max_bytes = MAXFILE * FSBLOCK_SIZE;
+    if (offset > inode.disk.size)
+        return std::nullopt;
+    if (offset > max_bytes or count > max_bytes - offset)
+        return std::nullopt;
+
+    uint32_t done = 0;
+    while (done < count)
+    {
+        const uint32_t pos = offset + done;
+        auto blockno       = map_block(inode, pos / FSBLOCK_SIZE, true);
+        if (!blockno)
+            break;
+        auto block = internal::fs.block_store->acquire(*blockno);
+        if (!block)
+            break;
+
+        const uint32_t in_block = pos % FSBLOCK_SIZE;
+        const uint32_t left     = count - done;
+        const uint32_t chunk    = std::min(left, FSBLOCK_SIZE - in_block);
+        std::memcpy(block.data() + in_block, source + done, chunk);
+        if (!block.write_back())
+            break;
+        done += chunk;
+    }
+
+    if (offset + done > inode.disk.size)
+        inode.disk.size = offset + done;
+    // map_block が addrs を書き換えている可能性があるので、size が変わらなくても書き戻す
+    update_inode(inode);
+    return done;
 }
 
 
