@@ -41,7 +41,7 @@ bool is_name_equal(const char (&entry_name)[DIRECTORY_NAME_SIZE], std::string_vi
 }
 
 // offset の位置にあるエントリを 1 つ読む。
-bool read_entry(Inode &directory, uint32_t offset, DirectoryEntry &entry)
+bool read_entry(const Inode &directory, uint32_t offset, DirectoryEntry &entry)
 {
     auto n = FileSystem::read_data(directory, reinterpret_cast<uint8_t *>(&entry), offset, sizeof(DirectoryEntry));
     return n && *n == sizeof(DirectoryEntry);
@@ -52,7 +52,7 @@ bool read_entry(Inode &directory, uint32_t offset, DirectoryEntry &entry)
 namespace FileSystem
 {
 
-std::optional<DirectoryLookup> directory_lookup(Inode &directory, std::string_view name)
+std::optional<DirectoryLookup> directory_lookup(const Inode &directory, std::string_view name)
 {
     if (directory.disk.type != InodeType::kDirectory || !is_valid_name(name))
         return std::nullopt;

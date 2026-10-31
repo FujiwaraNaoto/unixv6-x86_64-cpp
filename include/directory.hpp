@@ -18,7 +18,7 @@ struct DirectoryLookup
 
 // ディレクトリ directory の中から name を探す。
 // 見つからない、directory がディレクトリでない、読み込みに失敗した場合は std::nullopt。
-std::optional<DirectoryLookup> directory_lookup(Inode &directory, std::string_view name);
+std::optional<DirectoryLookup> directory_lookup(const Inode &directory, std::string_view name);
 
 // ディレクトリ directory に (name → inode_num) のエントリを追加する。
 // 空きスロット (inode_number == 0) があれば再利用し、無ければ末尾に足す。

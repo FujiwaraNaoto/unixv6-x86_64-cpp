@@ -90,11 +90,38 @@ void put_inode(Inode *inode)
         inode->refcnt--;
 }
 
-// ファイル内の logical 番目のブロックが、ディスクの何番ブロックかを返す。
-// 未割当のとき、allocation_flag なら確保し (addrs を書き換えるので、呼び出し側で update_inode すること)、
-// そうでなければ失敗する。
-// 論理ブロック番号を物理ブロック番号に変換する
-std::optional<uint32_t> map_block(Inode &inode, uint32_t logical, bool allocation_flag)
+// ファイル内の logical 番目のブロックが、ディスクの何番ブロックかを返す (論理ブロック番号 → 物理ブロック番号)。
+// 未割当なら失敗する。ブロックは確保しない。
+std::optional<uint32_t> find_block(const Inode &inode, uint32_t logical)
+{
+    const auto &addrs = inode.disk.addrs;
+
+    if (logical < NDIRECT)
+    {
+        if (addrs[logical] == 0)
+            return std::nullopt;
+        return addrs[logical];
+    }
+
+    logical -= NDIRECT;
+    if (logical >= NINDIRECT)
+        return std::nullopt; // MAXFILE 超え
+
+    if (addrs[INDIRECT_INDEX] == 0)
+        return std::nullopt;
+
+    auto block = internal::fs.block_store->acquire(addrs[INDIRECT_INDEX]);
+    if (!block)
+        return std::nullopt;
+    const auto *table = reinterpret_cast<const uint32_t *>(block.data());
+    if (table[logical] == 0)
+        return std::nullopt;
+    return table[logical];
+}
+
+// find_block と同じだが、未割当なら確保する。
+// addrs を書き換えるので、呼び出し側で update_inode すること。
+std::optional<uint32_t> allocate_or_find_block(Inode &inode, uint32_t logical)
 {
     auto &addrs = inode.disk.addrs;
 
@@ -102,8 +129,6 @@ std::optional<uint32_t> map_block(Inode &inode, uint32_t logical, bool allocatio
     {
         if (addrs[logical] == 0)
         {
-            if (!allocation_flag)
-                return std::nullopt;
             auto b = FileSystem::allocate_block();
             if (!b)
                 return std::nullopt;
@@ -118,8 +143,6 @@ std::optional<uint32_t> map_block(Inode &inode, uint32_t logical, bool allocatio
 
     if (addrs[INDIRECT_INDEX] == 0)
     {
-        if (!allocation_flag)
-            return std::nullopt;
         auto b = FileSystem::allocate_block(); // 0 埋めされて返るので中身は全部「未割当」
         if (!b)
             return std::nullopt;
@@ -132,8 +155,6 @@ std::optional<uint32_t> map_block(Inode &inode, uint32_t logical, bool allocatio
     auto *table = reinterpret_cast<uint32_t *>(block.data());
     if (table[logical] == 0)
     {
-        if (!allocation_flag)
-            return std::nullopt;
         auto b = FileSystem::allocate_block();
         if (!b)
             return std::nullopt;
@@ -147,7 +168,7 @@ std::optional<uint32_t> map_block(Inode &inode, uint32_t logical, bool allocatio
 // offset から最大 count バイトを dest に読む。読んだバイト数を返す。
 // ファイル末尾 (disk.size) より先は読まない。offset が末尾より先なら失敗。
 // 読み込みではブロックを確保しない。write_data は穴を作らないので、size 以内で未割当なら失敗する。
-std::optional<uint32_t> read_data(Inode &inode, uint8_t *dest, uint32_t offset, uint32_t count)
+std::optional<uint32_t> read_data(const Inode &inode, uint8_t *dest, uint32_t offset, uint32_t count)
 {
     const uint32_t size = inode.disk.size;
     if (offset > size)
@@ -159,7 +180,7 @@ std::optional<uint32_t> read_data(Inode &inode, uint8_t *dest, uint32_t offset, 
     while (done < count)
     {
         const uint32_t pos = offset + done;
-        auto blockno       = map_block(inode, pos / FSBLOCK_SIZE, false);
+        auto blockno       = find_block(inode, pos / FSBLOCK_SIZE);
         if (!blockno)
             return std::nullopt;
         auto block = internal::fs.block_store->acquire(*blockno);
@@ -191,7 +212,7 @@ std::optional<uint32_t> write_data(Inode &inode, const uint8_t *source, uint32_t
     while (done < count)
     {
         const uint32_t pos = offset + done;
-        auto blockno       = map_block(inode, pos / FSBLOCK_SIZE, true);
+        auto blockno       = allocate_or_find_block(inode, pos / FSBLOCK_SIZE);
         if (!blockno)
             break;
         auto block = internal::fs.block_store->acquire(*blockno);
@@ -209,7 +230,7 @@ std::optional<uint32_t> write_data(Inode &inode, const uint8_t *source, uint32_t
 
     if (offset + done > inode.disk.size)
         inode.disk.size = offset + done;
-    // map_block が addrs を書き換えている可能性があるので、size が変わらなくても書き戻す
+    // allocate_or_find_block が addrs を書き換えている可能性があるので、size が変わらなくても書き戻す
     if (!update_inode(inode))
         return std::nullopt;
     return done;
