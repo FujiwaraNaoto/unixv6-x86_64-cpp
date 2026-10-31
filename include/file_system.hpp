@@ -8,14 +8,14 @@
 
 
 // xv6 の 0x10203040と同じ値にしておく。リトルエンディアンとビックエンディアンの両方で同じ値にならないように
-constexpr uint32_t FS_MAGIC     = 0x10203040;
-constexpr uint32_t FSBLOCK_SIZE = 512;
-constexpr int NDIRECT           = 12;                              // 直接ブロック数
-constexpr int INDIRECT_INDEX    = NDIRECT;                         // addrs 内の間接ブロックの位置
-constexpr int NINDIRECT         = FSBLOCK_SIZE / sizeof(uint32_t); // 128
-constexpr int MAXFILE           = NDIRECT + NINDIRECT;             // 140ブロック
-constexpr int DIRSIZ            = 14;                              // ファイル名長 (V6と同じ)
-constexpr uint32_t ROOT_INODE   = 1;                               // ルートの inode 番号
+constexpr uint32_t FS_MAGIC       = 0x10203040;
+constexpr uint32_t FSBLOCK_SIZE   = 512;
+constexpr int NDIRECT             = 12;                              // 直接ブロック数
+constexpr int INDIRECT_INDEX      = NDIRECT;                         // addrs 内の間接ブロックの位置
+constexpr int NINDIRECT           = FSBLOCK_SIZE / sizeof(uint32_t); // 128
+constexpr int MAXFILE             = NDIRECT + NINDIRECT;             // 140ブロック
+constexpr int DIRECTORY_NAME_SIZE = 14;                              // ファイル名長 (V6と同じ)
+constexpr uint32_t ROOT_INODE     = 1;                               // ルートの inode 番号
 
 
 // block 0        1         2 ...            bitmap_start ...      data_start ...
@@ -99,7 +99,7 @@ constexpr int BLOCKS_PER_BITMAP_BLOCK = FSBLOCK_SIZE * BITS_PER_BYTE; // 4096ブ
 struct [[gnu::packed]] DirectoryEntry
 {
     uint16_t inode_number;
-    char name[DIRSIZ];
+    char name[DIRECTORY_NAME_SIZE];
 };
 static_assert(sizeof(DirectoryEntry) == 16, "DirectoryEntry must be 16 bytes");
 

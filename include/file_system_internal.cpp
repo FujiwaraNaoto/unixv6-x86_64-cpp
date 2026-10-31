@@ -72,7 +72,7 @@ bool write_inode(uint32_t inode_number, const DiskInode &inode)
     auto block = fs.block_store->acquire(inode_block(inode_number));
     if (!block)
         return false;
-    auto *entries                    = reinterpret_cast<DiskInode *>(block.data());
+    auto *entries                            = reinterpret_cast<DiskInode *>(block.data());
     entries[inode_number % INODES_PER_BLOCK] = inode;
     return block.write_back();
 }

@@ -16,7 +16,7 @@ namespace
 // '/' はパスの区切りなので、名前に入れるとパス解決で辿れなくなる。
 bool is_valid_name(std::string_view name)
 {
-    if (name.empty() || name.size() > DIRSIZ)
+    if (name.empty() || name.size() > DIRECTORY_NAME_SIZE)
         return false;
     for (char c : name)
     {
@@ -27,17 +27,17 @@ bool is_valid_name(std::string_view name)
 }
 
 // ディスク上の名前 (短ければ null 終端) と name が一致するか。
-// DIRSIZ ちょうどの名前は null 終端されないので、比較は最大 DIRSIZ バイトで打ち切る。
-bool is_name_equal(const char (&entry_name)[DIRSIZ], std::string_view name)
+// DIRECTORY_NAME_SIZE ちょうどの名前は null 終端されないので、比較は最大 DIRECTORY_NAME_SIZE バイトで打ち切る。
+bool is_name_equal(const char (&entry_name)[DIRECTORY_NAME_SIZE], std::string_view name)
 {
-    if (name.size() > DIRSIZ)
+    if (name.size() > DIRECTORY_NAME_SIZE)
         return false;
     for (size_t i = 0; i < name.size(); i++)
     {
         if (entry_name[i] != name[i])
             return false;
     }
-    return name.size() == DIRSIZ || entry_name[name.size()] == '\0';
+    return name.size() == DIRECTORY_NAME_SIZE || entry_name[name.size()] == '\0';
 }
 
 // offset の位置にあるエントリを 1 つ読む。

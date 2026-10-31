@@ -38,7 +38,7 @@ bool add_root_entry(DiskInode &root, uint32_t inode_number, const char *name)
             continue;
 
         entries[i].inode_number = inode_number;
-        std::strncpy(entries[i].name, name, DIRSIZ);
+        std::strncpy(entries[i].name, name, DIRECTORY_NAME_SIZE);
         if (!block.write_back())
         {
             return false;
