@@ -36,8 +36,8 @@ constexpr uint32_t ROOT_INODE   = 1;                               // ルート�
 //   inode blocks (inode_start から inode_blocks 個)
 //     DiskInode を 1 ブロックに INODES_PER_BLOCK (8) 個ずつ並べる。
 //     inode_start は 2 固定、inode_blocks = ceil(ninodes / INODES_PER_BLOCK)。
-//     inode 番号 inum は、inode_start + inum / INODES_PER_BLOCK 番目のブロックの
-//     inum % INODES_PER_BLOCK 番目に入っている。
+//     inode 番号 inode_number は、inode_start + inode_number / INODES_PER_BLOCK 番目のブロックの
+//     inode_number % INODES_PER_BLOCK 番目に入っている。
 //   bitmap       (bitmap_start から bitmap_blocks 個)
 //     ブロックの使用状況を 1 ブロック = 1 ビットで記録する (1 = 使用中)。
 //     データ領域だけでなく block 0 からの全ブロックが対象なので
@@ -98,7 +98,7 @@ constexpr int BLOCKS_PER_BITMAP_BLOCK = FSBLOCK_SIZE * BITS_PER_BYTE; // 4096ブ
 // ─── ディレクトリエントリ (16バイト) ─────────────────────────────
 struct [[gnu::packed]] DirectoryEntry
 {
-    uint16_t inum;
+    uint16_t inode_number;
     char name[DIRSIZ];
 };
 static_assert(sizeof(DirectoryEntry) == 16, "DirectoryEntry must be 16 bytes");

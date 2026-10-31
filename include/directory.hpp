@@ -22,7 +22,7 @@ struct DirectoryLookup
 std::optional<DirectoryLookup> dir_lookup(Inode &directory, std::string_view name);
 
 // ディレクトリ directory に (name → inode_num) のエントリを追加する。
-// 空きスロット (inum == 0) があれば再利用し、無ければ末尾に足す。
+// 空きスロット (inode_number == 0) があれば再利用し、無ければ末尾に足す。
 // 失敗するのは、name が空・DIRSIZ 超え・'/' を含む、inode_num が 0 か 16 bit に収まらない、
 // 同名が既にある、directory がディレクトリでない、読み書きに失敗した場合。
 // NOTE: inode_num 側の nlink は変更しない (呼び出し側の責任)。

@@ -64,16 +64,16 @@ bool directory_basic(IConsole *console)
     InodeRef file = FileSystem::allocate_inode(InodeType::kFile);
     if (!file)
         return report(console, "allocate file", false);
-    const uint32_t inum = file->inode_num;
+    const uint32_t inode_number = file->inode_num;
 
     // ディレクトリでない inode には使えない
     all &= report(console,
                   "reject non-directory",
-                  !FileSystem::dir_lookup(*file.get(), "hello") && !FileSystem::dir_link(*file.get(), "hello", inum));
+                  !FileSystem::dir_lookup(*file.get(), "hello") && !FileSystem::dir_link(*file.get(), "hello", inode_number));
 
-    bool ok    = FileSystem::dir_link(*root.get(), "hello", inum);
+    bool ok    = FileSystem::dir_link(*root.get(), "hello", inode_number);
     auto found = FileSystem::dir_lookup(*root.get(), "hello");
-    all &= report(console, "link then lookup", ok && found && found->inode_num == inum);
+    all &= report(console, "link then lookup", ok && found && found->inode_num == inode_number);
 
     // メモリ上の inode を捨てて、ディスクから読み直しても見つかるか
     root.reset();
@@ -81,19 +81,19 @@ bool directory_basic(IConsole *console)
     if (!root)
         return report(console, "get root again", false);
     auto reloaded = FileSystem::dir_lookup(*root.get(), "hello");
-    all &= report(console, "lookup after reload", reloaded && reloaded->inode_num == inum);
+    all &= report(console, "lookup after reload", reloaded && reloaded->inode_num == inode_number);
 
-    all &= report(console, "reject duplicate", !FileSystem::dir_link(*root.get(), "hello", inum));
+    all &= report(console, "reject duplicate", !FileSystem::dir_link(*root.get(), "hello", inode_number));
     all &= report(console,
-                  "reject empty / 15 chars / slash / inum 0 / inum over 16 bit",
-                  !FileSystem::dir_link(*root.get(), "", inum) &&
-                      !FileSystem::dir_link(*root.get(), "abcdefghijklmno", inum) &&
-                      !FileSystem::dir_link(*root.get(), "a/b", inum) &&
+                  "reject empty / 15 chars / slash / inode_number 0 / inode_number over 16 bit",
+                  !FileSystem::dir_link(*root.get(), "", inode_number) &&
+                      !FileSystem::dir_link(*root.get(), "abcdefghijklmno", inode_number) &&
+                      !FileSystem::dir_link(*root.get(), "a/b", inode_number) &&
                       !FileSystem::dir_link(*root.get(), "zero", 0) &&
                       !FileSystem::dir_link(*root.get(), "big", 0x10000));
 
     // ちょうど 14 文字は有効 (null 終端されない)。前方一致の名前とは区別される
-    ok = FileSystem::dir_link(*root.get(), "abcdefghijklmn", inum);
+    ok = FileSystem::dir_link(*root.get(), "abcdefghijklmn", inode_number);
     all &= report(console,
                   "14-char name",
                   ok && FileSystem::dir_lookup(*root.get(), "abcdefghijklmn") &&
@@ -103,7 +103,7 @@ bool directory_basic(IConsole *console)
     const uint32_t hello_offset = found ? found->offset : 0;
     clear_entry(*root.get(), "hello");
     all &= report(console, "lookup after clear", !FileSystem::dir_lookup(*root.get(), "hello"));
-    ok         = FileSystem::dir_link(*root.get(), "again", inum);
+    ok         = FileSystem::dir_link(*root.get(), "again", inode_number);
     auto again = FileSystem::dir_lookup(*root.get(), "again");
     all &= report(console, "reuse free slot", ok && found && again && again->offset == hello_offset);
 
@@ -113,7 +113,7 @@ bool directory_basic(IConsole *console)
     for (int i = 0; i < kManyEntries && ok; i++)
     {
         set_numbered_name(name, i);
-        ok = FileSystem::dir_link(*root.get(), name, inum);
+        ok = FileSystem::dir_link(*root.get(), name, inode_number);
     }
     set_numbered_name(name, kManyEntries - 1);
     all &= report(console,
@@ -130,7 +130,7 @@ bool directory_basic(IConsole *console)
     }
     clear_entry(*root.get(), "again");
     clear_entry(*root.get(), "abcdefghijklmn");
-    FileSystem::internal::write_inode(inum, DiskInode{});
+    FileSystem::internal::write_inode(inode_number, DiskInode{});
     return all;
 }
 

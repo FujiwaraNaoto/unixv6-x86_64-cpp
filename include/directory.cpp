@@ -66,12 +66,12 @@ std::optional<DirectoryLookup> dir_lookup(Inode &directory, std::string_view nam
     {
         if (!read_entry(directory, offset, entry))
             return std::nullopt;
-        if (entry.inum == 0) // 空きスロット
+        if (entry.inode_number == 0) // 空きスロット
             continue;
         if (is_name_equal(entry.name, name))
         {
             return DirectoryLookup{
-                .inode_num = entry.inum,
+                .inode_num = entry.inode_number,
                 .offset    = offset,
             };
         }
@@ -83,7 +83,7 @@ bool dir_link(Inode &directory, std::string_view name, uint32_t inode_num)
 {
     if (directory.disk.type != InodeType::kDirectory || !is_valid_name(name))
         return false;
-    // 0 は「空きスロット」の印なので指せない。DirectoryEntry::inum は 16 bit。
+    // 0 は「空きスロット」の印なので指せない。DirectoryEntry::inode_number は 16 bit。
     if (inode_num == 0 || inode_num > std::numeric_limits<uint16_t>::max())
         return false;
 
@@ -94,7 +94,7 @@ bool dir_link(Inode &directory, std::string_view name, uint32_t inode_num)
     {
         if (!read_entry(directory, offset, entry))
             return false;
-        if (entry.inum == 0)
+        if (entry.inode_number == 0)
         {
             if (!free_offset)
                 free_offset = offset;
@@ -108,7 +108,7 @@ bool dir_link(Inode &directory, std::string_view name, uint32_t inode_num)
     const uint32_t offset = free_offset ? *free_offset : directory.disk.size;
 
     DirectoryEntry fresh{}; // name は 0 埋めされるので、短い名前は自動で null 終端になる
-    fresh.inum = static_cast<uint16_t>(inode_num);
+    fresh.inode_number = static_cast<uint16_t>(inode_num);
     for (size_t i = 0; i < name.size(); i++)
         fresh.name[i] = name[i];
 

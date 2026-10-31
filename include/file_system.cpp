@@ -11,7 +11,7 @@ using FileSystem::internal::write_inode;
 using FileSystem::internal::zero_block;
 
 
-bool add_root_entry(DiskInode &root, uint32_t inum, const char *name)
+bool add_root_entry(DiskInode &root, uint32_t inode_number, const char *name)
 {
     int root_address = root.addrs[0];
     if (root_address == 0)
@@ -34,10 +34,10 @@ bool add_root_entry(DiskInode &root, uint32_t inum, const char *name)
 
     for (int i = 0; i < capacity; i++)
     {
-        if (entries[i].inum != 0)
+        if (entries[i].inode_number != 0)
             continue;
 
-        entries[i].inum = inum;
+        entries[i].inode_number = inode_number;
         std::strncpy(entries[i].name, name, DIRSIZ);
         if (!block.write_back())
         {

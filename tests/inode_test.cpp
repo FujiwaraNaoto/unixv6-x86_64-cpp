@@ -68,17 +68,17 @@ bool allocate_writes_type(IConsole *console)
     InodeRef file = FileSystem::allocate_inode(InodeType::kFile);
     bool ok       = file && file->inode_num >= 2;
 
-    uint32_t inum = ok ? file->inode_num : 0;
+    uint32_t inode_number = ok ? file->inode_num : 0;
     if (ok)
     {
         // メモリ上のコピーではなく、ディスクから読み直して確かめる
-        auto disk = FileSystem::internal::read_inode(inum);
+        auto disk = FileSystem::internal::read_inode(inode_number);
         ok        = disk && disk->type == InodeType::kFile;
     }
 
     // 後片付け: テストを何度走らせても inode を食い潰さないよう、空きに戻す
-    if (inum != 0)
-        FileSystem::internal::write_inode(inum, DiskInode{});
+    if (inode_number != 0)
+        FileSystem::internal::write_inode(inode_number, DiskInode{});
 
     return report(console, "allocate_inode(kFile)", ok);
 }
@@ -109,9 +109,9 @@ bool read_buffer_matches(uint32_t offset, uint32_t count)
 }
 
 // 後片付け: テストを何度走らせてもディスクを食い潰さないよう、ブロックと inode を空きに戻す
-void release_file(uint32_t inum)
+void release_file(uint32_t inode_number)
 {
-    auto disk = FileSystem::internal::read_inode(inum);
+    auto disk = FileSystem::internal::read_inode(inode_number);
     if (!disk)
         return;
 
@@ -132,7 +132,7 @@ void release_file(uint32_t inum)
         if (address != 0)
             FileSystem::free_block(address);
     }
-    FileSystem::internal::write_inode(inum, DiskInode{});
+    FileSystem::internal::write_inode(inode_number, DiskInode{});
 }
 
 // 間接ブロックに入る大きさを書き、ディスクから読み直しても同じ内容が返るか
@@ -141,7 +141,7 @@ bool write_and_read_back(IConsole *console)
     InodeRef file = FileSystem::allocate_inode(InodeType::kFile);
     if (!file)
         return report(console, "write/read across indirect block", false);
-    const uint32_t inum = file->inode_num;
+    const uint32_t inode_number = file->inode_num;
 
     for (uint32_t i = 0; i < kFileSize; i++)
         source_data[i] = pattern(i);
@@ -155,7 +155,7 @@ bool write_and_read_back(IConsole *console)
 
     // メモリ上のコピーを捨てて、size と addrs もディスクから読み直す
     file.reset();
-    file = FileSystem::get_inode(inum);
+    file = FileSystem::get_inode(inode_number);
     ok   = ok && file && file->disk.size == kFileSize && file->disk.addrs[NDIRECT] != 0;
 
     if (ok)
@@ -178,7 +178,7 @@ bool write_and_read_back(IConsole *console)
     }
 
     file.reset();
-    release_file(inum);
+    release_file(inode_number);
     return report(console, "write/read across indirect block", ok);
 }
 
@@ -188,7 +188,7 @@ bool read_does_not_allocate(IConsole *console)
     InodeRef file = FileSystem::allocate_inode(InodeType::kFile);
     if (!file)
         return report(console, "read does not allocate", false);
-    const uint32_t inum = file->inode_num;
+    const uint32_t inode_number = file->inode_num;
 
     // ブロックを持たないまま、メモリ上の size だけ伸ばす (ディスクには書かない)
     file->disk.size = (NDIRECT + 1) * FSBLOCK_SIZE;
@@ -198,7 +198,7 @@ bool read_does_not_allocate(IConsole *console)
     ok      = ok && file->disk.addrs[0] == 0 && file->disk.addrs[NDIRECT] == 0;
 
     file.reset();
-    release_file(inum);
+    release_file(inode_number);
     return report(console, "read does not allocate", ok);
 }
 
