@@ -10,6 +10,48 @@ constexpr size_t WIDTH             = 80;
 constexpr size_t HEIGHT            = 25;
 constexpr uint64_t ADDR            = 0xB8000;
 constexpr uint64_t DIRECT_MAP_BASE = 0xFFFF800000000000ULL;
+
+
+uint8_t decide_colorcode_vga(Color color)
+{
+    switch (color)
+    {
+        case Color::Black:
+            return 0;
+        case Color::Blue:
+            return 1;
+        case Color::Green:
+            return 2;
+        case Color::Cyan:
+            return 3;
+        case Color::Red:
+            return 4;
+        case Color::Magenta:
+            return 5;
+        case Color::Brown:
+            return 6;
+        case Color::LightGrey:
+            return 7;
+        case Color::DarkGrey:
+            return 8;
+        case Color::LightBlue:
+            return 9;
+        case Color::LightGreen:
+            return 10;
+        case Color::LightCyan:
+            return 11;
+        case Color::LightRed:
+            return 12;
+        case Color::LightMagenta:
+            return 13;
+        case Color::Yellow:
+            return 14;
+        case Color::White:
+            return 15;
+    }
+    return -1;
+}
+
 } // namespace
 
 namespace vga
@@ -33,14 +75,14 @@ VGA::VGA()
 }
 
 // bit0~bit3の4bit分が前景色, bit4~bit7の4bit分が背景色
-uint8_t VGA::make_attr(Color fg, Color bg)
+uint8_t VGA::make_attr(Color foreground, Color background)
 {
-    return static_cast<uint8_t>((static_cast<uint8_t>(bg) << 4) | (static_cast<uint8_t>(fg) & 0x0F));
+    return (decide_colorcode_vga(background) << 4) | (decide_colorcode_vga(foreground) & 0x0F);
 }
 
-void VGA::set_color(Color fg, Color bg)
+void VGA::set_color(Color foreground, Color background)
 {
-    attr_ = make_attr(fg, bg);
+    attr_ = make_attr(foreground, background);
 }
 
 // 文字コードを下位8bit, 属性を上位8bitに詰めた16bit値を作る
