@@ -12,8 +12,8 @@ namespace FileSystem
 
 struct DirectoryLookup
 {
-    uint32_t inode_number; // 見つかったエントリが指す inode 番号
-    uint32_t offset;       // そのエントリの、ディレクトリ内でのバイト位置
+    InodeNumber inode_number; // 見つかったエントリが指す inode 番号
+    uint32_t offset;          // そのエントリの、ディレクトリ内でのバイト位置
 };
 
 // ディレクトリ directory の中から name を探す。
@@ -25,7 +25,7 @@ std::optional<DirectoryLookup> directory_lookup(const Inode &directory, std::str
 // 失敗するのは、name が空・DIRECTORY_NAME_SIZE 超え・'/' を含む、inode_number が 0 か 16 bit に収まらない、
 // 同名が既にある、directory がディレクトリでない、読み書きに失敗した場合。
 // NOTE: inode_number 側の nlink は変更しない (呼び出し側の責任)。
-[[nodiscard]] bool directory_link(Inode &directory, std::string_view name, uint32_t inode_number);
+[[nodiscard]] bool directory_link(Inode &directory, std::string_view name, InodeNumber inode_number);
 
 } // namespace FileSystem
 

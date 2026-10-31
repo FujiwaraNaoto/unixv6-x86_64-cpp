@@ -7,6 +7,25 @@
 #include "block_store.hpp"
 
 
+// inode 番号。ブロック番号やバイト数などの普通の整数と取り違えないよう、型で区別する。
+// 0 は「inode を指していない」を表す (ディレクトリエントリの空きスロットの印でもある)。
+struct InodeNumber
+{
+    uint32_t value = 0;
+
+    constexpr InodeNumber() = default;
+    constexpr explicit InodeNumber(uint32_t number) : value(number) { }
+
+    explicit operator bool() const
+    {
+        return value != 0;
+    }
+
+    bool operator==(const InodeNumber &) const = default;
+};
+
+constexpr InodeNumber ROOT_INODE{1}; // ルートの inode 番号
+
 // xv6 の 0x10203040と同じ値にしておく。リトルエンディアンとビックエンディアンの両方で同じ値にならないように
 constexpr uint32_t FS_MAGIC       = 0x10203040;
 constexpr uint32_t FSBLOCK_SIZE   = 512;
@@ -15,7 +34,6 @@ constexpr int INDIRECT_INDEX      = NDIRECT;                         // addrs �
 constexpr int NINDIRECT           = FSBLOCK_SIZE / sizeof(uint32_t); // 128
 constexpr int MAXFILE             = NDIRECT + NINDIRECT;             // 140ブロック
 constexpr int DIRECTORY_NAME_SIZE = 14;                              // ファイル名長 (V6と同じ)
-constexpr uint32_t ROOT_INODE     = 1;                               // ルートの inode 番号
 
 
 // block 0        1         2 ...            bitmap_start ...      data_start ...

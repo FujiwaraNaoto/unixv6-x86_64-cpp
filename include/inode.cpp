@@ -11,7 +11,7 @@ namespace FileSystem
 namespace
 {
 // ヘッダに置くと include した翻訳単位ごとに実体ができるので、ここに置く
-std::array<Inode, NUM_INODE> inode_table;
+std::array<Inode, NUM_INODE> inode_table{};
 } // namespace
 
 void copy_from_disk(Inode &inode, const DiskInode &disk)
@@ -25,7 +25,7 @@ DiskInode to_disk(const Inode &inode)
     return inode.disk;
 }
 
-InodeRef get_inode(uint32_t inode_number)
+InodeRef get_inode(InodeNumber inode_number)
 {
     Inode *empty = nullptr;
     for (Inode &inode : inode_table)
@@ -62,9 +62,9 @@ InodeRef allocate_inode(InodeType type)
     const SuperBlock &superblock = FileSystem::superblock();
 
     const uint32_t num_super_block_inodes = superblock.ninodes;
-    for (uint32_t idx = 1; idx < num_super_block_inodes; idx++)
+    for (InodeNumber inode_number{1}; inode_number.value < num_super_block_inodes; inode_number.value++)
     {
-        auto disk = internal::read_inode(idx);
+        auto disk = internal::read_inode(inode_number);
         if (!disk)
         {
             return InodeRef{};
@@ -74,9 +74,9 @@ InodeRef allocate_inode(InodeType type)
 
         DiskInode fresh{};
         fresh.type = type;
-        if (!internal::write_inode(idx, fresh))
+        if (!internal::write_inode(inode_number, fresh))
             return InodeRef{};
-        return get_inode(idx);
+        return get_inode(inode_number);
     }
 
     return InodeRef{};

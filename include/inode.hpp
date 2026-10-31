@@ -7,7 +7,7 @@
 
 struct Inode
 {
-    uint32_t inode_number;
+    InodeNumber inode_number;
     int refcnt;     // 0なら空きスロット
     bool valid;     //　ディスクから読み込み済みか?
     DiskInode disk; // ディスク上の内容そのもの
@@ -23,7 +23,7 @@ constexpr int NUM_INODE = 10;
 
 // inode番号inode_numのinodeを取得する
 // テーブルに載っていればそれを共有してrefcntを増やす
-InodeRef get_inode(uint32_t inode_number);
+InodeRef get_inode(InodeNumber inode_number);
 
 //ディスクの空きinode(typeがkUnused)を確保してtypeを設定する。
 InodeRef allocate_inode(InodeType type);

@@ -64,7 +64,7 @@ bool directory_basic(IConsole *console)
     InodeRef file = FileSystem::allocate_inode(InodeType::kFile);
     if (!file)
         return report(console, "allocate file", false);
-    const uint32_t inode_number = file->inode_number;
+    const InodeNumber inode_number = file->inode_number;
 
     // ディレクトリでない inode には使えない
     all &= report(console,
@@ -90,8 +90,8 @@ bool directory_basic(IConsole *console)
                   !FileSystem::directory_link(*root.get(), "", inode_number) &&
                       !FileSystem::directory_link(*root.get(), "abcdefghijklmno", inode_number) &&
                       !FileSystem::directory_link(*root.get(), "a/b", inode_number) &&
-                      !FileSystem::directory_link(*root.get(), "zero", 0) &&
-                      !FileSystem::directory_link(*root.get(), "big", 0x10000));
+                      !FileSystem::directory_link(*root.get(), "zero", InodeNumber{0}) &&
+                      !FileSystem::directory_link(*root.get(), "big", InodeNumber{0x10000}));
 
     // ちょうど 14 文字は有効 (null 終端されない)。前方一致の名前とは区別される
     ok = FileSystem::directory_link(*root.get(), "abcdefghijklmn", inode_number);

@@ -8,9 +8,9 @@ State fs;
 
 namespace
 {
-uint32_t inode_block(uint32_t inode_number)
+uint32_t inode_block(InodeNumber inode_number)
 {
-    return FileSystem::internal::fs.superblock.inode_start + inode_number / INODES_PER_BLOCK;
+    return FileSystem::internal::fs.superblock.inode_start + inode_number.value / INODES_PER_BLOCK;
 }
 
 
@@ -67,24 +67,24 @@ bool mark_block_used(uint32_t blockno)
 }
 
 // TODO: write_disk_inode()に命名を変更
-bool write_inode(uint32_t inode_number, const DiskInode &inode)
+bool write_inode(InodeNumber inode_number, const DiskInode &inode)
 {
     auto block = fs.block_store->acquire(inode_block(inode_number));
     if (!block)
         return false;
-    auto *entries                            = reinterpret_cast<DiskInode *>(block.data());
-    entries[inode_number % INODES_PER_BLOCK] = inode;
+    auto *entries                                  = reinterpret_cast<DiskInode *>(block.data());
+    entries[inode_number.value % INODES_PER_BLOCK] = inode;
     return block.write_back();
 }
 
 // TODO: get_disk_inode()に命名変更
-std::optional<DiskInode> read_inode(uint32_t inode_number)
+std::optional<DiskInode> read_inode(InodeNumber inode_number)
 {
     auto block = fs.block_store->acquire(inode_block(inode_number));
     if (!block)
         return std::nullopt;
     auto *entries = reinterpret_cast<DiskInode *>(block.data());
-    return entries[inode_number % INODES_PER_BLOCK];
+    return entries[inode_number.value % INODES_PER_BLOCK];
 }
 
 

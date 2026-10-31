@@ -67,7 +67,7 @@ std::optional<DirectoryLookup> directory_lookup(const Inode &directory, std::str
         if (is_name_equal(entry.name, name))
         {
             return DirectoryLookup{
-                .inode_number = entry.inode_number,
+                .inode_number = InodeNumber{entry.inode_number},
                 .offset       = offset,
             };
         }
@@ -75,12 +75,12 @@ std::optional<DirectoryLookup> directory_lookup(const Inode &directory, std::str
     return std::nullopt;
 }
 
-bool directory_link(Inode &directory, std::string_view name, uint32_t inode_number)
+bool directory_link(Inode &directory, std::string_view name, InodeNumber inode_number)
 {
     if (directory.disk.type != InodeType::kDirectory || !is_valid_name(name))
         return false;
     // 0 は「空きスロット」の印なので指せない。DirectoryEntry::inode_number は 16 bit。
-    if (inode_number == 0 || inode_number > std::numeric_limits<uint16_t>::max())
+    if (!inode_number || inode_number.value > std::numeric_limits<uint16_t>::max())
         return false;
 
     // 1 回の走査で「同名が無いか」の確認と「最初の空きスロット」探しを両方やる。
@@ -104,7 +104,7 @@ bool directory_link(Inode &directory, std::string_view name, uint32_t inode_numb
     const uint32_t offset = free_offset ? *free_offset : directory.disk.size;
 
     DirectoryEntry fresh{}; // name は 0 埋めされるので、短い名前は自動で null 終端になる
-    fresh.inode_number = static_cast<uint16_t>(inode_number);
+    fresh.inode_number = static_cast<uint16_t>(inode_number.value);
     std::memcpy(fresh.name, name.data(), name.size());
 
     auto n = write_data(directory, reinterpret_cast<const uint8_t *>(&fresh), offset, sizeof(DirectoryEntry));
