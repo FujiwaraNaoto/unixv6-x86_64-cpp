@@ -117,17 +117,17 @@ std::optional<uint32_t> map_block(Inode &inode, uint32_t logical, bool allocatio
     if (logical >= NINDIRECT)
         return std::nullopt; // MAXFILE 超え
 
-    if (addrs[NDIRECT] == 0)
+    if (addrs[INDIRECT_INDEX] == 0)
     {
         if (!allocation_flag)
             return std::nullopt;
         auto b = FileSystem::allocate_block(); // 0 埋めされて返るので中身は全部「未割当」
         if (!b)
             return std::nullopt;
-        addrs[NDIRECT] = *b;
+        addrs[INDIRECT_INDEX] = *b;
     }
 
-    auto block = internal::fs.block_store->acquire(addrs[NDIRECT]);
+    auto block = internal::fs.block_store->acquire(addrs[INDIRECT_INDEX]);
     if (!block)
         return std::nullopt;
     auto *table = reinterpret_cast<uint32_t *>(block.data());

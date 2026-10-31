@@ -11,6 +11,7 @@
 constexpr uint32_t FS_MAGIC     = 0x10203040;
 constexpr uint32_t FSBLOCK_SIZE = 512;
 constexpr int NDIRECT           = 12;                              // 直接ブロック数
+constexpr int INDIRECT_INDEX    = NDIRECT;                         // addrs 内の間接ブロックの位置
 constexpr int NINDIRECT         = FSBLOCK_SIZE / sizeof(uint32_t); // 128
 constexpr int MAXFILE           = NDIRECT + NINDIRECT;             // 140ブロック
 constexpr int DIRSIZ            = 14;                              // ファイル名長 (V6と同じ)
