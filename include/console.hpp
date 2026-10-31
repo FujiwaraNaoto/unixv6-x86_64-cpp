@@ -3,25 +3,24 @@
 #include <cstdint>
 #include <cstdarg>
 
-// 文字色。出力先が色を表現できる場合にだけ使われる (VGA テキストモードの 16 色)。
-enum class Color : uint8_t
+enum class Color
 {
-    Black        = 0,
-    Blue         = 1,
-    Green        = 2,
-    Cyan         = 3,
-    Red          = 4,
-    Magenta      = 5,
-    Brown        = 6,
-    LightGrey    = 7,
-    DarkGrey     = 8,
-    LightBlue    = 9,
-    LightGreen   = 10,
-    LightCyan    = 11,
-    LightRed     = 12,
-    LightMagenta = 13,
-    Yellow       = 14,
-    White        = 15,
+    Black,
+    Blue,
+    Green,
+    Cyan,
+    Red,
+    Magenta,
+    Brown,
+    LightGrey,
+    DarkGrey,
+    LightBlue,
+    LightGreen,
+    LightCyan,
+    LightRed,
+    LightMagenta,
+    Yellow,
+    White,
 };
 
 // 文字出力先の抽象。VGA / シリアルなど「文字を出せるもの」を差し替え可能にする。
