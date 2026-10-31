@@ -92,10 +92,10 @@ void put_inode(Inode *inode)
 }
 
 // ファイル内の logical 番目のブロックが、ディスクの何番ブロックかを返す。
-// 未割当のとき、alloc なら確保し (addrs を書き換えるので、呼び出し側で update_inode すること)、
+// 未割当のとき、allocation_flag なら確保し (addrs を書き換えるので、呼び出し側で update_inode すること)、
 // そうでなければ失敗する。
 // 論理ブロック番号を物理ブロック番号に変換する
-std::optional<uint32_t> map_block(Inode &inode, uint32_t logical, bool alloc)
+std::optional<uint32_t> map_block(Inode &inode, uint32_t logical, bool allocation_flag)
 {
     auto &addrs = inode.disk.addrs;
 
@@ -103,7 +103,7 @@ std::optional<uint32_t> map_block(Inode &inode, uint32_t logical, bool alloc)
     {
         if (addrs[logical] == 0)
         {
-            if (!alloc)
+            if (!allocation_flag)
                 return std::nullopt;
             auto b = FileSystem::allocate_block();
             if (!b)
@@ -119,7 +119,7 @@ std::optional<uint32_t> map_block(Inode &inode, uint32_t logical, bool alloc)
 
     if (addrs[NDIRECT] == 0)
     {
-        if (!alloc)
+        if (!allocation_flag)
             return std::nullopt;
         auto b = FileSystem::allocate_block(); // 0 埋めされて返るので中身は全部「未割当」
         if (!b)
@@ -133,7 +133,7 @@ std::optional<uint32_t> map_block(Inode &inode, uint32_t logical, bool alloc)
     auto *table = reinterpret_cast<uint32_t *>(block.data());
     if (table[logical] == 0)
     {
-        if (!alloc)
+        if (!allocation_flag)
             return std::nullopt;
         auto b = FileSystem::allocate_block();
         if (!b)
