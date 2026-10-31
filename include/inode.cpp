@@ -106,35 +106,41 @@ std::optional<uint32_t> map_block(Inode &inode, uint32_t logical, bool alloc)
             if (!alloc)
                 return std::nullopt;
             auto b = FileSystem::allocate_block();
-            if (!b) return std::nullopt;
+            if (!b)
+                return std::nullopt;
             addrs[logical] = *b;
         }
         return addrs[logical];
     }
 
     logical -= NDIRECT;
-    if (logical >= NINDIRECT) return std::nullopt; // MAXFILE 超え
+    if (logical >= NINDIRECT)
+        return std::nullopt; // MAXFILE 超え
 
     if (addrs[NDIRECT] == 0)
     {
         if (!alloc)
             return std::nullopt;
         auto b = FileSystem::allocate_block(); // 0 埋めされて返るので中身は全部「未割当」
-        if (!b) return std::nullopt;
+        if (!b)
+            return std::nullopt;
         addrs[NDIRECT] = *b;
     }
 
     auto block = internal::fs.block_store->acquire(addrs[NDIRECT]);
-    if (!block) return std::nullopt;
+    if (!block)
+        return std::nullopt;
     auto *table = reinterpret_cast<uint32_t *>(block.data());
     if (table[logical] == 0)
     {
         if (!alloc)
             return std::nullopt;
         auto b = FileSystem::allocate_block();
-        if (!b) return std::nullopt;
+        if (!b)
+            return std::nullopt;
         table[logical] = *b;
-        if (!block.write_back()) return std::nullopt;
+        if (!block.write_back())
+            return std::nullopt;
     }
     return table[logical];
 }
