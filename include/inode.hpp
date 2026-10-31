@@ -31,7 +31,7 @@ InodeRef allocate_inode(InodeType type);
 // refcnt を減らす。InodeRef のデストラクタから呼ばれる。
 void put_inode(Inode *inode);
 
-void update_inode(const Inode &);
+[[nodiscard]] bool update_inode(const Inode &);
 
 // offset から最大 count バイトを dest に読む。読んだバイト数を返す (末尾で切り詰める)。
 std::optional<uint32_t> read_data(Inode &inode, uint8_t *dest, uint32_t offset, uint32_t count);

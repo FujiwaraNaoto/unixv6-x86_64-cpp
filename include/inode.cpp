@@ -38,7 +38,6 @@ InodeRef get_inode(uint32_t inode_num)
         if (empty == nullptr and inode.refcnt == 0)
         {
             empty = &inode;
-            break;
         }
     }
 
@@ -211,14 +210,15 @@ std::optional<uint32_t> write_data(Inode &inode, const uint8_t *source, uint32_t
     if (offset + done > inode.disk.size)
         inode.disk.size = offset + done;
     // map_block が addrs を書き換えている可能性があるので、size が変わらなくても書き戻す
-    update_inode(inode);
+    if (!update_inode(inode))
+        return std::nullopt;
     return done;
 }
 
 
-void update_inode(const Inode &inode)
+bool update_inode(const Inode &inode)
 {
-    internal::write_inode(inode.inode_num, inode.disk);
+    return internal::write_inode(inode.inode_num, inode.disk);
 }
 
 } // namespace FileSystem
