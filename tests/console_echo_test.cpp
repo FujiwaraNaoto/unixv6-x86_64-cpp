@@ -49,7 +49,7 @@ void fail(const char *message)
 }
 
 // このプロセスのアドレス空間に .user とユーザースタックをマップし、リング3へ降りる。ここから戻らない。
-void echo_entry()
+void echo_entry(void *)
 {
     Process *self = process::current_process();
 

@@ -98,7 +98,7 @@ void fail(const char *message)
 
 // プロセスのエントリ。このプロセスのアドレス空間に .user とユーザースタックをマップし、
 // リング3へ降りる。ここから戻らない。終了は exit システムコール (process::exit) 経由。
-void user_entry()
+void user_entry(void *)
 {
     Process *self = process::current_process();
     if (self == nullptr || !self->pml4)

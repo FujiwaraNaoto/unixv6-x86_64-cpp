@@ -6,7 +6,7 @@
 
 namespace Init
 {
-    void init_func(){
+    void init_func(void *){
         File *console_in  = FileSystem::file_open_console(true, false);
         File *console_out = FileSystem::file_open_console(false, true);
         if (console_in != nullptr && console_out != nullptr)

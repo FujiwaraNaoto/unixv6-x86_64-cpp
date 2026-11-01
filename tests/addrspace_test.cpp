@@ -18,7 +18,7 @@ constexpr PageVirtualAddress kAddrTestVirt{0x8000000000}; // PML4 index 1
 volatile uint64_t test_result_a = 0;
 volatile uint64_t test_result_b = 0;
 
-void addrspace_thread_a()
+void addrspace_thread_a(void *)
 {
     volatile uint64_t *p = reinterpret_cast<volatile uint64_t *>(kAddrTestVirt.address);
     *p                   = 0xAAAA;
@@ -26,7 +26,7 @@ void addrspace_thread_a()
     test_result_a = *p; // 戻ってきて自分の値を再確認
 }
 
-void addrspace_thread_b()
+void addrspace_thread_b(void *)
 {
     volatile uint64_t *p = reinterpret_cast<volatile uint64_t *>(kAddrTestVirt.address);
     *p                   = 0xBBBB;
