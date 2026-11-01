@@ -6,10 +6,6 @@
 #include "process.hpp"
 #include "user_syscall.hpp"
 
-// .user セクションの範囲 (kernel.ld が定義する)。この中だけを User 許可でマップする。
-extern "C" char __user_start[];
-extern "C" char __user_end[];
-
 namespace tests
 {
 namespace
@@ -84,8 +80,6 @@ namespace
     }
 }
 
-constexpr PageVirtualAddress kUserStack{0x600000};
-
 IConsole *usermode_console = nullptr;
 
 void fail(const char *message)
@@ -107,38 +101,15 @@ void user_entry(void *)
         return;
     }
 
-    // .user セクション全体を User 許可でマップする (1 ページに収まらなくなっても動くように)
-    for (uint64_t va = reinterpret_cast<uint64_t>(__user_start) & PAGE_MASK;
-         va < reinterpret_cast<uint64_t>(__user_end);
-         va += PAGE_SIZE)
+    if (!usermode::map_user_space(self->pml4))
     {
-        const PhysicalAddress phys = vmm::vmm_ptr->virtual_to_physical(PageVirtualAddress{va});
-        if (!phys)
-        {
-            fail("failed to resolve user_program physical address\n");
-            return;
-        }
-        vmm::vmm_ptr->map_page_in(self->pml4,
-                                  PageVirtualAddress{va},
-                                  phys,
-                                  vmm::PageFlag::Present | vmm::PageFlag::User);
-    }
-
-    // ユーザースタック
-    const PhysicalAddress stack_phys = pmm::pmm_ptr->allocate();
-    if (!stack_phys)
-    {
-        fail("failed to allocate user stack\n");
+        fail("failed to map user space\n");
         return;
     }
-    vmm::vmm_ptr->map_page_in(self->pml4,
-                              kUserStack,
-                              stack_phys,
-                              vmm::PageFlag::Present | vmm::PageFlag::Writable | vmm::PageFlag::User);
 
     // リング3へ遷移 (16バイト境界に揃える)。
     // syscall で降りてくる先のカーネルスタックは schedule() が設定済み。
-    usermode::enter(reinterpret_cast<uint64_t>(&user_program), kUserStack.address + PAGE_SIZE - 16);
+    usermode::enter(reinterpret_cast<uint64_t>(&user_program), usermode::kUserStackTop);
 }
 
 } // namespace

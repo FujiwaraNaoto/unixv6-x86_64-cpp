@@ -73,7 +73,7 @@ CFLAGS   = -m64 -std=c++20 -g \
            -fno-pic -fno-pie \
            -mno-red-zone -mno-mmx -mno-sse -mno-sse2 \
 		   -MMD -MP \
-           -Iinclude $(TEST_FLAGS) $(STD_INC)
+           -Iinclude -Iuser $(TEST_FLAGS) $(STD_INC)
 
 LDFLAGS  = -T kernel.ld -nostdlib -z max-page-size=0x1000
 NASMFLAGS = -f elf64 -Iinclude
@@ -81,6 +81,7 @@ NASMFLAGS = -f elf64 -Iinclude
 ASM_SRC  = boot/boot.asm io/io.asm interrupt/isr.asm interrupt/helper.asm boot/switch.asm syscall/syscall_entry.asm syscall/helper.asm user/usermode_entry.asm syscall/fork_ret.asm include/gdt_helper.asm
 CPP_SRC  = kernel/main.cpp \
            $(wildcard include/*.cpp) \
+           $(wildcard user/*.cpp) \
            $(TEST_SRC)
 
 OBJ_DIR  = build/$(BUILD_NAME)

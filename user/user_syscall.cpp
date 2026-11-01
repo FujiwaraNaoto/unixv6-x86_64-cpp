@@ -1,8 +1,5 @@
 #include "user_syscall.hpp"
 
-namespace tests
-{
-
 // リング3で動く。カーネルに降りる唯一の入口。
 //
 // 呼び出し規約は Linux 互換 (syscall/syscall_entry.asm を参照):
@@ -17,5 +14,3 @@ namespace tests
     asm volatile("syscall" : "=a"(ret) : "a"(num), "D"(a1), "S"(a2), "d"(a3) : "rcx", "r11", "memory");
     return ret;
 }
-
-} // namespace tests

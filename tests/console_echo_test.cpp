@@ -6,16 +6,10 @@
 #include "process.hpp"
 #include "user_syscall.hpp"
 
-// .user セクションの範囲 (kernel.ld が定義する)。この中だけを User 許可でマップする。
-extern "C" char __user_start[];
-extern "C" char __user_end[];
-
 namespace tests
 {
 namespace
 {
-
-constexpr PageVirtualAddress kUserStack{0x600000};
 
 // リング3で実行するエコー。fd 0 から 1 文字読んで fd 1 に書く。
 // 1 文字ずつ読むので、改行を待たずに打った文字がすぐ表示される。
@@ -53,34 +47,13 @@ void echo_entry(void *)
 {
     Process *self = process::current_process();
 
-    for (uint64_t va = reinterpret_cast<uint64_t>(__user_start) & PAGE_MASK;
-         va < reinterpret_cast<uint64_t>(__user_end);
-         va += PAGE_SIZE)
+    if (!usermode::map_user_space(self->pml4))
     {
-        const PhysicalAddress phys = vmm::vmm_ptr->virtual_to_physical(PageVirtualAddress{va});
-        if (!phys)
-        {
-            fail("failed to resolve user program physical address\n");
-            return;
-        }
-        vmm::vmm_ptr->map_page_in(self->pml4,
-                                  PageVirtualAddress{va},
-                                  phys,
-                                  vmm::PageFlag::Present | vmm::PageFlag::User);
-    }
-
-    const PhysicalAddress stack_phys = pmm::pmm_ptr->allocate();
-    if (!stack_phys)
-    {
-        fail("failed to allocate user stack\n");
+        fail("failed to map user space\n");
         return;
     }
-    vmm::vmm_ptr->map_page_in(self->pml4,
-                              kUserStack,
-                              stack_phys,
-                              vmm::PageFlag::Present | vmm::PageFlag::Writable | vmm::PageFlag::User);
 
-    usermode::enter(reinterpret_cast<uint64_t>(&user_echo_program), kUserStack.address + PAGE_SIZE - 16);
+    usermode::enter(reinterpret_cast<uint64_t>(&user_echo_program), usermode::kUserStackTop);
 }
 
 } // namespace

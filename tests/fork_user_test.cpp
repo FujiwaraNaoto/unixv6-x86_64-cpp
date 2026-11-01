@@ -7,19 +7,10 @@
 #include "systemcall.hpp"
 #include "user_syscall.hpp"
 
-// .user セクションの範囲 (kernel.ld が定義する)
-extern "C" char __user_start[];
-extern "C" char __user_end[];
-
 namespace tests
 {
 namespace
 {
-
-// ユーザースタックを置く仮想アドレス (PML4[0] 配下 = プロセスごとの領域)。
-// fork したとき copy_user_pages() が複製するのはこちら側だけなので、
-// 親子で別々になることを確かめるための変数はここ (スタック上) に置く。
-constexpr PageVirtualAddress kUserStack{0x600000};
 
 // ─── リング3で動く部分 ───────────────────────────────────────────
 // .rodata を参照しないよう、文字列はすべてスタック上に作る
@@ -88,37 +79,14 @@ void user_fork_entry(void *)
         return;
     }
 
-    // リング3で実行するコード。書き込みは許可しない。
-    for (uint64_t va = reinterpret_cast<uint64_t>(__user_start) & PAGE_MASK;
-         va < reinterpret_cast<uint64_t>(__user_end);
-         va += PAGE_SIZE)
+    if (!usermode::map_user_space(self->pml4))
     {
-        const PhysicalAddress phys = vmm::vmm_ptr->virtual_to_physical(PageVirtualAddress{va});
-        if (!phys)
-        {
-            fail("failed to resolve .user physical address\n");
-            return;
-        }
-        vmm::vmm_ptr->map_page_in(self->pml4,
-                                  PageVirtualAddress{va},
-                                  phys,
-                                  vmm::PageFlag::Present | vmm::PageFlag::User);
-    }
-
-    // ユーザースタック (fork で複製される側)
-    const PhysicalAddress stack_phys = pmm::pmm_ptr->allocate();
-    if (!stack_phys)
-    {
-        fail("failed to allocate user stack\n");
+        fail("failed to map user space\n");
         return;
     }
-    vmm::vmm_ptr->map_page_in(self->pml4,
-                              kUserStack,
-                              stack_phys,
-                              vmm::PageFlag::Present | vmm::PageFlag::Writable | vmm::PageFlag::User);
 
     // ここから戻らない。終了は exit システムコール (process::exit) 経由。
-    usermode::enter(reinterpret_cast<uint64_t>(&user_fork_program), kUserStack.address + PAGE_SIZE - 16);
+    usermode::enter(reinterpret_cast<uint64_t>(&user_fork_program), usermode::kUserStackTop);
 }
 
 } // namespace
