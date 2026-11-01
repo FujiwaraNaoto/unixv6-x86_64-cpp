@@ -1,9 +1,11 @@
 #include "systemcall.hpp"
 #include "serial.hpp"
-#include "keyboard.hpp"
+#include "file.hpp"
 #include "gdt.hpp"
 #include "console.hpp"
 #include "process.hpp"
+
+#include <limits>
 
 extern "C" void syscall_entry();
 extern "C" uint64_t rdmsr(uint32_t msr);
@@ -32,40 +34,41 @@ namespace
 IConsole *syscall_console = nullptr;
 } // namespace
 
+// 現在のプロセスの fd 表から File を引く。範囲外・閉じている fd は nullptr。
+static File *lookup_file(uint64_t fd)
+{
+    Process *proc = process::current_process();
+    if (proc == nullptr || fd >= proc->files.size())
+        return nullptr;
+    return proc->files[fd];
+}
+
 static long sys_read(uint64_t fd, uint64_t buf, uint64_t len)
 {
-    if (fd != 0)
-        return static_cast<long>(-1); // stdin のみ
-    char *p    = reinterpret_cast<char *>(buf);
-    size_t idx = 0;
-    while (idx < len)
-    {
-        while (!keyboard::has_input())
-        {
-            // syscall は FMASK で IF=0 (割り込み禁止) で入るため、ここで sti して
-            // キーボード割り込みを受けられるようにする。sti の直後に hlt を置くと
-            // sti から1命令ぶん割り込みが遅延する x86 の仕様により、check と hlt の
-            // 間に来た入力も取りこぼさずに wake できる (lost-wakeup 回避)。
-            asm volatile("sti; hlt");
-        }
-        char c = keyboard::getchar();
-        if (c == 0)
-            break; // no more input
-        p[idx] = c;
-        idx++;
-        if (c == '\n')
-            break; // stop reading after newline
-    }
-    return static_cast<long>(idx);
+    File *file = lookup_file(fd);
+    if (file == nullptr || len > std::numeric_limits<uint32_t>::max())
+        return static_cast<long>(-1);
+    auto done = FileSystem::file_read(*file, reinterpret_cast<uint8_t *>(buf), static_cast<uint32_t>(len));
+    return done ? static_cast<long>(*done) : static_cast<long>(-1);
 }
 
 static long sys_write(uint64_t fd, uint64_t buf, uint64_t len)
 {
-    if (fd != 1 && fd != 2)
-        return static_cast<long>(-1); // stdout/stderr のみ
-    const char *p = reinterpret_cast<const char *>(buf);
-    syscall_console->write(p, len);
-    return static_cast<long>(len);
+    File *file = lookup_file(fd);
+    if (file == nullptr || len > std::numeric_limits<uint32_t>::max())
+        return static_cast<long>(-1);
+    auto done = FileSystem::file_write(*file, reinterpret_cast<const uint8_t *>(buf), static_cast<uint32_t>(len));
+    return done ? static_cast<long>(*done) : static_cast<long>(-1);
+}
+
+static long sys_close(uint64_t fd)
+{
+    File *file = lookup_file(fd);
+    if (file == nullptr)
+        return static_cast<long>(-1);
+    process::current_process()->files[fd] = nullptr;
+    FileSystem::file_close(file);
+    return 0;
 }
 
 static long sys_exit(uint64_t code)
@@ -110,6 +113,8 @@ extern "C" long syscall_dispatch(uint64_t num, uint64_t a1, uint64_t a2, uint64_
             return sys_read(a1, a2, a3);
         case SyscallNo::kWrite:
             return sys_write(a1, a2, a3);
+        case SyscallNo::kClose:
+            return sys_close(a1);
         case SyscallNo::kFork:
             return sys_fork();
         case SyscallNo::kWait:
@@ -128,6 +133,7 @@ void init(IConsole *console)
 {
     // syscall を有効にする前に出力先を登録しておく
     syscall_console = (console != nullptr) ? console : serial::serial;
+    FileSystem::file_set_console(syscall_console);
 
     // 1. EFER.SCE (System Call Enable) を立てる
     uint64_t efer = rdmsr(MSR::EFER);

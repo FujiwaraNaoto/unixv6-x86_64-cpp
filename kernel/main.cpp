@@ -18,6 +18,7 @@
 #include "virtioblock.hpp"
 #include "buffer_cache.hpp"
 #include "file_system.hpp"
+#include "file.hpp"
 
 // tests/ 以下は make tests (TESTS=1) のときだけコンパイル・リンクされる。
 // 通常ビルドではテストコードはカーネルに一切含まれない。
@@ -163,6 +164,26 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, uint32_t mb_addr
 #ifdef ENABLE_TESTS
     // 各機能の動作確認 (どのテストを走らせるかは tests/tests.cpp で切り替える)
     tests::run_all(vga::vga);
+#else
+    // TODO: 一時的な動作確認用。キーボード入力を File 経由でそのまま画面に出す。シェルができたら消す。
+    File *console_in  = FileSystem::file_open_console(true, false);
+    File *console_out = FileSystem::file_open_console(false, true);
+    if (console_in != nullptr && console_out != nullptr)
+    {
+        vga::vga->puts("[ECHO] type something:\n> ");
+        while (1)
+        {
+            uint8_t c = 0;
+            if (FileSystem::file_read(*console_in, &c, 1))
+            {
+                (void)FileSystem::file_write(*console_out, &c, 1);
+                if (c == '\n')
+                {
+                    vga::vga->puts("> ");
+                }
+            }
+        }
+    }
 #endif
 
     while (1)
