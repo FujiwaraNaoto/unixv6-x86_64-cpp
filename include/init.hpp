@@ -4,10 +4,10 @@
 
 namespace Init
 {
-    //Entryと同じ型である必要がある
-    void init_func(void *);
+// Entryと同じ型である必要がある
+void init_func(void *);
 
-}
+} // namespace Init
 
 
-#endif 
+#endif

@@ -148,7 +148,7 @@ struct Process
     KernelStack kernel_stack; // そのプロセス専用のカーネルスタック領域の先頭アドレス。
                               // 上端 (rsp の出発点) は .top() で取る
     EntryPoint entry;
-    void *entry_arg; // entry に渡す引数
+    void *entry_arg;  // entry に渡す引数
     kstring<16> name; // NOTE: kstring は固定容量の文字列で、容量超過分は切り捨てられる.
                       // C++の標準ライブラリは使えないので、std::string は使えない
     PhysicalAddress pml4; // プロセスのページテーブルの物理アドレス(Page Map Level 4)。未割り当てなら nullopt
@@ -172,7 +172,7 @@ Process *create_process(EntryPoint entry, const char *name, void *arg = nullptr)
 void yield();
 Process *current_process();
 
-Process* create_init_process(EntryPoint entry, void *arg = nullptr);
+Process *create_init_process(EntryPoint entry, void *arg = nullptr);
 
 
 // 現在プロセスをchannelを理由にしてSleeping状態にしスケジューラへ制御を渡す
