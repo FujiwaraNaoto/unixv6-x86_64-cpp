@@ -99,7 +99,7 @@ static void trampoline()
     Process *proc = cpu.current;
     if (proc && proc->entry)
     {
-        proc->entry();
+        proc->entry(proc->entry_arg);
     }
     close_all_files(proc);
     proc->state = ProcessState::Zombie;
@@ -217,7 +217,7 @@ Process *allocate_process()
 //       │                │
 //   低  └────────────────┘ ← kernel_stack.base
 
-Process *create_process(EntryPoint entry, const char *name)
+Process *create_process(EntryPoint entry, const char *name, void *arg)
 {
     Process *proc = allocate_process();
     if (proc == nullptr)
@@ -230,6 +230,7 @@ Process *create_process(EntryPoint entry, const char *name)
         return nullptr;
     }
     proc->entry = entry;
+    proc->entry_arg = arg;
     proc->name  = name; // kstring が容量超過分を切り捨てて null 終端する
 
     uint8_t *stack_top = proc->kernel_stack.top();
@@ -256,8 +257,8 @@ Process *current_process()
     return cpu.current;
 }
 
-Process* create_init_process(EntryPoint entry){
-    return create_process(entry,"init");
+Process* create_init_process(EntryPoint entry, void *arg){
+    return create_process(entry,"init",arg);
 }
 
 // Switch to the next process in the “Runnable” state using round-robin scheduling
@@ -616,6 +617,7 @@ int fork()
 
     //子供に親の情報をコピーする
     child->entry  = parent->entry;
+    child->entry_arg = parent->entry_arg;
     child->name   = parent->name;
     child->parent = parent;
 

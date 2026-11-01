@@ -13,8 +13,7 @@ namespace tests
 namespace
 {
 
-// スレッド関数は EntryPoint (void (*)()) として create_process に渡すので引数を
-// 取れない。結果はグローバル変数で受け渡す。
+// スレッド関数の引数 (void *) は使わず、結果はグローバル変数で受け渡す。
 volatile bool console_fds_ok   = false;
 volatile bool fork_shares_ok   = false;
 volatile bool child_shares_ok  = false;
@@ -189,7 +188,7 @@ long call_syscall(int number, uint64_t fd, const void *buffer, uint64_t count)
 }
 
 // プロセスの fd 表: 作成時の fd 0/1/2、fork での共有、終了時の解放、syscall からの参照
-void process_thread()
+void process_thread(void *)
 {
     Process *self = process::current_process();
     auto &files   = self->files;

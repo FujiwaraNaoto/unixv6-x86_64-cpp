@@ -9,7 +9,7 @@
 namespace Init
 {
     //Entryと同じ型である必要がある
-    void init_func();
+    void init_func(void *);
 
 }
 

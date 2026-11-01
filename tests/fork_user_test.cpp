@@ -79,7 +79,7 @@ void fail(const char *message)
 }
 
 // このプロセスのアドレス空間に .user とユーザースタックをマップし、リング3へ降りる。
-void user_fork_entry()
+void user_fork_entry(void *)
 {
     Process *self = process::current_process();
     if (self == nullptr || !self->pml4)

@@ -10,11 +10,10 @@ namespace
 int sleep_channel;
 volatile bool sleeper_woke = false;
 
-// スレッド関数は EntryPoint (void (*)()) として create_process に渡すので引数を
-// 取れない。出力先はテスト関数がプロセスを作る前にここへ設定する。
+// スレッド関数の引数 (void *) は使わず、出力先はテスト関数がプロセスを作る前にここへ設定する。
 IConsole *thread_console = nullptr;
 
-void sleeper_thread()
+void sleeper_thread(void *)
 {
     thread_console->set_color(Color::LightCyan, Color::Black);
     thread_console->puts("[SLEEP] sleeper going to sleep...\n");
@@ -29,7 +28,7 @@ void sleeper_thread()
     thread_console->set_color(Color::LightGrey, Color::Black);
 }
 
-void waker_thread()
+void waker_thread(void *)
 {
     // 少し他の処理を挟んでから起こす
     for (int i = 0; i < 3; i++)
