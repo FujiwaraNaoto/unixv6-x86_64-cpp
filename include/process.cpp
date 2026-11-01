@@ -48,6 +48,9 @@ struct Cpu
 ProcessTable ptable;
 Cpu cpu;
 
+// 孤児の引き取り先 (pid 1)。create_init_process() が設定する。テストのビルドでは nullptr のまま。
+Process *init_proc = nullptr;
+
 } // namespace
 
 void initialize(heap::Heap &heap)
@@ -259,7 +262,8 @@ Process *current_process()
 
 Process *create_init_process(EntryPoint entry, void *arg)
 {
-    return create_process(entry, "init", arg);
+    init_proc = create_process(entry, "init", arg);
+    return init_proc;
 }
 
 // Switch to the next process in the “Runnable” state using round-robin scheduling
@@ -379,6 +383,19 @@ static void schedule_from_zombie(ProcessContext **discard_context)
         // まだ Zombie でなく、再び寝てしまい今度は誰も起こさない。
         wakeup(p->parent);
     }
+
+    // 自分の子を init に引き取らせる。親が先に死ぬと、子は誰にも wait() されなくなるため。
+    for (Process &child : ptable.procs)
+    {
+        if (child.state == ProcessState::Unused || child.parent != p)
+            continue;
+        child.parent = init_proc;
+        // 既に Zombie の子を渡した場合、init は wait() で寝たままなので起こす。
+        // チャネルは wait() の sleep(p) と同じ「親自身の Process*」。
+        if (init_proc != nullptr && child.state == ProcessState::Zombie)
+            wakeup(init_proc);
+    }
+
     //二度と戻らないので、スケジューラに制御を渡す
     static ProcessContext *discard_context;
     schedule_from_zombie(&discard_context);
