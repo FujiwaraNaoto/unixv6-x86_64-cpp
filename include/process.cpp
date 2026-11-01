@@ -616,7 +616,6 @@ int fork()
     child->name   = parent->name;
     child->parent = parent;
 
-    // fd 表を複製する。親子は同じ File を指すので offset を共有する
     for (size_t fd = 0; fd < parent->files.size(); fd++)
     {
         child->files[fd] = FileSystem::file_dup(parent->files[fd]);
