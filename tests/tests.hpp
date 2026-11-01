@@ -73,6 +73,9 @@ bool inode_basic(IConsole *console);
 // ディレクトリ: directory_lookup / directory_link の検索・追加・空きスロットの再利用・ブロック越えを確認する。
 bool directory_basic(IConsole *console);
 
+// パス解決: resolve_path / resolve_parent を確認する。
+bool path_basic(IConsole *console);
+
 
 // 有効化しているテストをまとめて実行する。
 // どのテストを走らせるかは tests.cpp 側で切り替える。
