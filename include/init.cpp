@@ -30,7 +30,7 @@ void init_func(void *arg)
                     // キーボード表示用
                     (void)FileSystem::file_write(*console_out, &c, 1);
                     buf[idx++] = c;
-                    if (c == '\n')
+                    if (c == '\n' || idx == BUF_SIZE - 1)
                     {
                         buf[idx] = '\0';
                         break;
