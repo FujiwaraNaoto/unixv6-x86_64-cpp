@@ -168,6 +168,9 @@ Process *create_process(EntryPoint entry, const char *name);
 void yield();
 Process *current_process();
 
+Process* create_init_process(EntryPoint entry);
+
+
 // 現在プロセスをchannelを理由にしてSleeping状態にしスケジューラへ制御を渡す
 // wakeup()でchannelを理由にしてSleeping状態のプロセスをReady状態にする
 void sleep(void *channel);

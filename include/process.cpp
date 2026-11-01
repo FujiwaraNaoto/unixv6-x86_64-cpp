@@ -256,6 +256,9 @@ Process *current_process()
     return cpu.current;
 }
 
+Process* create_init_process(EntryPoint entry){
+    return create_process(entry,"init");
+}
 
 // Switch to the next process in the “Runnable” state using round-robin scheduling
 void yield()
