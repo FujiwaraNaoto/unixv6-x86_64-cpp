@@ -6,8 +6,7 @@ namespace tests
 namespace
 {
 
-// スレッド関数は EntryPoint (void (*)()) として create_process に渡すので引数を
-// 取れない。出力先はテスト関数がプロセスを作る前にここへ設定する。
+// スレッド関数の引数 (void *) は使わず、出力先はテスト関数がプロセスを作る前にここへ設定する。
 IConsole *thread_console = nullptr;
 
 // 各スレッドが回った回数 (yield で切り替わらないと最後まで回らない)
@@ -15,7 +14,7 @@ constexpr int kIterations = 3;
 volatile int iterations_a = 0;
 volatile int iterations_b = 0;
 
-void thread_A()
+void thread_A(void *)
 {
     for (int i = 0; i < kIterations; ++i)
     {
@@ -27,7 +26,7 @@ void thread_A()
     }
 }
 
-void thread_B()
+void thread_B(void *)
 {
     for (int i = 0; i < kIterations; ++i)
     {

@@ -95,7 +95,7 @@ bool fork_and_wait()
 }
 
 // fork + wait を繰り返しても空きページが減らないことを確かめる (子の PML4 とカーネルスタック)。
-void fork_wait_thread()
+void fork_wait_thread(void *)
 {
     // 1 回目はヒープが伸びる (カーネルスタックの確保で sbrk する) ので、慣らしてから測る
     fork_and_wait();
