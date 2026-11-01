@@ -39,9 +39,9 @@ constexpr int NUM_FILES = 100; // システム全体で開けるファイル数 
 // kConsole の書き込み先を登録する。nullptr なら null_console に捨てる。
 void file_set_console(IConsole *console);
 
-File *file_allocate();       // 空きスロットを refcnt = 1 で返す。満杯なら nullptr
-File *file_dup(File *file);  // refcnt++ して同じ File を返す (fork 用)。nullptr はそのまま返す
-void file_close(File *file); // refcnt--。0 になったら inode を手放して空きに戻す
+File *file_allocate();            // 空きスロットを refcnt = 1 で返す。満杯なら nullptr
+File *file_duplicate(File *file); // refcnt++ して同じ File を返す (fork 用)。nullptr はそのまま返す
+void file_close(File *file);      // refcnt--。0 になったら inode を手放して空きに戻す
 
 // kConsole の File を作る。満杯なら nullptr。
 File *file_open_console(bool readable, bool writable);

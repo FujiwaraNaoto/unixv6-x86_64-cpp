@@ -53,7 +53,7 @@ bool allocate_dup_close(IConsole *console)
     bool ok    = file != nullptr && file->refcnt == 1;
     if (ok)
     {
-        ok = FileSystem::file_dup(file) == file && file->refcnt == 2;
+        ok = FileSystem::file_duplicate(file) == file && file->refcnt == 2;
         FileSystem::file_close(file);
         ok = ok && file->refcnt == 1;
         FileSystem::file_close(file);
@@ -131,7 +131,7 @@ bool inode_file(IConsole *console)
 
     // dup した File は offset を共有する
     reader->offset = 0;
-    File *shared   = FileSystem::file_dup(reader);
+    File *shared   = FileSystem::file_duplicate(reader);
     auto part1     = FileSystem::file_read(*reader, read_buffer.data(), 600);
     bool part1_ok  = part1 && *part1 == 600 && read_buffer_matches(0, 600);
     auto part2     = FileSystem::file_read(*shared, read_buffer.data(), 100);

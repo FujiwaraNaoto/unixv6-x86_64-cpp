@@ -56,7 +56,7 @@ File *file_allocate()
     return nullptr;
 }
 
-File *file_dup(File *file)
+File *file_duplicate(File *file)
 {
     if (file != nullptr)
         file->refcnt++;

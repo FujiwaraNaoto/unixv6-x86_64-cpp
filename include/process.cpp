@@ -88,7 +88,7 @@ static bool open_console_files(Process *proc)
     proc->files[1] = FileSystem::file_open_console(false, true);
     if (proc->files[0] == nullptr || proc->files[1] == nullptr)
         return false;
-    proc->files[2] = FileSystem::file_dup(proc->files[1]);
+    proc->files[2] = FileSystem::file_duplicate(proc->files[1]);
     return true;
 }
 
@@ -618,7 +618,7 @@ int fork()
 
     for (size_t fd = 0; fd < parent->files.size(); fd++)
     {
-        child->files[fd] = FileSystem::file_dup(parent->files[fd]);
+        child->files[fd] = FileSystem::file_duplicate(parent->files[fd]);
     }
 
     // カーネルスタックは allocate_process() が確保済み。
