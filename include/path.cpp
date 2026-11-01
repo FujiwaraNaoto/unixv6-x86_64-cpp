@@ -1,11 +1,7 @@
 #include "path.hpp"
 #include "directory.hpp"
-
 #include <cstddef>
 #include <utility>
-
-// NOTE: std::string_view の find() は memchr を呼ぶがカーネルには実体が無いので、1 文字ずつ見る。
-//       substr() も、範囲外のときに例外を投げる経路があるので使わない (-fno-exceptions)。
 
 namespace
 {
