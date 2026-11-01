@@ -60,6 +60,10 @@ bool usermode_ring3(IConsole *console);
 // キーボード: 入力をそのままエコーする。無限ループなので戻らない。
 [[noreturn]] void keyboard_echo(IConsole *console);
 
+// コンソール: リング3のプログラムが read(0) と write(1) で入力をエコーする。無限ループなので戻らない。
+// カーネルの fd 表を通る。make ONLY=console_echo tests-gui で起動する。
+[[noreturn]] void console_echo(IConsole *console);
+
 // VirtIO ブロックデバイス: 初期化してセクタ0を読み、hexdump で表示する。
 bool virtio_block_read(IConsole *console);
 
