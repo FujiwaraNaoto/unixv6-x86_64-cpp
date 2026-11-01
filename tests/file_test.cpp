@@ -20,6 +20,8 @@ volatile bool fork_shares_ok   = false;
 volatile bool child_shares_ok  = false;
 volatile bool wait_restores_ok = false;
 volatile bool syscall_fds_ok   = false;
+volatile bool child_close_ok   = false;
+volatile bool close_ok         = false;
 
 bool report(IConsole *console, const char *name, bool ok)
 {
@@ -208,6 +210,8 @@ void process_thread()
         auto &child_files = process::current_process()->files;
         child_shares_ok   = child_files[0] == self->files[0] && child_files[1] == self->files[1] &&
                           child_files[2] == self->files[2] && child_files[3] == nullptr;
+        // 閉じるのは子の fd だけ。親の表は変わらない (残りの fd は exit が閉じる)
+        child_close_ok = call_syscall(SyscallNo::kClose, 1, nullptr, 0) == 0 && child_files[1] == nullptr;
         process::exit(0);
     }
 
@@ -216,7 +220,8 @@ void process_thread()
 
     int code;
     const auto waited = process::wait(&code);
-    wait_restores_ok  = waited && files[0]->refcnt == stdin_refcnt && files[1]->refcnt == stdout_refcnt;
+    wait_restores_ok  = waited && files[1] != nullptr && files[0]->refcnt == stdin_refcnt &&
+                       files[1]->refcnt == stdout_refcnt;
 
     const char message[] = "[FILE] write through fd 1\n";
     const long length    = static_cast<long>(sizeof(message) - 1);
@@ -229,6 +234,15 @@ void process_thread()
                      call_syscall(SyscallNo::kRead, 3, &byte, 1) == -1 &&
                      call_syscall(SyscallNo::kWrite, NUM_OPEN_FILES, message, 1) == -1 && // 範囲外
                      call_syscall(SyscallNo::kRead, NUM_OPEN_FILES, &byte, 1) == -1;
+
+    // close: fd を空けて参照を 1 つ返す。同じ File を指す他の fd はそのまま使える
+    files[3]       = FileSystem::file_duplicate(files[1]);
+    const long ret = call_syscall(SyscallNo::kClose, 3, nullptr, 0);
+    close_ok       = ret == 0 && files[3] == nullptr && files[1]->refcnt == stdout_refcnt &&
+               call_syscall(SyscallNo::kWrite, 3, message, 1) == -1 && // 閉じた fd は使えない
+               call_syscall(SyscallNo::kWrite, 1, message, 0) == 0 &&
+               call_syscall(SyscallNo::kClose, 3, nullptr, 0) == -1 && // 二重 close
+               call_syscall(SyscallNo::kClose, NUM_OPEN_FILES, nullptr, 0) == -1;
 }
 
 bool process_files(IConsole *console)
@@ -243,6 +257,8 @@ bool process_files(IConsole *console)
     ok &= report(console, "fork shares files", fork_shares_ok && child_shares_ok);
     ok &= report(console, "exit of child closes files", wait_restores_ok);
     ok &= report(console, "syscalls go through fd table", syscall_fds_ok);
+    ok &= report(console, "close syscall", close_ok);
+    ok &= report(console, "close in child keeps parent's fd", child_close_ok);
     // entry から戻って終わったスレッドの分も閉じられている
     ok &= report(console, "no File leak after thread ends", count_free_slots() == free_before);
     return ok;

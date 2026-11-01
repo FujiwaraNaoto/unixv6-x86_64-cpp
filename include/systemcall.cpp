@@ -61,6 +61,16 @@ static long sys_write(uint64_t fd, uint64_t buf, uint64_t len)
     return done ? static_cast<long>(*done) : static_cast<long>(-1);
 }
 
+static long sys_close(uint64_t fd)
+{
+    File *file = lookup_file(fd);
+    if (file == nullptr)
+        return static_cast<long>(-1);
+    process::current_process()->files[fd] = nullptr;
+    FileSystem::file_close(file);
+    return 0;
+}
+
 static long sys_exit(uint64_t code)
 {
     syscall_console->set_color(Color::Yellow, Color::Black);
@@ -103,6 +113,8 @@ extern "C" long syscall_dispatch(uint64_t num, uint64_t a1, uint64_t a2, uint64_
             return sys_read(a1, a2, a3);
         case SyscallNo::kWrite:
             return sys_write(a1, a2, a3);
+        case SyscallNo::kClose:
+            return sys_close(a1);
         case SyscallNo::kFork:
             return sys_fork();
         case SyscallNo::kWait:
