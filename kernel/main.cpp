@@ -168,7 +168,7 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, uint32_t mb_addr
 #else
     // TODO: 一時的な動作確認用。キーボード入力を File 経由でそのまま画面に出す。シェルができたら消す。
     // init_func は void * を IConsole * に戻すので、VGA * のままではなく IConsole * にしてから渡す。
-    process::create_init_process(Init::init_func, static_cast<IConsole *>(vga::vga));
+    process::create_init_process(InitProcess::init_func, static_cast<IConsole *>(vga::vga));
 #endif
 
     while (1)

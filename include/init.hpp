@@ -2,12 +2,12 @@
 #define INIT_HPP
 
 
-namespace Init
+namespace InitProcess
 {
 // Entryと同じ型である必要がある
 void init_func(void *);
 
-} // namespace Init
+} // namespace InitProcess
 
 
 #endif

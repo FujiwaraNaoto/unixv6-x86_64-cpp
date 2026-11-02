@@ -5,7 +5,7 @@
 #include "console.hpp"
 
 constexpr int BUF_SIZE = 1 << 10;
-namespace Init
+namespace InitProcess
 {
 void init_func(void *arg)
 {
@@ -42,4 +42,4 @@ void init_func(void *arg)
     }
 }
 
-} // namespace Init
+} // namespace InitProcess
