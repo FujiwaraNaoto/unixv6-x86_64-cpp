@@ -390,16 +390,19 @@ void schedule_from_zombie(ProcessContext **discard_context)
         wakeup(p->parent);
     }
 
-    // 自分の子を init に引き取らせる。親が先に死ぬと、子は誰にも wait() されなくなるため。
+    // 孤児プロセスになるため init に引き取らせる。Linux Kernelと同様
     for (Process &child : ptable.procs)
     {
         if (child.state == ProcessState::Unused || child.parent != p)
             continue;
         child.parent = init_proc;
-        // 既に Zombie の子を渡した場合、init は wait() で寝たままなので起こす。
-        // チャネルは wait() の sleep(p) と同じ「親自身の Process*」。
         if (init_proc != nullptr && child.state == ProcessState::Zombie)
+        {
+            // この子は既に exit 済みで、その時の wakeup は元の親 (p) 宛てだった。
+            // init 宛ての wakeup は誰も送らないので、ここで起こす。
+            // 起きた init は wait() で子を走査し直して、この Zombie を回収する。
             wakeup(init_proc);
+        }
     }
 
     //二度と戻らないので、スケジューラに制御を渡す
