@@ -7,6 +7,7 @@
 constexpr int BUF_SIZE = 1 << 10;
 namespace InitProcess
 {
+// TODO: 一時的な動作確認用。キーボード入力を File 経由でそのまま画面に出す。シェルができたら消す。
 void init_func(void *arg)
 {
     IConsole *console = (arg != nullptr) ? static_cast<IConsole *>(arg) : null_console;
