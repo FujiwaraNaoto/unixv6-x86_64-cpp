@@ -71,8 +71,10 @@ void initialize(heap::Heap &heap)
 }
 
 
+namespace
+{
 // fd 表の File をすべて閉じる。閉じた fd は nullptr にするので、2 回呼んでも問題ない。
-static void close_all_files(Process *proc)
+void close_all_files(Process *proc)
 {
     for (File *&file : proc->files)
     {
@@ -82,7 +84,7 @@ static void close_all_files(Process *proc)
 }
 
 // fd 0/1/2 をコンソールにつなぐ。失敗したら false (開けた分は呼び出し側が free_process_resources で閉じる)。
-static bool open_console_files(Process *proc)
+bool open_console_files(Process *proc)
 {
     proc->files[0] = FileSystem::file_open_console(true, false);
     proc->files[1] = FileSystem::file_open_console(false, true);
@@ -94,7 +96,7 @@ static bool open_console_files(Process *proc)
 
 // A function called when a new process is executed for the first time
 // ProcessContext の rip に設定される
-static void trampoline()
+void trampoline()
 {
     Process *proc = cpu.current;
     if (proc && proc->entry)
@@ -111,7 +113,7 @@ static void trampoline()
         asm volatile("hlt");
 }
 
-static void schedule(Process *prev_proc)
+void schedule(Process *prev_proc)
 {
     size_t start = prev_proc ? (prev_proc - &ptable.procs[0]) : -1;
     for (size_t off = 1; off <= ptable.procs.size(); ++off)
@@ -156,6 +158,7 @@ static void schedule(Process *prev_proc)
         switch_context(&prev_proc->context, cpu.scheduler_context);
     }
 }
+} // namespace
 
 
 // 空きスロットを確保し、カーネルスタックとアドレス空間を用意する。
@@ -309,8 +312,10 @@ void wakeup(void *chan)
     }
 }
 
+namespace
+{
 // zombie になったプロセスのコンテキストを破棄して、別プロセスへ切り替える。
-static void schedule_from_zombie(ProcessContext **discard_context)
+void schedule_from_zombie(ProcessContext **discard_context)
 {
     Process *prev_proc = cpu.current;
     int start          = prev_proc ? (prev_proc - &ptable.procs[0]) : -1;
@@ -335,6 +340,7 @@ static void schedule_from_zombie(ProcessContext **discard_context)
     cpu.current = nullptr;
     switch_context(discard_context, cpu.scheduler_context);
 }
+} // namespace
 
 
 [[noreturn]] void exit(int status)

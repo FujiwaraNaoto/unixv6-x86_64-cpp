@@ -32,10 +32,9 @@ namespace
 // syscall_dispatch は引数で受け取れないので、ここに保持する。
 // syscall は init() で有効にするので、登録前に dispatch が走ることはない。
 IConsole *syscall_console = nullptr;
-} // namespace
 
 // 現在のプロセスの fd 表から File を引く。範囲外・閉じている fd は nullptr。
-static File *lookup_file(uint64_t fd)
+File *lookup_file(uint64_t fd)
 {
     Process *proc = process::current_process();
     if (proc == nullptr || fd >= proc->files.size())
@@ -43,7 +42,7 @@ static File *lookup_file(uint64_t fd)
     return proc->files[fd];
 }
 
-static long sys_read(uint64_t fd, uint64_t buf, uint64_t len)
+long sys_read(uint64_t fd, uint64_t buf, uint64_t len)
 {
     File *file = lookup_file(fd);
     if (file == nullptr || len > std::numeric_limits<uint32_t>::max())
@@ -52,7 +51,7 @@ static long sys_read(uint64_t fd, uint64_t buf, uint64_t len)
     return done ? static_cast<long>(*done) : static_cast<long>(-1);
 }
 
-static long sys_write(uint64_t fd, uint64_t buf, uint64_t len)
+long sys_write(uint64_t fd, uint64_t buf, uint64_t len)
 {
     File *file = lookup_file(fd);
     if (file == nullptr || len > std::numeric_limits<uint32_t>::max())
@@ -61,7 +60,7 @@ static long sys_write(uint64_t fd, uint64_t buf, uint64_t len)
     return done ? static_cast<long>(*done) : static_cast<long>(-1);
 }
 
-static long sys_close(uint64_t fd)
+long sys_close(uint64_t fd)
 {
     File *file = lookup_file(fd);
     if (file == nullptr)
@@ -71,7 +70,7 @@ static long sys_close(uint64_t fd)
     return 0;
 }
 
-static long sys_exit(uint64_t code)
+long sys_exit(uint64_t code)
 {
     syscall_console->set_color(Color::Yellow, Color::Black);
     syscall_console->printf("\n[SYS]  exit(%u) called\n", (unsigned)code);
@@ -86,12 +85,12 @@ static long sys_exit(uint64_t code)
     return 0;
 }
 
-static long sys_fork()
+long sys_fork()
 {
     return static_cast<long>(process::fork());
 }
 
-static long sys_wait(uint64_t status_ptr)
+long sys_wait(uint64_t status_ptr)
 {
     // ユーザー空間へは rax 経由の生の整数で返すので、ここで optional をほどく。
     auto pid = process::wait(reinterpret_cast<int *>(status_ptr));
@@ -101,6 +100,7 @@ static long sys_wait(uint64_t status_ptr)
     }
     return static_cast<long>(pid->value);
 }
+} // namespace
 
 namespace SystemCall
 {
