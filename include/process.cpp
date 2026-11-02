@@ -48,6 +48,9 @@ struct Cpu
 ProcessTable ptable;
 Cpu cpu;
 
+// 孤児の引き取り先 (pid 1)。create_init_process() が設定する。テストのビルドでは nullptr のまま。
+Process *init_proc = nullptr;
+
 } // namespace
 
 void initialize(heap::Heap &heap)
@@ -101,7 +104,7 @@ void trampoline()
     Process *proc = cpu.current;
     if (proc && proc->entry)
     {
-        proc->entry();
+        proc->entry(proc->entry_arg);
     }
     close_all_files(proc);
     proc->state = ProcessState::Zombie;
@@ -220,7 +223,7 @@ Process *allocate_process()
 //       │                │
 //   低  └────────────────┘ ← kernel_stack.base
 
-Process *create_process(EntryPoint entry, const char *name)
+Process *create_process(EntryPoint entry, const char *name, void *arg)
 {
     Process *proc = allocate_process();
     if (proc == nullptr)
@@ -232,8 +235,9 @@ Process *create_process(EntryPoint entry, const char *name)
         free_process_resources(proc);
         return nullptr;
     }
-    proc->entry = entry;
-    proc->name  = name; // kstring が容量超過分を切り捨てて null 終端する
+    proc->entry     = entry;
+    proc->entry_arg = arg;
+    proc->name      = name; // kstring が容量超過分を切り捨てて null 終端する
 
     uint8_t *stack_top = proc->kernel_stack.top();
     // スタックはアドレスの小さい方に成長していく。アセンブリでローカル変数確保の容量で引くことでProcessContextのメモリ領域を確保する
@@ -259,6 +263,11 @@ Process *current_process()
     return cpu.current;
 }
 
+Process *create_init_process(EntryPoint entry, void *arg)
+{
+    init_proc = create_process(entry, "init", arg);
+    return init_proc;
+}
 
 // Switch to the next process in the “Runnable” state using round-robin scheduling
 void yield()
@@ -380,6 +389,22 @@ void schedule_from_zombie(ProcessContext **discard_context)
         // まだ Zombie でなく、再び寝てしまい今度は誰も起こさない。
         wakeup(p->parent);
     }
+
+    // 孤児プロセスになるため init に引き取らせる。Linux Kernelと同様
+    for (Process &child : ptable.procs)
+    {
+        if (child.state == ProcessState::Unused || child.parent != p)
+            continue;
+        child.parent = init_proc;
+        if (init_proc != nullptr && child.state == ProcessState::Zombie)
+        {
+            // この子は既に exit 済みで、その時の wakeup は元の親 (p) 宛てだった。
+            // init 宛ての wakeup は誰も送らないので、ここで起こす。
+            // 起きた init は wait() で子を走査し直して、この Zombie を回収する。
+            wakeup(init_proc);
+        }
+    }
+
     //二度と戻らないので、スケジューラに制御を渡す
     static ProcessContext *discard_context;
     schedule_from_zombie(&discard_context);
@@ -618,9 +643,10 @@ int fork()
     }
 
     //子供に親の情報をコピーする
-    child->entry  = parent->entry;
-    child->name   = parent->name;
-    child->parent = parent;
+    child->entry     = parent->entry;
+    child->entry_arg = parent->entry_arg;
+    child->name      = parent->name;
+    child->parent    = parent;
 
     for (size_t fd = 0; fd < parent->files.size(); fd++)
     {

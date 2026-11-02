@@ -6,8 +6,7 @@ namespace tests
 namespace
 {
 
-// スレッド関数は EntryPoint (void (*)()) として create_process に渡すので引数を
-// 取れない。出力先はテスト関数がプロセスを作る前にここへ設定する。
+// スレッド関数の引数 (void *) は使わず、出力先はテスト関数がプロセスを作る前にここへ設定する。
 // (fork した子もカーネル空間を共有しているので、同じポインタをそのまま使える)
 IConsole *thread_console = nullptr;
 
@@ -15,7 +14,7 @@ IConsole *thread_console = nullptr;
 volatile bool child_collected = false;
 
 // fork/exit/wait デモ用スレッド
-void parent_thread()
+void parent_thread(void *)
 {
     thread_console->set_color(Color::LightCyan, Color::Black);
     thread_console->printf("[FORK] parent: calling fork()\n");

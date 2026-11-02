@@ -84,7 +84,10 @@ class Heap;
 
 constexpr size_t MAX_PROCESSES = 64;
 
-// プロセスのエントリポイント (引数なし・戻り値なしの関数)。
+// プロセスのエントリポイント。引数は create_process() に渡した arg がそのまま届く。
+// 使わない関数は引数名を省略して void f(void *) と書く。
+// NOTE: arg の指す先は entry が使い終わるまで生きていること。entry は create_process() が
+//       戻った後に走るので、呼び出し元のローカル変数のアドレスを渡してはいけない。
 //
 // std::function ではなく関数ポインタにしている理由:
 //   1. std::function はキャプチャが 16 バイト (libstdc++ の内部バッファ) を超えると
@@ -98,7 +101,7 @@ constexpr size_t MAX_PROCESSES = 64;
 // NOTE: 標準ライブラリ自体が使えないわけではない (std::array などは使っている)。
 //       また entry はアセンブリから直接ジャンプされる先ではなく trampoline() から
 //       呼ばれるので、呼び出し可能オブジェクトにすること自体は技術的に可能。
-using EntryPoint = void (*)();
+using EntryPoint = void (*)(void *);
 
 
 struct ProcessId
@@ -145,6 +148,7 @@ struct Process
     KernelStack kernel_stack; // そのプロセス専用のカーネルスタック領域の先頭アドレス。
                               // 上端 (rsp の出発点) は .top() で取る
     EntryPoint entry;
+    void *entry_arg;  // entry に渡す引数
     kstring<16> name; // NOTE: kstring は固定容量の文字列で、容量超過分は切り捨てられる.
                       // C++の標準ライブラリは使えないので、std::string は使えない
     PhysicalAddress pml4; // プロセスのページテーブルの物理アドレス(Page Map Level 4)。未割り当てなら nullopt
@@ -164,9 +168,12 @@ namespace process
 // heap はプロセスが生きている間ずっと使うので、呼び出し側が寿命を保証すること。
 void initialize(heap::Heap &heap);
 
-Process *create_process(EntryPoint entry, const char *name);
+Process *create_process(EntryPoint entry, const char *name, void *arg = nullptr);
 void yield();
 Process *current_process();
+
+Process *create_init_process(EntryPoint entry, void *arg = nullptr);
+
 
 // 現在プロセスをchannelを理由にしてSleeping状態にしスケジューラへ制御を渡す
 // wakeup()でchannelを理由にしてSleeping状態のプロセスをReady状態にする
