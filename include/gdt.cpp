@@ -12,9 +12,9 @@ extern "C" void LoadGDT(const gdt::GlobalDescriptorTablePointer *ptr);
 
 namespace
 {
-static std::array<gdt::GlobalDescriptorTableEntry, 7> gdt_entries;
-static gdt::TaskStateSegment tss;
-static gdt::GlobalDescriptorTablePointer gdt_ptr;
+std::array<gdt::GlobalDescriptorTableEntry, 7> gdt_entries;
+gdt::TaskStateSegment tss;
+gdt::GlobalDescriptorTablePointer gdt_ptr;
 } // namespace
 
 namespace

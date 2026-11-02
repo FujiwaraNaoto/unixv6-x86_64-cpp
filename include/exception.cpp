@@ -31,7 +31,9 @@ void set_console(IConsole *console)
 
 // isr.asmも参照
 constexpr int NUM_EXCEPTIONS                                       = 22;
-static std::array<const char *, NUM_EXCEPTIONS> exception_messages = {
+namespace
+{
+std::array<const char *, NUM_EXCEPTIONS> exception_messages = {
     "Division By Zero",
     "Debug",
     "Non Maskable Interrupt",
@@ -55,6 +57,7 @@ static std::array<const char *, NUM_EXCEPTIONS> exception_messages = {
     "Virtualization Exception",
     "Control Protection Exception",
 };
+} // namespace
 
 enum class ExceptionType : uint8_t
 {
@@ -111,7 +114,10 @@ void isr_common_handler(register_state_t *regs)
     }
 }
 
-static uint64_t timer_ticks = 0;
+namespace
+{
+uint64_t timer_ticks = 0;
+} // namespace
 
 // ─── IRQ ハンドラ ─────────────────────
 extern "C" void irq0_handler()

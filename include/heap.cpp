@@ -5,12 +5,14 @@
 
 namespace heap
 {
-static uint64_t ALIGN                  = 8;  // 8バイトアラインメント
-static constexpr size_t MIN_SPLIT_SIZE = 32; // ブロックを分割する最小サイズ
-static uint64_t virt_start_            = 0;
-static uint64_t virt_end_              = 0;
-static uint64_t brk_                   = 0;
-static Block *head_                    = nullptr; // ブロックの先頭を指すポインタ
+namespace
+{
+uint64_t ALIGN                  = 8;  // 8バイトアラインメント
+constexpr size_t MIN_SPLIT_SIZE = 32; // ブロックを分割する最小サイズ
+uint64_t virt_start_            = 0;
+uint64_t virt_end_              = 0;
+uint64_t brk_                   = 0;
+Block *head_                    = nullptr; // ブロックの先頭を指すポインタ
 
 // ヘッダとペイロードの往復。必ず対称でなければならないので、
 // sizeof(Block) の加減算はこの 2 つだけに閉じる。
@@ -21,16 +23,17 @@ static Block *head_                    = nullptr; // ブロックの先頭を指
 //   ↑ block   ↑ payload_of(block)
 
 // ブロックヘッダ → 呼び出し元に返すペイロードの先頭
-static void *payload_of(Block *block)
+void *payload_of(Block *block)
 {
     return reinterpret_cast<uint8_t *>(block) + sizeof(Block);
 }
 
 // ペイロードの先頭 → その手前にあるブロックヘッダ
-static Block *header_of(void *payload)
+Block *header_of(void *payload)
 {
     return reinterpret_cast<Block *>(reinterpret_cast<uint8_t *>(payload) - sizeof(Block));
 }
+} // namespace
 
 
 void *Heap::sbrk(intptr_t increment)
