@@ -46,6 +46,7 @@ constexpr std::array kTests{
     TestCase{"inode_basic", inode_basic},
     TestCase{"directory_basic", directory_basic},
     TestCase{"path_basic", path_basic},
+    TestCase{"file_basic", file_basic},
 
 };
 
@@ -57,6 +58,7 @@ constexpr std::array kTests{
 // NOTE: 以下は「呼ぶと戻ってこない」テストなので、run_all() には入れず
 //       必要なときだけ個別に呼ぶこと。
 //         - keyboard_echo()  : 入力エコーの無限ループ
+//         - console_echo()   : リング3から read / write で入力をエコーする無限ループ
 void run_all(IConsole *console)
 {
     // nullptr が渡されたときは、出力を捨てる既定のコンソール (kernel_main が作る) に出す
