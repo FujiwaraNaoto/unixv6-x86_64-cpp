@@ -11,7 +11,7 @@ namespace serial
 class Serial : public IConsole
 {
   public:
-    Serial(); // グローバル変数の構築時に COM1 を初期化する
+    Serial();
     void write(const char *s, size_t n) override;
 
   private:
