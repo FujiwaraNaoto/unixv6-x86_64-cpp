@@ -5,12 +5,13 @@
 // (C11 4.6 / GCC: "freestanding environments must provide memcpy, memmove,
 //  memset and memcmp")。-nostdlib なので実体はカーネル側で持つ必要がある。
 //
-// Having polymorphic globals (vga::vga, serial::serial, etc.) makes the
-// compiler require C++ runtime symbols (libstdc++/libsupc++), which a
-// -nostdlib kernel does not link. The kernel never "exits", so static
-// destructor registration (__cxa_atexit) and operator delete are never
-// actually needed; these empty implementations exist only to satisfy the
-// linker.
+// Some C++ features make the compiler require runtime symbols
+// (libstdc++/libsupc++), which a -nostdlib kernel does not link:
+// classes with a virtual destructor (IConsole, IBlockStore) and pure virtual
+// functions pull in operator delete and __cxa_pure_virtual, and globals with
+// a non-trivial destructor (e.g. file_table in file.cpp) pull in
+// __cxa_atexit. The kernel never "exits" and never deletes these objects,
+// so these empty implementations exist only to satisfy the linker.
 
 #include <cstddef>
 #include <cstdint>
@@ -103,7 +104,7 @@ extern "C"
 }
 
 // operator delete referenced by the deleting destructor (D0) in the vtable of
-// classes with a virtual destructor. These globals are never heap-allocated,
+// classes with a virtual destructor. These objects are never heap-allocated,
 // so it is never called and an empty body is sufficient.
 void operator delete(void *) noexcept { }
 void operator delete(void *, std::size_t) noexcept { }

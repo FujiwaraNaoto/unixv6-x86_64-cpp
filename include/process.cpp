@@ -283,11 +283,11 @@ void yield()
 
 // ─── sleep ────────────────────────────────────────────────────────
 //
-// 現プロセスを chan を理由に Sleeping にして、別プロセスへ切り替える。
-// wakeup(chan) で Runnable に戻され、再スケジュールされると
+// 現プロセスを channel を理由に Sleeping にして、別プロセスへ切り替える。
+// wakeup(channel) で Runnable に戻され、再スケジュールされると
 // swtch がこの続きに戻ってくる (= sleep から return する)。
 //
-void sleep(void *chan)
+void sleep(void *channel)
 {
     Process *p = cpu.current;
     if (!p)
@@ -295,7 +295,7 @@ void sleep(void *chan)
     // lost wakeup 対策: 状態変更中は割り込みを止める
     asm volatile("cli");
 
-    p->sleep_channel = chan;
+    p->sleep_channel = channel;
     p->state         = ProcessState::Sleeping;
 
     schedule(p); // 別プロセスへ。ここで一旦戻らない
@@ -307,14 +307,14 @@ void sleep(void *chan)
 
 // ─── wakeup ───────────────────────────────────────────────────────
 //
-// chan を理由に Sleeping な全プロセスを Runnable に戻す。
+// channel を理由に Sleeping な全プロセスを Runnable に戻す。
 // 実際に走り出すのは次のスケジュールのタイミング。
 //
-void wakeup(void *chan)
+void wakeup(void *channel)
 {
     for (size_t i = 0; i < ptable.procs.size(); ++i)
     {
-        if (ptable.procs[i].state == ProcessState::Sleeping && ptable.procs[i].sleep_channel == chan)
+        if (ptable.procs[i].state == ProcessState::Sleeping && ptable.procs[i].sleep_channel == channel)
         {
             ptable.procs[i].state = ProcessState::Runnable;
         }

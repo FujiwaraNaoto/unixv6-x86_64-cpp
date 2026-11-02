@@ -36,11 +36,14 @@ extern "C"
     extern ctor_t __init_array_end[];
 }
 
-static void call_global_constructors()
+namespace
+{
+void call_global_constructors()
 {
     for (ctor_t *fn = __init_array_start; fn != __init_array_end; ++fn)
         (*fn)();
 }
+} // namespace
 
 // カーネル終端の物理アドレス (kernel.ld で kernel_end - KERNEL_VMA として定義)。
 // 絶対シンボルなので RIP 相対では参照できないが、-mcmodel=kernel なら

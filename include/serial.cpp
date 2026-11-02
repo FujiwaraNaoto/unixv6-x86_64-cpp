@@ -22,11 +22,14 @@ Serial::Serial()
     io::outb(PORT + 4, 0x0B); // DTR/RTS/OUT2 セット
 }
 
+namespace
+{
 // 送信ホールディングレジスタが空くまで待つ (LSR bit5)
-static bool tx_ready()
+bool tx_ready()
 {
     return (io::inb(PORT + 5) & 0x20) != 0;
 }
+} // namespace
 
 void Serial::write(const char *s, size_t n)
 {

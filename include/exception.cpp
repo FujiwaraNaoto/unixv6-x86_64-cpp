@@ -4,7 +4,7 @@
 #include "process.hpp"
 #include "keyboard.hpp"
 #include "console.hpp"
-#include <array>
+#include "enum_util.hpp"
 
 
 // page fault 例外発生時に CR2 レジスタに格納される、アクセスしようとした仮想アドレスを返す
@@ -29,33 +29,6 @@ void set_console(IConsole *console)
     handler_console = (console != nullptr) ? console : serial::serial;
 }
 
-// isr.asmも参照
-constexpr int NUM_EXCEPTIONS                                       = 22;
-static std::array<const char *, NUM_EXCEPTIONS> exception_messages = {
-    "Division By Zero",
-    "Debug",
-    "Non Maskable Interrupt",
-    "Breakpoint",
-    "Into Detected Overflow",
-    "Bound Range Exceeded",
-    "Invalid Opcode",
-    "Device Not Available",
-    "Double Fault",
-    "Coprocessor Segment Overrun",
-    "Invalid TSS",
-    "Segment Not Present",
-    "Stack-Segment Fault",
-    "General Protection Fault",
-    "Page Fault",
-    "Reserved",
-    "x87 Floating-Point Exception",
-    "Alignment Check",
-    "Machine Check",
-    "SIMD Floating-Point Exception",
-    "Virtualization Exception",
-    "Control Protection Exception",
-};
-
 enum class ExceptionType : uint8_t
 {
     DivideByZero = 0,
@@ -79,22 +52,78 @@ enum class ExceptionType : uint8_t
     MachineCheck,
     SIMDException,
     VirtualizationException,
-    ControlProtectionException
+    ControlProtectionException,
+    Sentinel, // 番兵。値が例外の数になる。isr.asmも参照
 };
+
+namespace
+{
+const char *exception_name(ExceptionType type)
+{
+    switch (type)
+    {
+        case ExceptionType::DivideByZero:
+            return "Division By Zero";
+        case ExceptionType::Debug:
+            return "Debug";
+        case ExceptionType::NonMaskableInterrupt:
+            return "Non Maskable Interrupt";
+        case ExceptionType::Breakpoint:
+            return "Breakpoint";
+        case ExceptionType::Overflow:
+            return "Into Detected Overflow";
+        case ExceptionType::BoundRangeExceeded:
+            return "Bound Range Exceeded";
+        case ExceptionType::InvalidOpcode:
+            return "Invalid Opcode";
+        case ExceptionType::DeviceNotAvailable:
+            return "Device Not Available";
+        case ExceptionType::DoubleFault:
+            return "Double Fault";
+        case ExceptionType::CoprocessorSegmentOverrun:
+            return "Coprocessor Segment Overrun";
+        case ExceptionType::InvalidTSS:
+            return "Invalid TSS";
+        case ExceptionType::SegmentNotPresent:
+            return "Segment Not Present";
+        case ExceptionType::StackSegmentFault:
+            return "Stack-Segment Fault";
+        case ExceptionType::GeneralProtectionFault:
+            return "General Protection Fault";
+        case ExceptionType::PageFault:
+            return "Page Fault";
+        case ExceptionType::Reserved:
+            return "Reserved";
+        case ExceptionType::FloatingPointException:
+            return "x87 Floating-Point Exception";
+        case ExceptionType::AlignmentCheck:
+            return "Alignment Check";
+        case ExceptionType::MachineCheck:
+            return "Machine Check";
+        case ExceptionType::SIMDException:
+            return "SIMD Floating-Point Exception";
+        case ExceptionType::VirtualizationException:
+            return "Virtualization Exception";
+        case ExceptionType::ControlProtectionException:
+            return "Control Protection Exception";
+        case ExceptionType::Sentinel:
+            break;
+    }
+    return "Unknown Exception";
+}
+} // namespace
 
 
 void isr_common_handler(register_state_t *regs)
 {
     handler_console->set_color(Color::White, Color::Red);
     handler_console->printf("**Exception **");
-    if (regs->int_no < exception_messages.size())
+    const char *name = "Unknown Exception";
+    if (regs->int_no < to_underlying(ExceptionType::Sentinel))
     {
-        handler_console->printf(": %s\n", exception_messages[regs->int_no]);
+        name = exception_name(static_cast<ExceptionType>(regs->int_no));
     }
-    else
-    {
-        handler_console->printf(": Unknown Exception\n");
-    }
+    handler_console->printf(": %s\n", name);
 
     handler_console->printf("RIP: 0x%016lx, CS=0x%016lx, RFLAGS=0x%016lx\n", regs->rip, regs->cs, regs->rflags);
     handler_console->printf(
@@ -111,7 +140,10 @@ void isr_common_handler(register_state_t *regs)
     }
 }
 
-static uint64_t timer_ticks = 0;
+namespace
+{
+uint64_t timer_ticks = 0;
+} // namespace
 
 // ─── IRQ ハンドラ ─────────────────────
 extern "C" void irq0_handler()

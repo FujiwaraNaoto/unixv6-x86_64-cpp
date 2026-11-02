@@ -268,7 +268,9 @@ bool initialize(PhysicalAddressResolver resolve_physical)
 }
 
 // ─── I/O 共通処理 ────────────────────────────────────────────────
-static bool do_request(VirtIOBlockRequestType type, uint64_t sector)
+namespace
+{
+bool do_request(VirtIOBlockRequestType type, uint64_t sector)
 {
     if (!ready)
         return false;
@@ -284,6 +286,7 @@ static bool do_request(VirtIOBlockRequestType type, uint64_t sector)
 
     return status_byte == VirtIOBlockStatus::OK;
 }
+} // namespace
 
 
 uint64_t capacity()
