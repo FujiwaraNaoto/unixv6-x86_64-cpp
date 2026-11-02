@@ -24,10 +24,10 @@ enum class FileType : uint8_t
 struct File
 {
     FileType type = FileType::kNone;
-    int refcnt    = 0; // fd 表から何か所で指されているか (fork / dup で増える)
+    int refcnt    = 0; // fd 表から何か所で指されているか
     bool readable = false;
     bool writable = false;
-    InodeRef inode;      // kInode のときだけ有効。close で reset → put_inode
+    InodeRef inode;      // kInode のときだけ有効
     uint32_t offset = 0; // kInode のときの読み書き位置
 };
 
