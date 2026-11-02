@@ -27,6 +27,24 @@ make run-vscode   # ターミナル直結(-nographic)で起動。終了は Ctrl-
 必要なもの: `g++-13` (Makefile でバージョン固定)、`nasm`、`ld`、`grub-mkrescue` (+`xorriso` / `mtools`)、`qemu-system-x86_64`。
 ディスクイメージ `fs.img` は `make fs.img` で作る (未フォーマットのまま起動すると、カーネルが自分でフォーマットする)。
 
+### macOS で動かす
+
+macOS の clang / ld は ELF を作れず、BIOS 用の GRUB (`grub-pc-bin`) も無いので、
+ビルドだけを [`Dockerfile`](Dockerfile) のコンテナ (CI と同じ Ubuntu 24.04 + `g++-13`) で行い、
+起動はホストの QEMU で行う。
+
+```sh
+brew install qemu    # Docker Desktop か OrbStack も入れておく
+make fs.img
+make docker-run      # コンテナでビルドして、ターミナル直結で起動。終了は Ctrl-A X
+make docker-run-gui  # 同上を別ウィンドウ (Cocoa) で
+make docker-tests    # テスト入りでビルドして起動
+make docker-iso      # ISO を作るだけ (TESTS=1 / ONLY=<名前> も渡せる)
+```
+
+`grub-pc-bin` が amd64 にしか無いので、Apple Silicon でもコンテナは `linux/amd64` で動かす。
+QEMU は Linux でも KVM を使わずエミュレーション (TCG) で動かしているので、macOS でも動作は同じ。
+
 ### 機能テスト
 
 `kernel_main` は初期化して `hlt` ループに入るだけで、各機能の動作確認コードは
