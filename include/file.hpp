@@ -7,7 +7,7 @@
 #include <cstdint>
 #include <optional>
 
-// fd (整数) と inode の間の層。
+// fd (= file descriptor 整数) と inode の間の層。
 //   Process::files[fd] → File → InodeRef
 //
 // inode と分けているのは、読み書き位置 (offset) を inode ではなく File が持つため。
