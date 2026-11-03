@@ -155,11 +155,6 @@ tests-gdb: fs.img
 # ─── Docker でビルド (macOS など g++-13 / grub-pc-bin が無いホスト向け) ──────
 # ビルドだけを Dockerfile のイメージ内で行い、起動はホストの QEMU で行う。
 #
-#   make docker-iso                … ISO を作るだけ (TESTS=1 / ONLY=<名前> も渡せる)
-#   make docker-run                … ビルドしてターミナル直結で起動
-#   make docker-run-gui            … ビルドして別ウィンドウで起動
-#   make docker-tests              … テスト入りでビルドしてターミナル直結で起動
-#
 # docker-run 系は $(ISO) に依存させない。依存させると、ホストの make が ISO を
 # 古いと判断したときにホストの g++-13 でビルドしようとしてしまう。
 DOCKER          = docker
