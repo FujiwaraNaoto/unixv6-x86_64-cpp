@@ -27,7 +27,7 @@ void set_console(IConsole *console);
 // isr.asm から呼ばれるため C リンケージ (名前マングリング無効)
 extern "C" void isr_common_handler(register_state_t *regs);
 extern "C" void irq0_handler();
-extern "C" void irq_handler(uint64_t irq_no);
+extern "C" void irq_handler(uint64_t irq_number);
 
 } // namespace exception
 

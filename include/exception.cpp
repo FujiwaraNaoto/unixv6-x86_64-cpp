@@ -164,13 +164,13 @@ extern "C" void irq0_handler()
     // スケジューリングは各スレッドが自分で yield() を呼ぶ協調型に任せる。
 }
 
-extern "C" void irq_handler(uint64_t irq_no)
+extern "C" void irq_handler(uint64_t irq_number)
 {
-    if (irq_no == 1)
+    if (irq_number == 1)
     {
         keyboard::handle_irq();
     }
-    pic::send_eoi(static_cast<uint8_t>(irq_no));
+    pic::send_eoi(static_cast<uint8_t>(irq_number));
 }
 
 } // namespace exception
