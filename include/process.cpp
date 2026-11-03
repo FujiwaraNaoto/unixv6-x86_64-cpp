@@ -588,8 +588,12 @@ int fork_kernel(Process *parent, Process *child, uint8_t *child_stack)
 
     // 親のスタック上のアドレスを、子のスタック上の同じ相対位置に写す
     // 子のスタックは仮想アドレスが親と違うため補正が必要
-    auto to_child = [&](uint64_t parent_addr)
-    { return parent_addr - reinterpret_cast<uint64_t>(parent_stack) + reinterpret_cast<uint64_t>(child_stack); };
+    //   子のアドレス = 親のアドレス - 親の下端 + 子の下端
+    auto to_child = [&](KernelStackAddress parent_address)
+    {
+        const uint64_t offset = parent->kernel_stack.offset_of(parent_address); // 親のアドレス - 親の下端
+        return child->kernel_stack.at(offset);                                  // 子の下端 + offset
+    };
 
 
     // copy the parent's kernel stack to the child's kernel stack
@@ -602,7 +606,7 @@ int fork_kernel(Process *parent, Process *child, uint8_t *child_stack)
     // 2. 今の callee-saved と復帰点 (= 直後の★) を、switch_context が読む形式で snap に取っておく。
     //    戻り値は fork_capture から戻った直後の rsp (= 図の caller_rsp)。
     ProcessContext snap;
-    uint64_t caller_rsp = fork_capture(&snap);
+    const KernelStackAddress caller_rsp{fork_capture(&snap)};
 
     // ★ fork_capture() は setjmp と同じく 2 回戻ってくる。
     //   1 回目: 親が普通に戻る。cpu.current == parent なので素通りする。
@@ -618,9 +622,9 @@ int fork_kernel(Process *parent, Process *child, uint8_t *child_stack)
     // ── 以降は親のみ実行 ──
     // 子が★に着地したときの rsp を求め、そのすぐ下に ProcessContext を置く。
     // switch_context が 6 本 pop + ret すると、rsp はちょうど child_rsp_at_resume になる。
-    uint64_t child_rsp_at_resume = to_child(caller_rsp);
-    child->context               = reinterpret_cast<ProcessContext *>(child_rsp_at_resume - sizeof(ProcessContext));
-    *child->context              = snap;
+    const KernelStackAddress child_rsp_at_resume = to_child(caller_rsp);
+    child->context  = reinterpret_cast<ProcessContext *>(child_rsp_at_resume.address - sizeof(ProcessContext));
+    *child->context = snap;
 
     child->state = ProcessState::Runnable;
     return static_cast<int>(child->pid); // return the child's pid to the parent process

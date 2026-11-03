@@ -6,6 +6,14 @@
 
 constexpr size_t KERNEL_STACK_SIZE = 16_KiB;
 
+// カーネルスタックの中の位置 (仮想アドレス)。rsp の値などを表す。
+// どのプロセスのスタックかは持たないので、別のスタックの同じ位置へ写すときは
+// KernelStack::offset_of() と KernelStack::at() を通す。
+struct KernelStackAddress
+{
+    uint64_t address;
+};
+
 // プロセスごとのカーネルスタック領域。heap から確保した KERNEL_STACK_SIZE バイト。
 // 「下端 (alloc が返した先頭)」と「上端 (rsp の出発点)」を取り違えないよう、型で区別する。
 struct KernelStack
@@ -16,6 +24,18 @@ struct KernelStack
     {
         return base + KERNEL_STACK_SIZE;
     } // rsp の出発点 (上端)
+
+    // address が下端から何バイト目か
+    uint64_t offset_of(KernelStackAddress address) const
+    {
+        return address.address - reinterpret_cast<uint64_t>(base);
+    }
+
+    // 下端から offset バイト目の位置
+    KernelStackAddress at(uint64_t offset) const
+    {
+        return KernelStackAddress{reinterpret_cast<uint64_t>(base) + offset};
+    }
 
     explicit operator bool() const
     {
