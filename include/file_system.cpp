@@ -1,5 +1,6 @@
 #include "file_system.hpp"
 #include "file_system_internal.hpp"
+#include <algorithm>
 #include <cstdint>
 #include <cstring>
 
@@ -38,7 +39,9 @@ bool add_root_entry(DiskInode &root, InodeNumber inode_number, const char *name)
             continue;
 
         entries[i].inode_number = static_cast<uint16_t>(inode_number.value);
-        std::strncpy(entries[i].name, name, DIRECTORY_NAME_SIZE);
+        const size_t length     = std::min(std::strlen(name), static_cast<size_t>(DIRECTORY_NAME_SIZE));
+        std::memset(entries[i].name, 0, DIRECTORY_NAME_SIZE);
+        std::memcpy(entries[i].name, name, length);
         if (!block.write_back())
         {
             return false;

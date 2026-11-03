@@ -30,7 +30,7 @@ static constexpr uint32_t BITMAP_SIZE = MAX_PAGES / 8;
 // 物理メモリの状態を表示する。
 // 出力先は注入で受け取るので、PMM は VGA / シリアルのどちらに出るかを知らない。
 // console に nullptr を渡した場合は何も出力しない。
-static void print_mm_state(const PhysicalMemoryManagerState &state, IConsole *console)
+inline void print_mm_state(const PhysicalMemoryManagerState &state, IConsole *console)
 {
     if (console == nullptr)
     {
