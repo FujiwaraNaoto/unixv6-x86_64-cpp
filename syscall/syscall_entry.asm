@@ -61,6 +61,7 @@ fork_return:
 ; NOTE: process.hppのTrapFrameと順番を同じにすること
 GLOBAL syscall_return_path
 syscall_return_path:
+    cli ; ここから sysret まで割り込ませない (IF は sysret が R11 から戻す)
     pop r15
     pop r14
     pop r13
