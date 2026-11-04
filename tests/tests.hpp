@@ -27,7 +27,7 @@ bool higher_half_check(IConsole *console);
 // PMM: allocate / free / 解放したページの再割り当てを確認する。
 bool pmm_alloc_free(IConsole *console);
 
-// ヒープ: sbrk によるページ拡張と alloc/free のブロック再利用を確認する。
+// ヒープ: sbrk によるページ拡張と allocate/free のブロック再利用を確認する。
 bool heap_sbrk_alloc(IConsole *console);
 
 // 例外: IDT の 0 番が isr_stub_0 を指していることと、0 除算で #DE が起きることを確認する。

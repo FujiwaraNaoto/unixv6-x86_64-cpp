@@ -15,10 +15,10 @@ struct KernelStackAddress
 };
 
 // プロセスごとのカーネルスタック領域。heap から確保した KERNEL_STACK_SIZE バイト。
-// 「下端 (alloc が返した先頭)」と「上端 (rsp の出発点)」を取り違えないよう、型で区別する。
+// 「下端 (allocate が返した先頭)」と「上端 (rsp の出発点)」を取り違えないよう、型で区別する。
 struct KernelStack
 {
-    uint8_t *base = nullptr; // alloc が返した先頭 (一番低いアドレス)。nullptr = 未確保
+    uint8_t *base = nullptr; // allocate が返した先頭 (一番低いアドレス)。nullptr = 未確保
 
     uint8_t *top() const
     {

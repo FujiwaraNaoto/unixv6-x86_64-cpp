@@ -20,12 +20,12 @@ bool heap_sbrk_alloc(IConsole *console)
                     reinterpret_cast<uintptr_t>(brk1),
                     reinterpret_cast<uintptr_t>(heap->sbrk(0)));
 
-    // alloc/free テスト (morecore が自動で呼ばれる)
-    void *p1 = heap->alloc(64);
-    void *p2 = heap->alloc(128);
-    void *p3 = heap->alloc(32);
+    // allocate/free テスト (morecore が自動で呼ばれる)
+    void *p1 = heap->allocate(64);
+    void *p2 = heap->allocate(128);
+    void *p3 = heap->allocate(32);
     heap->free(p2);
-    void *p4 = heap->alloc(64); // p2 の領域が再利用されるはず
+    void *p4 = heap->allocate(64); // p2 の領域が再利用されるはず
     console->set_color(Color::LightGreen, Color::Black);
     console->puts("[HEAP] ");
     console->set_color(Color::LightGrey, Color::Black);

@@ -194,7 +194,7 @@ Process *allocate_process()
     proc->pml4         = PhysicalAddress{};
     proc->files        = {};
 
-    void *stack = ptable.heap->alloc(KERNEL_STACK_SIZE);
+    void *stack = ptable.heap->allocate(KERNEL_STACK_SIZE);
     if (stack == nullptr)
     {
         free_process_resources(proc);
