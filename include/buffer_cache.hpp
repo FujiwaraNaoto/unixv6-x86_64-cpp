@@ -55,6 +55,13 @@ namespace BufferCache
 //       .read_block = [](uint64_t n, uint8_t *dst) { ... disk[n] ... },
 //       ...
 //   }
+//
+//   read_block():reads one block (BLOCK_SIZE bytes) at block_number from the device into buffer.
+//                Returns false if the device reports an error.
+//   write_block():writes one block (BLOCK_SIZE bytes) from buffer to block_number on the device.
+//                 Returns false if the device reports an error.
+// Both return only after the device has finished (no asynchronous completion).
+// block_number is the device's sector number, since BLOCK_SIZE is the same as the sector size.
 struct BlockDevice
 {
     bool (*read_block)(uint64_t block_number, uint8_t *buffer);
