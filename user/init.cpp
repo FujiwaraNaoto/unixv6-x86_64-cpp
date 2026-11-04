@@ -1,10 +1,12 @@
 #include "user_syscall.hpp"
 
+constexpr int LINE_BUFFER_SIZE=1<<10;
+
 [[gnu::section(".user")]] void init_main(){
     const char* prompt="> ";
-    char line[1<<10];
+    char line[LINE_BUFFER_SIZE];
 
-    while(1){
+    while(1){// ずっとinitでいるための無限ループ
         user_syscall(SyscallNo::kWrite, 1, reinterpret_cast<long>(prompt), 2);
         long length = 0;
         char c      = 0;
@@ -17,6 +19,6 @@
                 break;
         }
         user_syscall(SyscallNo::kWrite, 1, reinterpret_cast<long>(line), length);
-    }
+    }// init
 }
 
