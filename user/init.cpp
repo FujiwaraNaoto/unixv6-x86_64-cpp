@@ -3,7 +3,7 @@
 constexpr int LINE_BUFFER_SIZE=1<<10;
 
 [[gnu::section(".user")]] void init_main(){
-    const char* prompt="> ";
+    const char prompt[] = "> ";//user stackに置くため配列を用いることでローカル変数に置かれる
     char line[LINE_BUFFER_SIZE];
 
     while(1){// ずっとinitでいるための無限ループ
