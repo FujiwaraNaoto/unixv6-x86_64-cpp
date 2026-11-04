@@ -160,7 +160,7 @@ bool inode_file(IConsole *console)
         if (block_number.value != 0)
             FileSystem::free_block(block_number);
     }
-    FileSystem::internal::write_inode(inode_number, DiskInode{});
+    FileSystem::internal::write_disk_inode(inode_number, DiskInode{});
     return ok;
 }
 

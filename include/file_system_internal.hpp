@@ -27,8 +27,8 @@ bool load_superblock();
 BlockNumber bitmap_block(BlockNumber block_number);
 bool zero_block(BlockNumber block_number);
 bool mark_block_used(BlockNumber block_number);
-bool write_inode(InodeNumber inode_number, const DiskInode &inode);
-std::optional<DiskInode> read_inode(InodeNumber inode_number);
+bool write_disk_inode(InodeNumber inode_number, const DiskInode &inode);
+std::optional<DiskInode> get_disk_inode(InodeNumber inode_number);
 } // namespace FileSystem::internal
 
 

@@ -45,7 +45,7 @@ InodeRef get_inode(InodeNumber inode_number)
     {
         return InodeRef{};
     }
-    auto disk = internal::read_inode(inode_number);
+    auto disk = internal::get_disk_inode(inode_number);
     if (!disk)
         return InodeRef{};
     empty->inode_number = inode_number;
@@ -64,7 +64,7 @@ InodeRef allocate_inode(InodeType type)
     const uint32_t num_super_block_inodes = superblock.ninodes;
     for (InodeNumber inode_number{1}; inode_number.value < num_super_block_inodes; inode_number.value++)
     {
-        auto disk = internal::read_inode(inode_number);
+        auto disk = internal::get_disk_inode(inode_number);
         if (!disk)
         {
             return InodeRef{};
@@ -74,7 +74,7 @@ InodeRef allocate_inode(InodeType type)
 
         DiskInode fresh{};
         fresh.type = type;
-        if (!internal::write_inode(inode_number, fresh))
+        if (!internal::write_disk_inode(inode_number, fresh))
             return InodeRef{};
         return get_inode(inode_number);
     }
@@ -256,7 +256,7 @@ std::optional<uint32_t> write_data(Inode &inode, const uint8_t *source, uint32_t
 
 bool update_inode(const Inode &inode)
 {
-    return internal::write_inode(inode.inode_number, inode.disk);
+    return internal::write_disk_inode(inode.inode_number, inode.disk);
 }
 
 } // namespace FileSystem
