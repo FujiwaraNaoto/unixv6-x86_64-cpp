@@ -160,6 +160,7 @@ namespace FileSystem
 
 const SuperBlock &superblock();
 
+// 未使用のblockを見つけてその番号(=BlockNumber)を返す
 std::optional<BlockNumber> allocate_block();
 void free_block(BlockNumber block_number);
 
