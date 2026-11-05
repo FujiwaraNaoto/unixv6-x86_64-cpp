@@ -20,6 +20,10 @@ constexpr int LINE_BUFFER_SIZE = 1 << 10;
             if (c == '\n' || length == sizeof(line))
                 break;
         }
-        user_syscall(SyscallNo::kWrite, 1, reinterpret_cast<long>(line), length);
+        const bool empty_line = length == 1 && line[0] == '\n';
+        if (length > 0 && !empty_line)
+        {
+            user_syscall(SyscallNo::kWrite, 1, reinterpret_cast<long>(line), length);
+        }
     } // init
 }
