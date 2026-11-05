@@ -169,8 +169,7 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, uint32_t mb_addr
     // 各機能の動作確認 (どのテストを走らせるかは tests/tests.cpp で切り替える)
     tests::run_all(vga::vga);
 #else
-    // init_func は void * を IConsole * に戻すので、VGA * のままではなく IConsole * にしてから渡す。
-    process::create_init_process(InitProcess::init_func, static_cast<IConsole *>(vga::vga));
+    process::create_init_process(InitProcess::init_func);
 #endif
 
     while (1)

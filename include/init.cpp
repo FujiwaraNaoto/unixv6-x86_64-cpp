@@ -1,12 +1,9 @@
 
 #include "init.hpp"
 #include "process.hpp"
-#include "file.hpp"
-#include "console.hpp"
 #include "usermode.hpp"
 #include "user_init.hpp"
 
-constexpr int BUF_SIZE = 1 << 10;
 namespace InitProcess
 {
 void init_func(void * /*arg*/)
