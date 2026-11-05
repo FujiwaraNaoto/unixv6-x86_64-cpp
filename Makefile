@@ -9,8 +9,9 @@ QEMU     = qemu-system-x86_64
 # -nostdinc で標準インクルードを切った上で、libstdc++ の C++ ヘッダ
 # (<array> など) を使うために必要なパスだけを -isystem で足す。
 # バージョン/ターゲットはコンパイラから取得してハードコードを避ける。
-GCC_VER    := $(shell $(CC) -dumpversion)
-GCC_TRIPLE := $(shell $(CC) -dumpmachine)
+# (g++-13 が無いホストで docker-* を使うときに毎回エラーが出ないよう stderr は捨てる)
+GCC_VER    := $(shell $(CC) -dumpversion 2>/dev/null)
+GCC_TRIPLE := $(shell $(CC) -dumpmachine 2>/dev/null)
 STD_INC    = -isystem /usr/include/c++/$(GCC_VER) \
              -isystem /usr/include/$(GCC_TRIPLE)/c++/$(GCC_VER) \
              -isystem /usr/lib/gcc/$(GCC_TRIPLE)/$(GCC_VER)/include \
@@ -107,12 +108,19 @@ QEMU_COMMON    = -cdrom $(ISO) -boot d -m 128M -no-reboot -no-shutdown  -d int,c
 
 # VSCode 等のターミナルに直結 (シリアル = 標準入出力)。終了は Ctrl-A X
 QEMU_TERM      = $(QEMU_COMMON) -nographic
-# 別ウィンドウ表示 (GTK)。要 DISPLAY。シリアルは標準入出力(端末)にも出す
-QEMU_GUI       = $(QEMU_COMMON) -display gtk -serial file:serial.log
+# 別ウィンドウ表示。Linux は GTK (要 DISPLAY)、macOS は Homebrew の QEMU に GTK が無いので Cocoa。
+# シリアルは serial.log に出す
+ifeq ($(shell uname -s),Darwin)
+  QEMU_DISPLAY = cocoa
+else
+  QEMU_DISPLAY = gtk
+endif
+QEMU_GUI       = $(QEMU_COMMON) -display $(QEMU_DISPLAY) -serial file:serial.log
 
 QEMU_GDB_FLAGS = $(QEMU_TERM) -s -S
 
-.PHONY: all iso run run-vscode run-gui run-gdb tests tests-build tests-gui tests-gdb clean format
+.PHONY: all iso run run-vscode run-gui run-gdb tests tests-build tests-gui tests-gdb clean format \
+        docker-image docker-iso docker-run docker-run-gui docker-tests
 
 all: $(KERNEL)
 iso: $(ISO)
@@ -143,6 +151,35 @@ tests-gui: fs.img
 
 tests-gdb: fs.img
 	@$(MAKE) --no-print-directory TESTS=1 run-gdb
+
+# ─── Docker でビルド (macOS など g++-13 / grub-pc-bin が無いホスト向け) ──────
+# ビルドだけを Dockerfile のイメージ内で行い、起動はホストの QEMU で行う。
+#
+# docker-run 系は $(ISO) に依存させない。依存させると、ホストの make が ISO を
+# 古いと判断したときにホストの g++-13 でビルドしようとしてしまう。
+DOCKER          = docker
+DOCKER_IMAGE    = unixv6-x86_64-cpp-build
+# grub-pc-bin が amd64 にしか無いので、Apple Silicon でも amd64 で動かす
+DOCKER_PLATFORM = linux/amd64
+# 生成物の所有者をホストのユーザーにする (root 所有だとホストで make clean できない)
+DOCKER_RUN      = $(DOCKER) run --rm --platform $(DOCKER_PLATFORM) \
+                  -u $(shell id -u):$(shell id -g) -e HOME=/tmp \
+                  -v "$(CURDIR)":/work -w /work $(DOCKER_IMAGE)
+
+docker-image:
+	$(DOCKER) build --platform $(DOCKER_PLATFORM) -t $(DOCKER_IMAGE) .
+
+docker-iso: docker-image
+	$(DOCKER_RUN) make iso TESTS=$(TESTS) ONLY=$(ONLY)
+
+docker-run: docker-iso
+	$(QEMU) $(QEMU_TERM)
+
+docker-run-gui: docker-iso
+	$(QEMU) $(QEMU_GUI)
+
+docker-tests: fs.img
+	@$(MAKE) --no-print-directory TESTS=1 docker-run
 
 # asm/cpp とも build/ 以下にソースのディレクトリ構造をそのまま掘って出力する。
 # (ベース名だけにすると interrupt/helper.asm と syscall/helper.asm のように
