@@ -6,7 +6,7 @@
 namespace
 {
 
-std::array<File, FileSystem::NUM_FILES> file_table{};
+std::array<File, FileSystem::NUM_FILES> file_table{}; // 実体
 IConsole *file_console = nullptr;
 
 uint32_t console_read(uint8_t *dest, uint32_t count)
