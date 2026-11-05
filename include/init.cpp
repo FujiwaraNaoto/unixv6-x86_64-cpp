@@ -4,7 +4,7 @@
 #include "file.hpp"
 #include "console.hpp"
 #include "usermode.hpp"
-#include "../user/init.hpp"
+#include "user_init.hpp"
 
 constexpr int BUF_SIZE = 1 << 10;
 namespace InitProcess
