@@ -45,7 +45,7 @@ InodeRef get_inode(InodeNumber inode_number)
     {
         return InodeRef{};
     }
-    auto disk = internal::read_inode(inode_number);
+    auto disk = internal::get_disk_inode(inode_number);
     if (!disk)
         return InodeRef{};
     empty->inode_number = inode_number;
@@ -64,7 +64,7 @@ InodeRef allocate_inode(InodeType type)
     const uint32_t num_super_block_inodes = superblock.ninodes;
     for (InodeNumber inode_number{1}; inode_number.value < num_super_block_inodes; inode_number.value++)
     {
-        auto disk = internal::read_inode(inode_number);
+        auto disk = internal::get_disk_inode(inode_number);
         if (!disk)
         {
             return InodeRef{};
@@ -74,7 +74,7 @@ InodeRef allocate_inode(InodeType type)
 
         DiskInode fresh{};
         fresh.type = type;
-        if (!internal::write_inode(inode_number, fresh))
+        if (!internal::write_disk_inode(inode_number, fresh))
             return InodeRef{};
         return get_inode(inode_number);
     }
@@ -90,21 +90,38 @@ void put_inode(Inode *inode)
         inode->refcnt--;
 }
 
+namespace
+{
+// ファイルの中で何番目のブロックか (論理ブロック番号)。
+struct LogicalBlockIndex
+{
+    uint32_t value;
+
+    constexpr explicit LogicalBlockIndex(uint32_t index) : value(index) { }
+
+    // ファイル内のバイト位置 byte_offset を含むブロック
+    static constexpr LogicalBlockIndex containing(uint32_t byte_offset)
+    {
+        return LogicalBlockIndex{byte_offset / FSBLOCK_SIZE};
+    }
+};
+} // namespace
+
 // ファイル内の logical 番目のブロックが、ディスクの何番ブロックかを返す (論理ブロック番号 → 物理ブロック番号)。
 // 未割当なら失敗する。ブロックは確保しない。
-std::optional<BlockNumber> find_block(const Inode &inode, uint32_t logical)
+std::optional<BlockNumber> find_block(const Inode &inode, LogicalBlockIndex logical)
 {
     const auto &addrs = inode.disk.addrs;
 
-    if (logical < NDIRECT)
+    if (logical.value < NDIRECT)
     {
-        if (addrs[logical].value == 0)
+        if (addrs[logical.value].value == 0)
             return std::nullopt;
-        return addrs[logical];
+        return addrs[logical.value];
     }
 
-    logical -= NDIRECT;
-    if (logical >= NINDIRECT)
+    const uint32_t indirect_index = logical.value - NDIRECT; // 間接ブロックの表の中の位置
+    if (indirect_index >= NINDIRECT)
         return std::nullopt; // MAXFILE 超え
 
     if (addrs[INDIRECT_INDEX].value == 0)
@@ -114,31 +131,31 @@ std::optional<BlockNumber> find_block(const Inode &inode, uint32_t logical)
     if (!block)
         return std::nullopt;
     const auto *table = reinterpret_cast<const BlockNumber *>(block.data());
-    if (table[logical].value == 0)
+    if (table[indirect_index].value == 0)
         return std::nullopt;
-    return table[logical];
+    return table[indirect_index];
 }
 
 // find_block と同じだが、未割当なら確保する。
 // addrs を書き換えるので、呼び出し側で update_inode すること。
-std::optional<BlockNumber> allocate_or_find_block(Inode &inode, uint32_t logical)
+std::optional<BlockNumber> allocate_or_find_block(Inode &inode, LogicalBlockIndex logical)
 {
     auto &addrs = inode.disk.addrs;
 
-    if (logical < NDIRECT)
+    if (logical.value < NDIRECT)
     {
-        if (addrs[logical].value == 0)
+        if (addrs[logical.value].value == 0)
         {
             auto b = FileSystem::allocate_block();
             if (!b)
                 return std::nullopt;
-            addrs[logical] = *b;
+            addrs[logical.value] = *b;
         }
-        return addrs[logical];
+        return addrs[logical.value];
     }
 
-    logical -= NDIRECT;
-    if (logical >= NINDIRECT)
+    const uint32_t indirect_index = logical.value - NDIRECT; // 間接ブロックの表の中の位置
+    if (indirect_index >= NINDIRECT)
         return std::nullopt; // MAXFILE 超え
 
     if (addrs[INDIRECT_INDEX].value == 0)
@@ -153,16 +170,16 @@ std::optional<BlockNumber> allocate_or_find_block(Inode &inode, uint32_t logical
     if (!block)
         return std::nullopt;
     auto *table = reinterpret_cast<BlockNumber *>(block.data());
-    if (table[logical].value == 0)
+    if (table[indirect_index].value == 0)
     {
         auto b = FileSystem::allocate_block();
         if (!b)
             return std::nullopt;
-        table[logical] = *b;
+        table[indirect_index] = *b;
         if (!block.write_back())
             return std::nullopt;
     }
-    return table[logical];
+    return table[indirect_index];
 }
 
 // offset から最大 count バイトを dest に読む。読んだバイト数を返す。
@@ -180,7 +197,7 @@ std::optional<uint32_t> read_data(const Inode &inode, uint8_t *dest, uint32_t of
     while (done < count)
     {
         const uint32_t pos = offset + done;
-        auto block_number  = find_block(inode, pos / FSBLOCK_SIZE);
+        auto block_number  = find_block(inode, LogicalBlockIndex::containing(pos));
         if (!block_number)
             return std::nullopt;
         auto block = internal::fs.block_store->acquire(*block_number);
@@ -212,7 +229,7 @@ std::optional<uint32_t> write_data(Inode &inode, const uint8_t *source, uint32_t
     while (done < count)
     {
         const uint32_t pos = offset + done;
-        auto block_number  = allocate_or_find_block(inode, pos / FSBLOCK_SIZE);
+        auto block_number  = allocate_or_find_block(inode, LogicalBlockIndex::containing(pos));
         if (!block_number)
             break;
         auto block = internal::fs.block_store->acquire(*block_number);
@@ -239,7 +256,7 @@ std::optional<uint32_t> write_data(Inode &inode, const uint8_t *source, uint32_t
 
 bool update_inode(const Inode &inode)
 {
-    return internal::write_inode(inode.inode_number, inode.disk);
+    return internal::write_disk_inode(inode.inode_number, inode.disk);
 }
 
 } // namespace FileSystem

@@ -131,7 +131,7 @@ bool directory_basic(IConsole *console)
     }
     clear_entry(*root.get(), "again");
     clear_entry(*root.get(), "abcdefghijklmn");
-    FileSystem::internal::write_inode(inode_number, DiskInode{});
+    FileSystem::internal::write_disk_inode(inode_number, DiskInode{});
     return all;
 }
 

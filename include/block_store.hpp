@@ -19,6 +19,11 @@ static_assert(sizeof(BlockNumber) == 4, "BlockNumber is stored on disk as 32 bit
 
 class BlockRef;
 
+// An interface that lends out the contents of a block (FSBLOCK_SIZE bytes) for a given block number.
+//
+//   acquire():borrows the contents. On failure, returns a BlockRef with no data (check with !block).
+//   write_back():writes the borrowed contents back to the disk.
+//   release():returns the borrowed block. BlockRef's destructor normally calls this, so don't call it directly.
 class IBlockStore
 {
   public:

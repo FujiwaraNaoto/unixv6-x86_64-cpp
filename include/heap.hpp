@@ -51,7 +51,7 @@ class Heap final
          uint64_t virt_end,
          pmm::PhysicalMemoryManager *pmm_ptr,
          vmm::VirtualMemoryManager *vmm_ptr);
-    void *alloc(size_t size);
+    void *allocate(size_t size);
     void free(void *ptr);
 
     // error時には(void*)-1を返す

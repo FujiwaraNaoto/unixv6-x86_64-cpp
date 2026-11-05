@@ -70,8 +70,8 @@ void remove_test_tree(Inode &root, const Inode &directory, InodeNumber file_numb
         if (block_number.value != 0)
             FileSystem::free_block(block_number);
     }
-    FileSystem::internal::write_inode(directory.inode_number, DiskInode{});
-    FileSystem::internal::write_inode(file_number, DiskInode{});
+    FileSystem::internal::write_disk_inode(directory.inode_number, DiskInode{});
+    FileSystem::internal::write_disk_inode(file_number, DiskInode{});
 }
 
 } // namespace

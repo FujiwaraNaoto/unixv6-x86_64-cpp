@@ -106,7 +106,7 @@ Heap::Heap(uint64_t virt_start,
     head_->prev = nullptr;
 }
 
-void *Heap::alloc(size_t size)
+void *Heap::allocate(size_t size)
 {
     if (size == 0 || head_ == nullptr)
         return nullptr;
@@ -170,7 +170,7 @@ void *Heap::alloc(size_t size)
         last_block->next = new_block;
     }
 
-    return alloc(size); // 再度allocを呼び出してブロックを取得. 今度は必ず空きがある
+    return allocate(size); // 再度allocateを呼び出してブロックを取得. 今度は必ず空きがある
 }
 
 void Heap::free(void *ptr)

@@ -8,7 +8,7 @@ namespace
 {
 using FileSystem::internal::bitmap_block;
 using FileSystem::internal::mark_block_used;
-using FileSystem::internal::write_inode;
+using FileSystem::internal::write_disk_inode;
 using FileSystem::internal::zero_block;
 
 
@@ -117,7 +117,7 @@ bool format(uint32_t total_blocks)
     {
         return false;
     }
-    if (!write_inode(ROOT_INODE, root_inode))
+    if (!write_disk_inode(ROOT_INODE, root_inode))
     {
         return false;
     }

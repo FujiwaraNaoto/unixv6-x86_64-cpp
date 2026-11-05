@@ -66,8 +66,7 @@ bool mark_block_used(BlockNumber block_number)
     return block.write_back();
 }
 
-// TODO: write_disk_inode()に命名を変更
-bool write_inode(InodeNumber inode_number, const DiskInode &inode)
+bool write_disk_inode(InodeNumber inode_number, const DiskInode &inode)
 {
     auto block = fs.block_store->acquire(inode_block(inode_number));
     if (!block)
@@ -77,8 +76,7 @@ bool write_inode(InodeNumber inode_number, const DiskInode &inode)
     return block.write_back();
 }
 
-// TODO: get_disk_inode()に命名変更
-std::optional<DiskInode> read_inode(InodeNumber inode_number)
+std::optional<DiskInode> get_disk_inode(InodeNumber inode_number)
 {
     auto block = fs.block_store->acquire(inode_block(inode_number));
     if (!block)

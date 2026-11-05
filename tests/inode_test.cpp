@@ -56,10 +56,10 @@ bool shared_after_earlier_slot_freed(IConsole *console)
         first.reset(); // second より手前のスロットが空く
         InodeRef again = FileSystem::get_inode(second->inode_number);
         ok             = again && again.get() == second.get() && second->refcnt == 2;
-        FileSystem::internal::write_inode(first_number, DiskInode{});
+        FileSystem::internal::write_disk_inode(first_number, DiskInode{});
     }
     if (second)
-        FileSystem::internal::write_inode(second->inode_number, DiskInode{});
+        FileSystem::internal::write_disk_inode(second->inode_number, DiskInode{});
     return report(console, "shared slot after earlier slot freed", ok);
 }
 
@@ -72,13 +72,13 @@ bool allocate_writes_type(IConsole *console)
     if (ok)
     {
         // メモリ上のコピーではなく、ディスクから読み直して確かめる
-        auto disk = FileSystem::internal::read_inode(inode_number);
+        auto disk = FileSystem::internal::get_disk_inode(inode_number);
         ok        = disk && disk->type == InodeType::kFile;
     }
 
     // 後片付け: テストを何度走らせても inode を食い潰さないよう、空きに戻す
     if (inode_number)
-        FileSystem::internal::write_inode(inode_number, DiskInode{});
+        FileSystem::internal::write_disk_inode(inode_number, DiskInode{});
 
     return report(console, "allocate_inode(kFile)", ok);
 }
@@ -111,7 +111,7 @@ bool read_buffer_matches(uint32_t offset, uint32_t count)
 // 後片付け: テストを何度走らせてもディスクを食い潰さないよう、ブロックと inode を空きに戻す
 void release_file(InodeNumber inode_number)
 {
-    auto disk = FileSystem::internal::read_inode(inode_number);
+    auto disk = FileSystem::internal::get_disk_inode(inode_number);
     if (!disk)
         return;
 
@@ -132,7 +132,7 @@ void release_file(InodeNumber inode_number)
         if (address.value != 0)
             FileSystem::free_block(address);
     }
-    FileSystem::internal::write_inode(inode_number, DiskInode{});
+    FileSystem::internal::write_disk_inode(inode_number, DiskInode{});
 }
 
 // 間接ブロックに入る大きさを書き、ディスクから読み直しても同じ内容が返るか
