@@ -9,7 +9,7 @@
 constexpr int BUF_SIZE = 1 << 10;
 namespace InitProcess
 {
-void init_func(void *arg)
+void init_func(void * /*arg*/)
 {
     Process *self = process::current_process();
     if (!usermode::map_user_space(self->pml4))
