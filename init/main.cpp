@@ -175,8 +175,8 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, uint32_t mb_addr
 
     while (1)
     {
-        irq_enable(); // 寝る前に割り込みを開ける
-        process::yield();    // Runnableが居れば拾う
+        irq_enable();     // 寝る前に割り込みを開ける
+        process::yield(); // Runnableが居れば拾う
         asm volatile("sti; hlt;");
     }
 }

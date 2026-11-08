@@ -26,4 +26,3 @@ inline void irq_enable_and_wait()
 {
     asm volatile("sti; hlt");
 }
-

@@ -1,4 +1,4 @@
-#pragma once 
+#pragma once
 
 #include <cstdint>
 
@@ -58,5 +58,3 @@ struct [[gnu::packed]] UserForkFrame
 
 // switch_context が context を pop し終えたとき、rsp がちょうど trap_frame を指すこと
 static_assert(offsetof(UserForkFrame, trap_frame) == sizeof(ProcessContext), "fork_return expects rsp == &trap_frame");
-
-
