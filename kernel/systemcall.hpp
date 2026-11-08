@@ -2,6 +2,7 @@
 #define KERNEL_SYSTEMCALL_HPP
 #include <cstdint>
 #include "console.hpp"
+#include "asm/msr.hpp"
 
 // Linux x86-64 のシステムコール番号と合わせる
 namespace SyscallNo
