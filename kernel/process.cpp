@@ -362,7 +362,7 @@ void schedule_from_zombie(ProcessContext **discard_context)
         // noreturn なので return はできない (呼び出し側は後ろのコードが無い前提で最適化される)
         while (1)
         {
-            cpu_idle()
+            cpu_idle();
         }
     }
 
