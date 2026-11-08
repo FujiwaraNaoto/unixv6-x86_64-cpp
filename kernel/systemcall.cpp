@@ -4,6 +4,7 @@
 #include "gdt.hpp"
 #include "console.hpp"
 #include "process.hpp"
+#include "asm/irqflags.hpp"
 
 #include <limits>
 
@@ -81,7 +82,7 @@ long sys_exit(uint64_t code)
         process::exit(static_cast<int>(code));
     }
     while (1)
-        asm volatile("hlt");
+        cpu_idle();
     return 0;
 }
 

@@ -61,7 +61,7 @@ void initialize(heap::Heap &heap)
     if (ptable.initialized)
     {
         while (1)
-            asm volatile("hlt");
+            cpu_idle();
     }
 
     for (Process &p : ptable.procs)
@@ -114,7 +114,7 @@ void trampoline()
     // unreachable, but just in case, halt the CPU to avoid unexpected behavior. The process will be in Zombie state,
     // and won't be scheduled again, but it will still consume CPU time if we don't halt here.
     while (1)
-        asm volatile("hlt");
+        cpu_idle();
 }
 
 void schedule(Process *prev_proc)
@@ -412,7 +412,7 @@ void schedule_from_zombie(ProcessContext **discard_context)
 
     // unreachable, but just in case, halt the CPU to avoid unexpected behavior. The process will be in Zombie state,
     while (1)
-        asm volatile("hlt");
+        cpu_idle();
 }
 
 void free_process_resources(Process *proc)
