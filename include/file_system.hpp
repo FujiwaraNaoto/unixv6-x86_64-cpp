@@ -143,6 +143,12 @@ class NullBlockStore final : public IBlockStore
 // main で明示的に構築することで、初期化順序の問題を避ける。
 inline NullBlockStore *null_block_store = nullptr;
 
+//ディスクを勝手に上書きして壊してしまわないようにする
+enum class FormatPolicy
+{
+    kNever   = 0,
+    kIfBlack = 1,
+};
 
 namespace FileSystem
 {
@@ -156,7 +162,10 @@ namespace FileSystem
 //
 // 戻り値は初期化に成功したか。フォーマット済みだった場合も、新規にフォーマットした
 // 場合も true。
-[[nodiscard]] bool initialize(uint32_t total_blocks, IBlockStore *block_store = nullptr, IConsole *console = nullptr);
+[[nodiscard]] bool initialize(uint32_t total_blocks,
+                              IBlockStore *block_store = nullptr,
+                              IConsole *console        = nullptr,
+                              FormatPolicy policy      = FormatPolicy::kNever);
 
 const SuperBlock &superblock();
 

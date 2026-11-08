@@ -132,7 +132,7 @@ bool format(uint32_t total_blocks)
 namespace FileSystem
 {
 
-bool initialize(uint32_t total_blocks, IBlockStore *block_store, IConsole *console)
+bool initialize(uint32_t total_blocks, IBlockStore *block_store, IConsole *console, FormatPolicy policy)
 {
     FileSystem::internal::fs.block_store = block_store ? block_store : null_block_store;
     FileSystem::internal::fs.console     = console ? console : null_console;
@@ -140,6 +140,12 @@ bool initialize(uint32_t total_blocks, IBlockStore *block_store, IConsole *conso
     if (internal::load_superblock())
     {
         return true;
+    }
+
+    if (policy != FormatPolicy::kIfBlack)
+    {
+        FileSystem::internal::fs.console->puts("[FS]   no filesystem found. refusing to format (boot with mkfs=1)\n");
+        return false;
     }
 
     // if the magic number is not matched, the disk is not formatted yet. format it.
