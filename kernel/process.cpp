@@ -361,7 +361,9 @@ void schedule_from_zombie(ProcessContext **discard_context)
         // カーネル初期文脈から exit() されるのは呼び出し側のバグ。
         // noreturn なので return はできない (呼び出し側は後ろのコードが無い前提で最適化される)
         while (1)
-            asm volatile("cli; hlt");
+        {
+            cpu_idle()
+        }
     }
 
     close_all_files(p);
