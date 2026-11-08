@@ -1,4 +1,5 @@
 #pragma once
+#include <cstdint>
 
 
 // MSR 番号(識別子)

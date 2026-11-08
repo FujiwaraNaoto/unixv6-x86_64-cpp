@@ -1,5 +1,7 @@
+#include <cstdint>
 #include "asm/syscall.hpp"
 #include "asm/msr.hpp"
+#include "asm/trapframe.hpp"
 #include "systemcall.hpp"
 #include "process.hpp"
 #include "gdt.hpp"

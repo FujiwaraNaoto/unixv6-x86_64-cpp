@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 
 // syscall の入口 (syscall/syscall_entry.asm) がカーネルスタックに積む、

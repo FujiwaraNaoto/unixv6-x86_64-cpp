@@ -1,11 +1,11 @@
 #include <cstdint>
-#include <optional>
+#include "address.hpp"
+#include "console.hpp"
 #include "vga.hpp"
 #include "serial.hpp"
 #include "exception.hpp"
 #include "idt.hpp"
 #include "pic.hpp"
-#include "io.hpp"
 #include "pmm.hpp"
 #include "vmm.hpp"
 #include "heap.hpp"
@@ -14,11 +14,10 @@
 #include "systemcall.hpp"
 #include "keyboard.hpp"
 #include "gdt.hpp"
-#include "usermode.hpp"
 #include "virtioblock.hpp"
+#include "block_store.hpp"
 #include "buffer_cache.hpp"
 #include "file_system.hpp"
-#include "file.hpp"
 #include "init.hpp"
 #include "asm/irqflags.hpp"
 
