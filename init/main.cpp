@@ -20,6 +20,7 @@
 #include "file_system.hpp"
 #include "file.hpp"
 #include "init.hpp"
+#include "asm/irqflags.hpp"
 
 // tests/ 以下は make tests (TESTS=1) のときだけコンパイル・リンクされる。
 // 通常ビルドではテストコードはカーネルに一切含まれない。
@@ -174,7 +175,7 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, uint32_t mb_addr
 
     while (1)
     {
-        asm volatile("sti"); // 寝る前に割り込みを開ける
+        irq_enable(); // 寝る前に割り込みを開ける
         process::yield();    // Runnableが居れば拾う
         asm volatile("sti; hlt;");
     }

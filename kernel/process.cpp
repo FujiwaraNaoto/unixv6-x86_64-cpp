@@ -6,6 +6,7 @@
 #include "address.hpp"
 #include "gdt.hpp"
 #include "file.hpp"
+#include "asm/irqflags.hpp"
 
 extern "C" void switch_context(ProcessContext **old_ctx, ProcessContext *new_ctx);
 
@@ -302,7 +303,7 @@ void sleep(void *channel)
 
     // ─── wakeup されて再開したらここに戻る ───
     p->sleep_channel = nullptr;
-    asm volatile("sti");
+    irq_enable();
 }
 
 // ─── wakeup ───────────────────────────────────────────────────────
