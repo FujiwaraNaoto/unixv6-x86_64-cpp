@@ -71,7 +71,7 @@ void console_echo(IConsole *console)
     while (1)
     {
         process::yield();
-        irq_enable_and_wait()
+        irq_enable_and_wait();
     }
 }
 
