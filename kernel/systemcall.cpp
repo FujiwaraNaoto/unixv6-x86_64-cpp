@@ -5,12 +5,9 @@
 #include "console.hpp"
 #include "process.hpp"
 #include "asm/irqflags.hpp"
-
+#include "asm/msr.hpp"
 #include <limits>
 
-extern "C" void syscall_entry();
-extern "C" uint64_t rdmsr(uint32_t msr);
-extern "C" void wrmsr(uint32_t msr, uint64_t value);
 
 extern "C" void handle_syscall(TrapFrame *tf)
 {
