@@ -294,7 +294,7 @@ void sleep(void *channel)
     if (!p)
         return; // カーネル初期文脈では sleep しない
     // lost wakeup 対策: 状態変更中は割り込みを止める
-    asm volatile("cli");
+    irq_disable();
 
     p->sleep_channel = channel;
     p->state         = ProcessState::Sleeping;
@@ -366,7 +366,7 @@ void schedule_from_zombie(ProcessContext **discard_context)
 
     close_all_files(p);
 
-    asm volatile("cli"); // 状態変更中は割り込みを止める
+    irq_disable(); // 状態変更中は割り込みを止める
 
     p->exit_status = status;
     p->state       = ProcessState::Zombie;
