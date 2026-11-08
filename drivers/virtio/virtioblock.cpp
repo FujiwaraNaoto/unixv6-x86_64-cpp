@@ -6,6 +6,7 @@
 #include "enum_util.hpp"
 #include "io.hpp"
 #include "pci.hpp"
+#include "asm/processor.hpp"
 
 namespace
 {
@@ -204,9 +205,9 @@ void virtq_kick(uint16_t desc_index)
 // デバイスがまだ処理中か (used->idx が last_used_index に追いついていないか)
 bool virtq_is_busy()
 {
-    // queue.used->idx は非 volatile なので、"memory" クロバーを挟まないと -O2 で
+    // queue.used->idx は非 volatile なので、cpu_relax()を挟まないと -O2 で
     // ポーリングループの外に読み出しが巻き上げられて無限ループになる。
-    asm volatile("pause" ::: "memory");
+    cpu_relax();
     return queue.used->idx != last_used_index;
 }
 
