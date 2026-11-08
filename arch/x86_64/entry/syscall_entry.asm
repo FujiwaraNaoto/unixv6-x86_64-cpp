@@ -19,7 +19,6 @@ saved_user_rsp: resq 1
 
 
 section .text
-extern syscall_dispatch
 extern syscall_kernel_rsp ; 現在プロセスのカーネルスタックの先頭を指す変数
 extern handle_syscall ; void handle_syscall(TrapFrame *tf);
 
@@ -47,7 +46,7 @@ syscall_entry:
 
     mov rdi, rsp ; TrapFrame* (syscall_entry で積んだフレームの先頭) を引数にする
     call handle_syscall
-    jmp syscall_return_path ; syscall_dispatch から戻ったら、syscall_return_path へジャンプして sysret でリング3へ戻る
+    jmp syscall_return_path ; handle_syscall から戻ったら、syscall_return_path へジャンプして sysret でリング3へ戻る
 
 
 ; fork した子がスケジューラから最初に選ばれたときの着地点。
