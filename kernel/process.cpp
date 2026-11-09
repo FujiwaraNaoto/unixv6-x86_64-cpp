@@ -512,8 +512,9 @@ namespace
 
 //カーネル側(上半分)は親と共有する．ユーザ側(下半分)は親のページを複製(同じ仮想アドレス，別の物理ページ)
 // リング3のプロセスから呼ばれたfork
-int fork_user(Process *parent, Process *child, uint8_t *child_stack)
+int fork_user(Process *parent, Process *child)
 {
+    
     // ユーザページの複製
     if (!vmm::vmm_ptr->copy_user_pages(parent->pml4, child->pml4))
     {
@@ -523,6 +524,9 @@ int fork_user(Process *parent, Process *child, uint8_t *child_stack)
         return -1;
     }
 
+    // カーネルスタックは allocate_process() が確保済み。
+    uint8_t *child_stack = child->kernel_stack.base;
+        
 
     // fork した子のカーネルスタック上端に置く初期フレーム。
     // 構造体のメンバは先に書いたものほど低いアドレスに置かれる (図では下)。
@@ -585,7 +589,7 @@ int fork_user(Process *parent, Process *child, uint8_t *child_stack)
 
 // カーネル側(上半分)は親と共有(同じ表)．ユーザ側(下半分)は空のまま
 // カーネルスレッドの fork で、リング3のユーザスタックはコピーしない
-int fork_kernel(Process *parent, Process *child, uint8_t *child_stack)
+int fork_kernel(Process *parent, Process *child)
 {
     uint8_t *parent_stack = parent->kernel_stack.base;
 
@@ -598,6 +602,8 @@ int fork_kernel(Process *parent, Process *child, uint8_t *child_stack)
         return child->kernel_stack.at(offset);                                  // 子の下端 + offset
     };
 
+    // カーネルスタックは allocate_process() が確保済み。
+    uint8_t *child_stack = child->kernel_stack.base;
 
     // copy the parent's kernel stack to the child's kernel stack
     // (make the child process's kernel stack identical to the parent's kernel stack)
@@ -660,18 +666,15 @@ int fork()
         child->files[fd] = FileSystem::file_duplicate(parent->files[fd]);
     }
 
-    // カーネルスタックは allocate_process() が確保済み。
-    auto *child_stack = child->kernel_stack.base;
-
     bool is_user_thread = (parent->trap_frame != nullptr);
     if (is_user_thread)
     {
         // Copy the parent's trap frame to the child's trap frame
-        return fork_user(parent, child, child_stack);
+        return fork_user(parent, child);
     }
     else
     {
-        return fork_kernel(parent, child, child_stack);
+        return fork_kernel(parent, child);
     }
 }
 
