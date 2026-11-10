@@ -133,7 +133,7 @@ void schedule(Process *prev_proc)
     if (prev_proc)
     {
         cpu.current = nullptr;
-        switch_context(&prev_proc->context, cpu.scheduler_context);
+        arch_switch_to_scheduler(&prev_proc->context, cpu.scheduler_context);
     }
 }
 } // namespace
@@ -293,7 +293,7 @@ void schedule_from_zombie(ProcessContext **discard_context)
 
     // Runnable なプロセスがない場合は、カーネル初期文脈に戻す
     cpu.current = nullptr;
-    switch_context(discard_context, cpu.scheduler_context);
+    arch_switch_to_scheduler(discard_context,cpu.scheduler_context);
 }
 } // namespace
 

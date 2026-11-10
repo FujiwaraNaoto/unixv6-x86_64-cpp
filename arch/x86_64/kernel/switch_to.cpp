@@ -205,3 +205,8 @@ void arch_switch(ProcessContext **save_to, Process *next)
     // step3: rspを子のフレームへ
     switch_context(save_to, next->context);
 }
+
+void arch_switch_to_scheduler(ProcessContext **save_to, ProcessContext *scheduler_context)
+{
+    switch_context(save_to, scheduler_context);
+}
