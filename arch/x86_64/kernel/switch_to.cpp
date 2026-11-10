@@ -185,12 +185,6 @@ int arch_fork_kernel(Process *parent, Process *child){
 }
 
 
-// step2: TSS.rsp0と syscall_kernel_rsp
-// set TSS's RSP0 to the top of the current process's kernel stack, so that when an interrupt occurs, the
-// CPU will switch to this stack.
-void arch_prepare_switch(Process *next){
-    gdt::set_kernel_stack(reinterpret_cast<uint64_t>(next->kernel_stack.top()));
-}
 
 // 今のコンテキストを *save_to に保存し、next に切り替える。
 // next が次に選ばれて戻ってきたとき (= 誰かが save_to に切り替えたとき) にこの関数から戻る。
@@ -200,7 +194,11 @@ void arch_switch(ProcessContext **save_to, Process *next)
     {
         vmm::vmm_ptr->switch_address_space(next->pml4); // step1: CR3を子の空間へ
     }
-    arch_prepare_switch(next);
+
+    // step2: TSS.rsp0と syscall_kernel_rsp
+    // set TSS's RSP0 to the top of the current process's kernel stack, so that when an interrupt occurs, the
+    // CPU will switch to this stack.
+    gdt::set_kernel_stack(reinterpret_cast<uint64_t>(next->kernel_stack.top()));
 
     // step3: rspを子のフレームへ
     switch_context(save_to, next->context);
