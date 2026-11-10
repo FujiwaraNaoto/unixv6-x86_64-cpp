@@ -166,7 +166,7 @@ int arch_fork_kernel(Process *parent, Process *child){
     //           リング0のまま、複製したスタックの上で動いている。
     //           yield() が先に cpu.current = child にしているので 0 を返し、
     //           あとは複製された fork() のフレームを通って呼び出し元へ戻っていく。
-    if (cpu.current == child)
+    if (process::current_process() == child)
     {
         return 0; // 子: fork() は 0 を返す
     }
