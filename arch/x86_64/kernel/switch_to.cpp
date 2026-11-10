@@ -2,6 +2,7 @@
 #include <cstdint>
 #include "asm/switch_to.hpp"
 #include "gdt.hpp"
+#include "vmm.hpp"
 #include "process.hpp"
 
 namespace
@@ -189,4 +190,18 @@ int arch_fork_kernel(Process *parent, Process *child){
 // CPU will switch to this stack.
 void arch_prepare_switch(Process *next){
     gdt::set_kernel_stack(reinterpret_cast<uint64_t>(next->kernel_stack.top()));
+}
+
+// 今のコンテキストを *save_to に保存し、next に切り替える。
+// next が次に選ばれて戻ってきたとき (= 誰かが save_to に切り替えたとき) にこの関数から戻る。
+void arch_switch(ProcessContext **save_to, Process *next)
+{
+    if (next->pml4)
+    {
+        vmm::vmm_ptr->switch_address_space(next->pml4); // step1: CR3を子の空間へ
+    }
+    arch_prepare_switch(next);
+
+    // step3: rspを子のフレームへ
+    switch_context(save_to, next->context);
 }

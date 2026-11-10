@@ -121,20 +121,12 @@ void schedule(Process *prev_proc)
         if (cpu.current == prev_proc)
             return;
 
-        if (cpu.current->pml4)
-        {
-            vmm::vmm_ptr->switch_address_space(cpu.current->pml4); // step1: CR3を子の空間へ
-        }
-
-        arch_prepare_switch(cpu.current);
-
         // prev がプロセスならそのコンテキストへ、kernel_main (スケジューラ) からの
         // 呼び出しなら cpu.scheduler_context へ保存する。後者は Runnable が尽きたときの
         // 復帰先になる
         ProcessContext **old_ctx = prev_proc ? &prev_proc->context : &cpu.scheduler_context;
 
-        // step2: rspを子のフレームへ
-        switch_context(old_ctx, cpu.current->context);
+        arch_switch(old_ctx, cpu.current);
         return;
     }
 
@@ -295,12 +287,7 @@ void schedule_from_zombie(ProcessContext **discard_context)
 
         cpu.current        = &ptable.procs[idx];
         cpu.current->state = ProcessState::Running;
-        if (cpu.current->pml4)
-        {
-            vmm::vmm_ptr->switch_address_space(cpu.current->pml4);
-        }
-        arch_prepare_switch(cpu.current);
-        switch_context(discard_context, cpu.current->context);
+        arch_switch(discard_context, cpu.current);
         return;
     }
 
