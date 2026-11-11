@@ -70,7 +70,7 @@ void fail(const char *message)
 void user_fork_entry(void *)
 {
     Process *self = process::current_process();
-    if (self == nullptr || !self->pml4)
+    if (self == nullptr || !self->page_table_root)
     {
         fail("no process context\n");
         return;

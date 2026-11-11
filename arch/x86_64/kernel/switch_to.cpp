@@ -191,9 +191,10 @@ int arch_fork_kernel(Process *parent, Process *child)
 // next が次に選ばれて戻ってきたとき (= 誰かが save_to に切り替えたとき) にこの関数から戻る。
 void arch_switch(ProcessContext **save_to, Process *next)
 {
-    if (next->pml4)
+    const PhysicalAddress pml4 = next->page_table_root; // x86-64 ではルートのテーブルが PML4
+    if (pml4)
     {
-        vmm::vmm_ptr->switch_address_space(next->pml4); // step1: CR3を子の空間へ
+        vmm::vmm_ptr->switch_address_space(pml4); // step1: CR3を子の空間へ
     }
 
     // step2: TSS.rsp0と syscall_kernel_rsp

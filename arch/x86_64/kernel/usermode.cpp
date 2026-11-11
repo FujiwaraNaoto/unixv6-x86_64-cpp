@@ -60,7 +60,8 @@ void enter(uint64_t entry, uint64_t user_stack)
 }
 
 bool arch_enter_user(Process *self, void (*entry)()){
-    if (!usermode::map_user_space(self->pml4))
+    const PhysicalAddress pml4 = self->page_table_root; // x86-64 ではルートのテーブルが PML4
+    if (!usermode::map_user_space(pml4))
         return false;
     usermode::enter(reinterpret_cast<uint64_t>(entry), usermode::kUserStackTop);   
     return true;
