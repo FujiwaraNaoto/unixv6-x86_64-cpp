@@ -5,22 +5,19 @@
 #include "asm/memory_layout.hpp"
 #include "vga.hpp"
 #include "serial.hpp"
-#include "exception.hpp"
-#include "idt.hpp"
-#include "pic.hpp"
 #include "pmm.hpp"
 #include "vmm.hpp"
 #include "heap.hpp"
 #include "process.hpp"
-#include "multiboot2.hpp"
+#include "memory_region.hpp"
 #include "systemcall.hpp"
 #include "keyboard.hpp"
-#include "gdt.hpp"
 #include "virtioblock.hpp"
 #include "buffer_cache.hpp"
 #include "file_system.hpp"
 #include "init.hpp"
 #include "asm/irqflags.hpp"
+#include "asm/setup.hpp"
 
 // tests/ 以下は make tests (TESTS=1) のときだけコンパイル・リンクされる。
 // 通常ビルドではテストコードはカーネルに一切含まれない。
@@ -46,11 +43,6 @@ void call_global_constructors()
 }
 } // namespace
 
-// カーネル終端の物理アドレス (kernel.ld で kernel_end - KERNEL_VMA として定義)。
-// 絶対シンボルなので RIP 相対では参照できないが、-mcmodel=kernel なら
-// R_X86_64_32S (符号付き32bit絶対) で解決されるため直接参照できる。
-extern "C" uint8_t kernel_phys_end[];
-
 // カーネルのエントリポイント。
 // ここではハードウェアとカーネルサブシステムの初期化だけを行い、
 // 各機能の動作確認は tests/ 以下の tests::run_all() に任せる
@@ -66,10 +58,6 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, uint32_t mb_addr
     NullConsole null_console_instance;
     null_console = &null_console_instance;
 
-    // 例外ハンドラは asm から呼ばれて引数を受け取れないので、出力先を登録しておく。
-    // IDT の構築時に VGA へ差し替わるが、それまでの例外はシリアルに出る。
-    exception::set_console(serial::serial);
-
     // グローバル変数のコンストラクタを実行する。
     // 初期化順序は .init_array の並び = リンク順 (Makefile の CPP_SRC の順) なので、
     // グローバル同士が互いのメンバを呼ぶと、まだ構築されていない相手に触ってしまう。
@@ -81,21 +69,11 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, uint32_t mb_addr
 
     vga::vga->puts("Hello World\n");
 
-    pic::InitializePIC(0x20, 0x28); // IRQ0-7は0x20-0x27、IRQ8-15は0x28-0x2Fに割り当てる
-    pic::InitializePIT(100);        // タイマー割り込みを約100Hzで発生させる
-
-    idt::InterruptDescriptorTable idt(vga::vga);
-    vga::vga->puts("IDT / interrupt handlers\n");
-
-    // PMM は物理アドレスを扱うので、高位カーネル化後は kernel_end (仮想) ではなく
-    // kernel_phys_end (物理) を渡す。仮想を渡すと「カーネル領域」の予約が
-    // 物理メモリ全体を覆ってしまい、空きページが無くなる。
-    // mb_addr を渡すのは、GRUB が置いた multiboot2 情報構造体も予約に入れるため。
-    // 情報構造体はカーネル終端より後ろにあるので、予約しないと空きページとして配られる。
+    // 割り込み・例外と CPU まわりの初期化 (x86-64 では PIC / PIT、IDT、GDT と TSS)。
+    // あわせて、PMM に渡す物理メモリの情報をブート情報から集める。
     BootMemoryMap memory_map;
-    if (!collect_memory_regions(mb_addr, reinterpret_cast<uint64_t>(kernel_phys_end), &memory_map))
+    if (!arch_setup(vga::vga, mb_addr, &memory_map))
     {
-        vga::vga->puts("Memory map not found\n");
         cpu_idle();
     }
     pmm::PhysicalMemoryManager pmm(memory_map.usable.data(),
@@ -118,10 +96,6 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, uint32_t mb_addr
     SystemCall::init(vga::vga);
 
     keyboard::initialize();
-
-    gdt::initialize_gdt();
-    static uint8_t kernel_stack[8192]; // 8KB のカーネルスタック
-    gdt::set_kernel_stack(reinterpret_cast<uint64_t>(kernel_stack + sizeof(kernel_stack)));
 
     process::initialize(heap_instance);
 
@@ -179,6 +153,6 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, uint32_t mb_addr
     {
         irq_enable();     // 寝る前に割り込みを開ける
         process::yield(); // Runnableが居れば拾う
-        asm volatile("sti; hlt;");
+        irq_enable_and_wait();
     }
 }
