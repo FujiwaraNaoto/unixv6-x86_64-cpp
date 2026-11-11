@@ -4,15 +4,15 @@
 #include <cstddef>
 #include <cstdint>
 
-// 物理アドレス [start, end)
+// PhysicalAddress [start, end)
 struct MemoryRegion
 {
     uint64_t start;
     uint64_t end;
 };
 
-// ブート時に arch 側が集めて PMM に渡す、物理メモリの情報。
-// usable: 使ってよい物理メモリ。reserved: usable の中にあるが配ってはいけない範囲。
+// Physical memory information collected by the arch code at boot and passed to the PMM.
+// usable: physical memory that may be used. reserved: ranges inside usable that must not be handed out.
 struct BootMemoryMap
 {
     static constexpr size_t MAX_USABLE   = 32;
