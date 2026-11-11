@@ -3,6 +3,7 @@
 #include <cstdint>
 #include "address.hpp"
 #include "vmm.hpp"
+#include "process.hpp"
 
 namespace usermode
 {
@@ -17,6 +18,8 @@ constexpr uint64_t kUserStackTop = kUserStack.address + PAGE_SIZE - 16;
 [[nodiscard]] bool map_user_space(PhysicalAddress pml4);
 
 [[noreturn]] void enter(uint64_t entry_point, uint64_t stack_pointer);
+
+bool arch_enter_user(Process *self, void (*entry)());
 
 } // namespace usermode
 

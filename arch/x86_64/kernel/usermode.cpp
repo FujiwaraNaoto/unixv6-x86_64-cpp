@@ -57,4 +57,12 @@ void enter(uint64_t entry, uint64_t user_stack)
     enter_usermode(entry, user_stack);
 }
 
+bool arch_enter_user(Process *self, void (*entry)()){
+    if (!usermode::map_user_space(self->pml4))
+        return false;
+    usermode::enter(reinterpret_cast<uint64_t>(entry), usermode::kUserStackTop);   
+    return true;
+}
+
+
 } // namespace usermode
