@@ -100,6 +100,8 @@ void user_entry(void *)
         return;
     }
 
+    // リング3へ遷移 (16バイト境界に揃える)。
+    // syscall で降りてくる先のカーネルスタックは schedule() が設定済み。
     if(!usermode::arch_enter_user(self,&user_program)){
         fail("failed to map user space\n");
         return;
