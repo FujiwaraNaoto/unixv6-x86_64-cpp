@@ -85,19 +85,21 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, uint32_t mb_addr
     idt::InterruptDescriptorTable idt(vga::vga);
     vga::vga->puts("IDT / interrupt handlers\n");
 
-    auto *mmap = find_mmap(mb_addr);
-    if (!mmap)
+    // PMM は物理アドレスを扱うので、高位カーネル化後は kernel_end (仮想) ではなく
+    // kernel_phys_end (物理) を渡す。仮想を渡すと「カーネル領域」の予約が
+    // 物理メモリ全体を覆ってしまい、空きページが無くなる。
+    // mb_addr を渡すのは、GRUB が置いた multiboot2 情報構造体も予約に入れるため。
+    // 情報構造体はカーネル終端より後ろにあるので、予約しないと空きページとして配られる。
+    BootMemoryMap memory_map;
+    if (!collect_memory_regions(mb_addr, reinterpret_cast<uint64_t>(kernel_phys_end), &memory_map))
     {
         vga::vga->puts("Memory map not found\n");
         cpu_idle();
     }
-
-    // PMM は物理アドレスを扱うので、高位カーネル化後は kernel_end (仮想) ではなく
-    // kernel_phys_end (物理) を渡す。仮想を渡すと「カーネル領域スキップ」判定が
-    // 常に真になり、さらに終端までのループが事実上無限ループになる。
-    // mb_addr も渡すのは、GRUB が置いた multiboot2 情報構造体を PMM に予約させるため。
-    // 情報構造体はカーネル終端より後ろにあるので、渡さないと空きページとして配られる。
-    pmm::PhysicalMemoryManager pmm(mmap, reinterpret_cast<uint64_t>(kernel_phys_end), mb_addr);
+    pmm::PhysicalMemoryManager pmm(memory_map.usable.data(),
+                                   memory_map.usable_count,
+                                   memory_map.reserved.data(),
+                                   memory_map.reserved_count);
     vmm::VirtualMemoryManager vmm_instance = vmm::VirtualMemoryManager(&pmm, vga::vga);
     // カーネルヒープは高位 (0xFFFFFFFF90000000〜) に置く。
     // 低位の identity map (PML4[0]) には依存しない。
