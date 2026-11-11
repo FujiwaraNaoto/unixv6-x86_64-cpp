@@ -1,5 +1,5 @@
-
-
+#pragma once
+struct Process;
 
 namespace usermode
 {
