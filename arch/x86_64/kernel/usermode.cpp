@@ -5,6 +5,7 @@
 #include "pmm.hpp"
 #include "vmm.hpp"
 #include <cstdint>
+#include "process.hpp"  
 
 extern "C" [[noreturn]] void enter_usermode(uint64_t entry, uint64_t user_stack);
 
