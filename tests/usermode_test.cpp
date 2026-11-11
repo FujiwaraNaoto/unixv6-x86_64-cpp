@@ -100,15 +100,10 @@ void user_entry(void *)
         return;
     }
 
-    if (!usermode::map_user_space(self->pml4))
-    {
+    if(!usermode::arch_enter_user(self,&user_program)){
         fail("failed to map user space\n");
         return;
     }
-
-    // リング3へ遷移 (16バイト境界に揃える)。
-    // syscall で降りてくる先のカーネルスタックは schedule() が設定済み。
-    usermode::enter(reinterpret_cast<uint64_t>(&user_program), usermode::kUserStackTop);
 }
 
 } // namespace

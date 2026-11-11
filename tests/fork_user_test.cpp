@@ -1,7 +1,6 @@
-#include <cstdint>
 #include "tests.hpp"
 #include "process.hpp"
-#include "usermode.hpp"
+#include "asm/usermode.hpp"
 #include "systemcall.hpp"
 #include "user_syscall.hpp"
 
@@ -77,14 +76,10 @@ void user_fork_entry(void *)
         return;
     }
 
-    if (!usermode::map_user_space(self->pml4))
-    {
+    if(!usermode::arch_enter_user(self,&user_fork_program)){
         fail("failed to map user space\n");
         return;
     }
-
-    // ここから戻らない。終了は exit システムコール (process::exit) 経由。
-    usermode::enter(reinterpret_cast<uint64_t>(&user_fork_program), usermode::kUserStackTop);
 }
 
 } // namespace
