@@ -1,6 +1,6 @@
 #include "tests.hpp"
 #include "process.hpp"
-#include "asm/usermode.hpp"
+#include "asm/user_entry.hpp"
 #include "systemcall.hpp"
 #include "user_syscall.hpp"
 

@@ -1,4 +1,5 @@
-#include "asm/usermode.hpp"
+#include "usermode.hpp"
+#include "asm/user_entry.hpp"
 #include "address.hpp"
 #include "vga.hpp"
 #include "console.hpp"
@@ -41,7 +42,7 @@ bool map_user_space(PhysicalAddress pml4)
         return false;
     }
     if (!vmm::vmm_ptr->map_page_in(
-            pml4, kUserStack, stack_phys, vmm::PageFlag::Present | vmm::PageFlag::Writable | vmm::PageFlag::User))
+            pml4, usermode::kUserStack, stack_phys, vmm::PageFlag::Present | vmm::PageFlag::Writable | vmm::PageFlag::User))
     {
         pmm::pmm_ptr->free(stack_phys);
         return false;
