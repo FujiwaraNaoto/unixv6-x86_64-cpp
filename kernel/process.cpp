@@ -204,8 +204,8 @@ Process *create_process(EntryPoint entry, const char *name, void *arg)
     proc->entry     = entry;
     proc->entry_arg = arg;
     proc->name      = name; // kstring が容量超過分を切り捨てて null 終端する
-    arch_setup_kernel_thread(proc,trampoline);
-    proc->state   = ProcessState::Runnable; // 構築完了。これでスケジューラが拾えるようになる
+    arch_setup_kernel_thread(proc, trampoline);
+    proc->state = ProcessState::Runnable; // 構築完了。これでスケジューラが拾えるようになる
     return proc;
 }
 
@@ -293,7 +293,7 @@ void schedule_from_zombie(ProcessContext **discard_context)
 
     // Runnable なプロセスがない場合は、カーネル初期文脈に戻す
     cpu.current = nullptr;
-    arch_switch_to_scheduler(discard_context,cpu.scheduler_context);
+    arch_switch_to_scheduler(discard_context, cpu.scheduler_context);
 }
 } // namespace
 
@@ -440,7 +440,7 @@ namespace
 // リング3のプロセスから呼ばれたfork
 int fork_user(Process *parent, Process *child)
 {
-    
+
     // ユーザページの複製
     if (!vmm::vmm_ptr->copy_user_pages(parent->pml4, child->pml4))
     {
@@ -449,7 +449,7 @@ int fork_user(Process *parent, Process *child)
         free_process_resources(child);
         return -1;
     }
-    arch_setup_user_fork(parent,child);
+    arch_setup_user_fork(parent, child);
     child->state = ProcessState::Runnable;
     return static_cast<int>(child->pid); // return the child's pid to the parent process
 }

@@ -1,7 +1,6 @@
 #include "trapframe.hpp"
 
 
-
 struct Process;
 
 extern "C" void switch_context(ProcessContext **old_ctx, ProcessContext *new_ctx);

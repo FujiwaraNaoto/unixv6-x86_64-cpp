@@ -27,7 +27,8 @@ extern "C" void fork_return();
 //       │ (空き)          │   trampoline 以降はここをスタックとして使う
 //       │                │
 //   低  └────────────────┘ ← kernel_stack.base
-void arch_setup_kernel_thread(Process *proc, void (*entry)()){
+void arch_setup_kernel_thread(Process *proc, void (*entry)())
+{
     uint8_t *stack_top = proc->kernel_stack.top();
     // スタックはアドレスの小さい方に成長していく。アセンブリでローカル変数確保の容量で引くことでProcessContextのメモリ領域を確保する
     auto *context = reinterpret_cast<ProcessContext *>(stack_top - sizeof(ProcessContext));
@@ -43,7 +44,6 @@ void arch_setup_kernel_thread(Process *proc, void (*entry)()){
     };
 
     proc->context = context;
-    
 }
 
 // ring3からfork
@@ -65,11 +65,12 @@ void arch_setup_kernel_thread(Process *proc, void (*entry)()){
 // child_stack                       ← 下端 (アドレスが低い)
 //カーネル側(上半分)は親と共有する．ユーザ側(下半分)は親のページを複製(同じ仮想アドレス，別の物理ページ)
 
-void arch_setup_user_fork(Process *parent, Process *child){
-    
+void arch_setup_user_fork(Process *parent, Process *child)
+{
+
     // カーネルスタックは allocate_process() が確保済み。
     uint8_t *child_stack = child->kernel_stack.base;
-        
+
 
     // fork した子のカーネルスタック上端に置く初期フレーム。
     // 構造体のメンバは先に書いたものほど低いアドレスに置かれる (図では下)。
@@ -106,8 +107,6 @@ void arch_setup_user_fork(Process *parent, Process *child){
 }
 
 
-
-
 // カーネルスレッドから呼ばれたfork().
 // カーネルスレッドの fork。親のカーネルスタックを丸ごと複製し、子はリング0のまま
 // fork_capture() の直後(★)から再開する。リング3のユーザスタックはコピーしない。
@@ -133,7 +132,8 @@ void arch_setup_user_fork(Process *parent, Process *child){
 // カーネル側(上半分)は親と共有(同じ表)．ユーザ側(下半分)は空のまま
 // カーネルスレッドの fork で、リング3のユーザスタックはコピーしない
 
-int arch_fork_kernel(Process *parent, Process *child){
+int arch_fork_kernel(Process *parent, Process *child)
+{
 
     uint8_t *parent_stack = parent->kernel_stack.base;
 
@@ -181,9 +181,7 @@ int arch_fork_kernel(Process *parent, Process *child){
 
     child->state = ProcessState::Runnable;
     return static_cast<int>(child->pid); // return the child's pid to the parent process
-
 }
-
 
 
 // 今のコンテキストを *save_to に保存し、next に切り替える。
