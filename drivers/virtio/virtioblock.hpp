@@ -2,11 +2,8 @@
 #define VIRTIOBLOCK_HPP
 #include <cstddef>
 #include <cstdint>
-#include <optional>
-#include <type_traits>
 #include "address.hpp"
 #include "bitmask_enum.hpp"
-#include "enum_util.hpp"
 
 /*
 Reference: https://ozlabs.org/~rusty/virtio-spec/virtio-0.9.5.pdf
