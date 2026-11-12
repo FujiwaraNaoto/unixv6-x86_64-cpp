@@ -11,9 +11,10 @@
 
 namespace
 {
-// 実体のプール。new が無いので静的に置き、refcnt == 0 のスロットを空きとして使う
-std::array<StandardInput, FileSystem::NUM_FILES> standard_input_table{};
-std::array<StandardOutput, FileSystem::NUM_FILES> standard_output_table{};
+// 標準入出力はプロセスごとの状態を持たないので、実体は 1 つずつ (Linux の /dev/console と同じく共有する)
+StandardInput standard_input;
+StandardOutput standard_output;
+// FileIO は offset を持つので open ごとに実体が要る。new が無いので静的に置き、refcnt == 0 のスロットを空きとして使う
 std::array<FileIO, FileSystem::NUM_FILES> file_io_table{};
 IConsole *file_console = nullptr;
 
@@ -63,6 +64,7 @@ size_t StandardInput::write(const void*,size_t){
 }
 
 void StandardInput::release(){
+    // 実体は 1 つで使い回すので、手放すものは無い
 }
 
 size_t StandardOutput::read(void*,size_t){
@@ -70,13 +72,13 @@ size_t StandardOutput::read(void*,size_t){
 }
 
 size_t StandardOutput::write(const void* buffer,size_t len){
-    IConsole *console = (io_console != nullptr) ? io_console : null_console;
+    IConsole *console = (file_console != nullptr) ? file_console : null_console;
     console->write(reinterpret_cast<const char *>(buffer), len);
     return len;
 }
 
 void StandardOutput::release(){
-    io_console = nullptr;
+    // 実体は 1 つで使い回すので、手放すものは無い
 }
 
 // 現在の offset から読み書きして offset を進める。ファイル末尾を読むと 0。
@@ -114,20 +116,12 @@ void file_set_console(IConsole *console)
 
 FileDescriptor *open_standard_input()
 {
-    StandardInput *f = find_free(standard_input_table);
-    if (f == nullptr)
-        return nullptr;
-    f->open();
-    return f;
+    return standard_input.duplicate();
 }
 
 FileDescriptor *open_standard_output()
 {
-    StandardOutput *f = find_free(standard_output_table);
-    if (f == nullptr)
-        return nullptr;
-    f->open(file_console);
-    return f;
+    return standard_output.duplicate();
 }
 
 FileDescriptor *open_file(InodeRef inode, bool readable, bool writable)

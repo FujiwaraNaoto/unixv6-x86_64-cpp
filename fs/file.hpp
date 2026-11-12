@@ -43,32 +43,31 @@ class FileDescriptor
         void start_use(){refcnt=1;} // 派生クラスの open() から呼ぶ。プールの空きスロットを使用中にする
         virtual void release() = 0; // 最後の close で呼ばれる
     private:
-        size_t refcnt=0; // fd 表から何か所で指されているか。0 = プールの空きスロット
+        size_t refcnt=0; // fd 表から何か所で指されているか。FileIO では 0 = プールの空きスロット
 };
 
 // fd 0 用: キーボードから読むだけ。NOTE: read は 1 行入力されるまで返らない。
+// 実体はシステムに 1 つで、全プロセスの fd 0 が参照カウントで共有する。
 class StandardInput:  public FileDescriptor
 {
     public:
         StandardInput() = default;
-        void open(){start_use();}
         size_t read(void* buffer,size_t len) override;
         size_t write(const void* buffer,size_t len) override;
     private:
         void release() override;
 };
 
-// fd 1/2 用: コンソールに書くだけ
+// fd 1/2 用: file_set_console で登録したコンソールに書くだけ。
+// 実体はシステムに 1 つで、全プロセスの fd 1/2 が参照カウントで共有する。
 class StandardOutput:  public FileDescriptor
 {
     public:
         StandardOutput() = default;
-        void open(IConsole* console_){start_use(); io_console = console_;}
         size_t read(void* buffer,size_t len) override;
         size_t write(const void* buffer,size_t len) override;
     private:
         void release() override;
-        IConsole* io_console = nullptr; // nullptr なら null_console に捨てる
 };
 
 // ディスク上のファイル。読み書きできるかは open のモードで決まる
@@ -96,14 +95,15 @@ class FileIO:  public FileDescriptor
 namespace FileSystem
 {
 
-constexpr int NUM_FILES = 100; // 種類ごとに、システム全体で開けるファイル数 (xv6 の NFILE)
+constexpr int NUM_FILES = 100; // システム全体で開ける FileIO の数 (xv6 の NFILE)
 
 // StandardOutput の書き込み先を登録する。nullptr なら null_console に捨てる。
 void file_set_console(IConsole *console);
 
-// プールの空きスロットを refcnt = 1 で返す。満杯なら nullptr。
+// 唯一の StandardInput / StandardOutput の参照カウントを増やして返す。
 FileDescriptor *open_standard_input();
 FileDescriptor *open_standard_output();
+// プールの空きスロットを refcnt = 1 で返す。満杯なら nullptr。
 FileDescriptor *open_file(InodeRef inode, bool readable, bool writable);
 
 } // namespace FileSystem
