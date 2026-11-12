@@ -21,6 +21,65 @@ enum class FileType : uint8_t
     kInode,   // ディスク上のファイル
 };
 
+class FileDescriptor
+{
+    public:
+        virtual ~FileDescriptor() = default;
+        FileDescriptor()=default;
+        FileDescriptor(bool readable_,bool writable_):readable(readable_),writable(writable_),refcnt(1){};
+        virtual size_t read(void* buffer,size_t len) = 0;
+        virtual size_t write(void* buffer,size_t len) = 0;
+        size_t close(){
+            if(refcnt<=0) return 0;
+            refcnt--;
+            if(refcnt==0) release();
+            return 0;
+        }
+        bool in_use() const {return refcnt>0;}
+        FileDescriptor* duplicate(){
+            refcnt++;
+            return this;
+        }
+    protected:
+        virtual void release() = 0;
+        bool readable = false;
+        bool writable = false;
+    private:
+        size_t refcnt=0;
+};
+
+class StandardIO:  public FileDescriptor
+{
+    public:
+        StandardIO() = default;
+        StandardIO(IConsole* console_,bool readable_=false,bool writable_=false):
+            io_console(console_),FileDescriptor(readable_,writable_){};
+        size_t read(void* buffer,size_t len) override;
+        size_t write(void* buffer,size_t len) override;
+    
+    private:
+        void release() override;
+        IConsole* io_console;
+};
+
+class FileIO:  public FileDescriptor
+{
+    public:
+        //FileIO(const InodeRef& inoderef_):inoderef(inoderef_){};
+        size_t read(void* buffer,size_t len) override;
+        size_t write(void* buffer,size_t len) override;
+    private:
+        void release() override;
+        InodeRef inoderef;
+        size_t offset = 0;
+};
+
+
+namespace FileSystem{
+    StandardIO *open_console(bool readable,bool writable);
+}
+
+
 struct File
 {
     FileType type = FileType::kNone;

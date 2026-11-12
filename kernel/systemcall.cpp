@@ -17,7 +17,7 @@ namespace
 IConsole *syscall_console = nullptr;
 
 // 現在のプロセスの fd 表から File を引く。範囲外・閉じている fd は nullptr。
-File *lookup_file(uint64_t fd)
+FileDescriptor *lookup_file(uint64_t fd)
 {
     Process *proc = process::current_process();
     if (proc == nullptr || fd >= proc->files.size())

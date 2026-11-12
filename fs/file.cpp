@@ -3,6 +3,7 @@
 #include "inode.hpp"
 #include "keyboard.hpp"
 #include "asm/irqflags.hpp"
+#include "inode.hpp"
 
 #include <array>
 #include <cstdint>
@@ -10,10 +11,11 @@
 
 namespace
 {
-
+std::array<StandardIO,FileSystem::NUM_FILES> console_table{};
 std::array<File, FileSystem::NUM_FILES> file_table{}; // 実体
 IConsole *file_console = nullptr;
 
+//deprecated
 uint32_t console_read(uint8_t *dest, uint32_t count)
 {
     uint32_t done = 0;
@@ -38,10 +40,70 @@ uint32_t console_read(uint8_t *dest, uint32_t count)
     return done;
 }
 
+template <class T, size_t N>
+T *find_free(std::array<T, N> &table)
+{
+    for (T &f : table)
+        if (!f.in_use())
+            return &f;
+    return nullptr;
+}
+
+
 } // namespace
+
+
+size_t  StandardIO::read(void* buffer,size_t len){
+    if(readable){
+        return console_read(reinterpret_cast<uint8_t*>(buffer),len);
+    }
+    return -1;
+}
+
+size_t  StandardIO::write(void* buffer,size_t len){
+    
+    if(writable){
+    IConsole *console = (file_console != nullptr) ? file_console : null_console;
+    console->write(reinterpret_cast<const char *>(buffer), len);
+    return len;
+    }
+    return -1;
+}
+
+void  StandardIO::release(){
+    io_console = nullptr;
+    return;
+}
+
+
+size_t  FileIO::read(void* buffer,size_t len){
+    auto res = FileSystem::read_data(*inoderef.get(), reinterpret_cast<uint8_t*>(buffer), offset, len);
+    return res.value_or(-1);
+}
+
+size_t  FileIO::write(void* buffer,size_t len){
+    auto res = FileSystem::write_data(*inoderef.get(), reinterpret_cast<uint8_t*>(buffer), offset, len);
+    return res.value_or(-1);
+}
+
+void  FileIO::release(){
+    inoderef.reset();
+    offset = 0;
+    return;
+}
+
 
 namespace FileSystem
 {
+
+StandardIO *open_console(bool readable,bool writable)
+{
+    StandardIO* f = find_free(console_table);
+    if(f==nullptr) return nullptr;
+
+    *f = StandardIO(file_console,readable,writable);
+    return f;
+}
 
 void file_set_console(IConsole *console)
 {
@@ -83,16 +145,17 @@ void file_close(File *file)
     file->offset   = 0;
 }
 
-File *file_open_console(bool readable, bool writable)
-{
-    File *file = file_allocate();
-    if (file == nullptr)
-        return nullptr;
-    file->type     = FileType::kConsole;
-    file->readable = readable;
-    file->writable = writable;
-    return file;
-}
+// //deprecated
+// File *file_open_console(bool readable, bool writable)
+// {
+//     File *file = file_allocate();
+//     if (file == nullptr)
+//         return nullptr;
+//     file->type     = FileType::kConsole;
+//     file->readable = readable;
+//     file->writable = writable;
+//     return file;
+// }
 
 std::optional<uint32_t> file_read(File &file, uint8_t *dest, uint32_t count)
 {
