@@ -1,4 +1,5 @@
-#pragma once
+#ifndef PROCESS_HPP
+#define PROCESS_HPP
 #include <array>
 #include <cstdint>
 #include <cstddef>
@@ -203,3 +204,5 @@ void free_process_resources(Process *proc);
 Process *allocate_process();
 
 } // namespace process
+
+#endif // PROCESS_HPP

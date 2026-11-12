@@ -1,4 +1,5 @@
-#pragma once
+#ifndef MULTIBOOT2_HPP
+#define MULTIBOOT2_HPP
 #include <cstdint>
 
 // see 4.4.1 multiboot2.h
@@ -49,3 +50,5 @@ Multiboot2MemoryMapTag *find_mmap(uint32_t multiboot_address);
 // GRUB が置いた情報構造体全体のバイト数を返す。
 // PMM に予約させて、後から物理ページとして配られるのを防ぐために使う。
 uint32_t multiboot_info_size(uint32_t multiboot_address);
+
+#endif // MULTIBOOT2_HPP

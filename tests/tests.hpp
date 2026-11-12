@@ -1,4 +1,5 @@
-#pragma once
+#ifndef TESTS_HPP
+#define TESTS_HPP
 
 #include "console.hpp"
 
@@ -90,3 +91,5 @@ void run_all(IConsole *console);
 
 
 } // namespace tests
+
+#endif // TESTS_HPP

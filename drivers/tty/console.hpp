@@ -1,4 +1,5 @@
-#pragma once
+#ifndef CONSOLE_HPP
+#define CONSOLE_HPP
 #include <cstddef>
 #include <cstdint>
 #include <cstdarg>
@@ -71,3 +72,5 @@ class NullConsole final : public IConsole
 // 他のグローバルとの初期化順序が「たまたま動いている」状態になりやすい。
 // main で明示的に構築することで、初期化順序の問題を避ける。
 inline NullConsole *null_console = nullptr;
+
+#endif // CONSOLE_HPP

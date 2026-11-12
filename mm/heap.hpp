@@ -1,4 +1,5 @@
-#pragma once
+#ifndef HEAP_HPP
+#define HEAP_HPP
 #include <cstdint>
 #include "units.hpp"
 #include <cstddef>
@@ -65,3 +66,5 @@ class Heap final
 
 inline Heap *heap_ptr;
 } // namespace heap
+
+#endif // HEAP_HPP

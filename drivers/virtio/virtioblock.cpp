@@ -1,8 +1,9 @@
 #include "virtioblock.hpp"
 
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
-#include <optional>
+#include "enum_util.hpp"
 #include "io.hpp"
 #include "pci.hpp"
 

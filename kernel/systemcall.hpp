@@ -1,4 +1,5 @@
-#pragma once
+#ifndef SYSTEMCALL_HPP
+#define SYSTEMCALL_HPP
 #include <cstdint>
 #include "console.hpp"
 
@@ -38,3 +39,5 @@ void init(IConsole *console);
 
 extern "C" long syscall_dispatch(uint64_t num, uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4, uint64_t a5);
 } // namespace SystemCall
+
+#endif // SYSTEMCALL_HPP
