@@ -11,7 +11,7 @@
 
 namespace
 {
-std::array<StandardIO,FileSystem::NUM_FILES> console_table{};
+std::array<StandardIO,FileSystem::NUM_FILES> console_input{};
 std::array<File, FileSystem::NUM_FILES> file_table{}; // 実体
 IConsole *file_console = nullptr;
 
@@ -53,24 +53,25 @@ T *find_free(std::array<T, N> &table)
 } // namespace
 
 
-size_t  StandardIO::read(void* buffer,size_t len){
-    if(readable){
-        return console_read(reinterpret_cast<uint8_t*>(buffer),len);
-    }
+size_t  StandardInput::read(void* buffer,size_t len){
+    return console_read(reinterpret_cast<uint8_t*>(buffer),len);    
+}
+size_t  StandardInput::write(void* buffer,size_t len){
+    return -1; 
+}
+
+size_t  StandardOutput::read(void* buffer,size_t len){
     return -1;
 }
 
-size_t  StandardIO::write(void* buffer,size_t len){
-    
-    if(writable){
+size_t  StandardOutput::write(void* buffer,size_t len){
+
     IConsole *console = (file_console != nullptr) ? file_console : null_console;
     console->write(reinterpret_cast<const char *>(buffer), len);
     return len;
-    }
-    return -1;
 }
 
-void  StandardIO::release(){
+void  StandardInput::release(){
     io_console = nullptr;
     return;
 }

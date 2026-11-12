@@ -26,7 +26,6 @@ class FileDescriptor
     public:
         virtual ~FileDescriptor() = default;
         FileDescriptor()=default;
-        FileDescriptor(bool readable_,bool writable_):readable(readable_),writable(writable_),refcnt(1){};
         virtual size_t read(void* buffer,size_t len) = 0;
         virtual size_t write(void* buffer,size_t len) = 0;
         size_t close(){
@@ -42,18 +41,25 @@ class FileDescriptor
         }
     protected:
         virtual void release() = 0;
-        bool readable = false;
-        bool writable = false;
     private:
         size_t refcnt=0;
 };
 
-class StandardIO:  public FileDescriptor
+class StandardInput:  public FileDescriptor
 {
     public:
-        StandardIO() = default;
-        StandardIO(IConsole* console_,bool readable_=false,bool writable_=false):
-            io_console(console_),FileDescriptor(readable_,writable_){};
+        StandardInput() = default;
+        size_t read(void* buffer,size_t len) override;
+        size_t write(void* buffer,size_t len) override;
+    private:
+        void release() override;
+        IConsole* io_console;
+};
+class StandardOutput:  public FileDescriptor
+{
+    public:
+        StandardOutput() = default;
+        StandardOutput(IConsole* console_):io_console(console_){};
         size_t read(void* buffer,size_t len) override;
         size_t write(void* buffer,size_t len) override;
     
@@ -61,6 +67,7 @@ class StandardIO:  public FileDescriptor
         void release() override;
         IConsole* io_console;
 };
+
 
 class FileIO:  public FileDescriptor
 {
@@ -72,6 +79,8 @@ class FileIO:  public FileDescriptor
         void release() override;
         InodeRef inoderef;
         size_t offset = 0;
+        bool readable=false;
+        bool writable = false;
 };
 
 
