@@ -16,7 +16,7 @@ namespace
 // syscall は init() で有効にするので、登録前に dispatch が走ることはない。
 IConsole *syscall_console = nullptr;
 
-// 現在のプロセスの fd 表から File を引く。範囲外・閉じている fd は nullptr。
+// 現在のプロセスの fd 表から FileDescriptor を引く。範囲外・閉じている fd は nullptr。
 FileDescriptor *lookup_file(uint64_t fd)
 {
     Process *proc = process::current_process();
@@ -27,29 +27,27 @@ FileDescriptor *lookup_file(uint64_t fd)
 
 long sys_read(uint64_t fd, uint64_t buf, uint64_t len)
 {
-    File *file = lookup_file(fd);
+    FileDescriptor *file = lookup_file(fd);
     if (file == nullptr || len > std::numeric_limits<uint32_t>::max())
         return static_cast<long>(-1);
-    auto done = FileSystem::file_read(*file, reinterpret_cast<uint8_t *>(buf), static_cast<uint32_t>(len));
-    return done ? static_cast<long>(*done) : static_cast<long>(-1);
+    return static_cast<long>(file->read(reinterpret_cast<void *>(buf), len)); // 失敗は -1 のまま返る
 }
 
 long sys_write(uint64_t fd, uint64_t buf, uint64_t len)
 {
-    File *file = lookup_file(fd);
+    FileDescriptor *file = lookup_file(fd);
     if (file == nullptr || len > std::numeric_limits<uint32_t>::max())
         return static_cast<long>(-1);
-    auto done = FileSystem::file_write(*file, reinterpret_cast<const uint8_t *>(buf), static_cast<uint32_t>(len));
-    return done ? static_cast<long>(*done) : static_cast<long>(-1);
+    return static_cast<long>(file->write(reinterpret_cast<const void *>(buf), len));
 }
 
 long sys_close(uint64_t fd)
 {
-    File *file = lookup_file(fd);
+    FileDescriptor *file = lookup_file(fd);
     if (file == nullptr)
         return static_cast<long>(-1);
     process::current_process()->files[fd] = nullptr;
-    FileSystem::file_close(file);
+    file->close();
     return 0;
 }
 

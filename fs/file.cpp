@@ -11,11 +11,12 @@
 
 namespace
 {
-std::array<StandardIO,FileSystem::NUM_FILES> console_input{};
-std::array<File, FileSystem::NUM_FILES> file_table{}; // 実体
+// 実体のプール。new が無いので静的に置き、refcnt == 0 のスロットを空きとして使う
+std::array<StandardInput, FileSystem::NUM_FILES> standard_input_table{};
+std::array<StandardOutput, FileSystem::NUM_FILES> standard_output_table{};
+std::array<FileIO, FileSystem::NUM_FILES> file_io_table{};
 IConsole *file_console = nullptr;
 
-//deprecated
 uint32_t console_read(uint8_t *dest, uint32_t count)
 {
     uint32_t done = 0;
@@ -53,157 +54,91 @@ T *find_free(std::array<T, N> &table)
 } // namespace
 
 
-size_t  StandardInput::read(void* buffer,size_t len){
-    return console_read(reinterpret_cast<uint8_t*>(buffer),len);    
-}
-size_t  StandardInput::write(void* buffer,size_t len){
-    return -1; 
+size_t StandardInput::read(void* buffer,size_t len){
+    return console_read(reinterpret_cast<uint8_t*>(buffer),static_cast<uint32_t>(len));
 }
 
-size_t  StandardOutput::read(void* buffer,size_t len){
-    return -1;
+size_t StandardInput::write(const void*,size_t){
+    return kError; // 入力専用
 }
 
-size_t  StandardOutput::write(void* buffer,size_t len){
+void StandardInput::release(){
+}
 
-    IConsole *console = (file_console != nullptr) ? file_console : null_console;
+size_t StandardOutput::read(void*,size_t){
+    return kError; // 出力専用
+}
+
+size_t StandardOutput::write(const void* buffer,size_t len){
+    IConsole *console = (io_console != nullptr) ? io_console : null_console;
     console->write(reinterpret_cast<const char *>(buffer), len);
     return len;
 }
 
-void  StandardInput::release(){
+void StandardOutput::release(){
     io_console = nullptr;
-    return;
 }
 
-
-size_t  FileIO::read(void* buffer,size_t len){
-    auto res = FileSystem::read_data(*inoderef.get(), reinterpret_cast<uint8_t*>(buffer), offset, len);
-    return res.value_or(-1);
+// 現在の offset から読み書きして offset を進める。ファイル末尾を読むと 0。
+size_t FileIO::read(void* buffer,size_t len){
+    if(!readable) return kError;
+    auto done = FileSystem::read_data(*inoderef.get(), reinterpret_cast<uint8_t*>(buffer), offset, static_cast<uint32_t>(len));
+    if(!done) return kError;
+    offset += *done;
+    return *done;
 }
 
-size_t  FileIO::write(void* buffer,size_t len){
-    auto res = FileSystem::write_data(*inoderef.get(), reinterpret_cast<uint8_t*>(buffer), offset, len);
-    return res.value_or(-1);
+size_t FileIO::write(const void* buffer,size_t len){
+    if(!writable) return kError;
+    auto done = FileSystem::write_data(*inoderef.get(), reinterpret_cast<const uint8_t*>(buffer), offset, static_cast<uint32_t>(len));
+    if(!done) return kError;
+    offset += *done;
+    return *done;
 }
 
-void  FileIO::release(){
+void FileIO::release(){
     inoderef.reset();
-    offset = 0;
-    return;
+    offset   = 0;
+    readable = false;
+    writable = false;
 }
 
 
 namespace FileSystem
 {
 
-StandardIO *open_console(bool readable,bool writable)
-{
-    StandardIO* f = find_free(console_table);
-    if(f==nullptr) return nullptr;
-
-    *f = StandardIO(file_console,readable,writable);
-    return f;
-}
-
 void file_set_console(IConsole *console)
 {
     file_console = console;
 }
 
-File *file_allocate()
+FileDescriptor *open_standard_input()
 {
-    for (File &file : file_table)
-    {
-        if (file.refcnt == 0)
-        {
-            file.refcnt = 1;
-            return &file;
-        }
-    }
-    return nullptr;
+    StandardInput *f = find_free(standard_input_table);
+    if (f == nullptr)
+        return nullptr;
+    f->open();
+    return f;
 }
 
-File *file_duplicate(File *file)
+FileDescriptor *open_standard_output()
 {
-    if (file != nullptr)
-        file->refcnt++;
-    return file;
+    StandardOutput *f = find_free(standard_output_table);
+    if (f == nullptr)
+        return nullptr;
+    f->open(file_console);
+    return f;
 }
 
-void file_close(File *file)
+FileDescriptor *open_file(InodeRef inode, bool readable, bool writable)
 {
-    if (file == nullptr || file->refcnt <= 0)
-        return;
-    file->refcnt--;
-    if (file->refcnt > 0)
-        return; // まだ誰かが使っている
-
-    file->inode.reset();
-    file->type     = FileType::kNone;
-    file->readable = false;
-    file->writable = false;
-    file->offset   = 0;
-}
-
-// //deprecated
-// File *file_open_console(bool readable, bool writable)
-// {
-//     File *file = file_allocate();
-//     if (file == nullptr)
-//         return nullptr;
-//     file->type     = FileType::kConsole;
-//     file->readable = readable;
-//     file->writable = writable;
-//     return file;
-// }
-
-std::optional<uint32_t> file_read(File &file, uint8_t *dest, uint32_t count)
-{
-    if (!file.readable)
-        return std::nullopt;
-
-    switch (file.type)
-    {
-        case FileType::kConsole:
-            return console_read(dest, count);
-        case FileType::kInode:
-        {
-            auto done = read_data(*file.inode.get(), dest, file.offset, count);
-            if (done)
-                file.offset += *done;
-            return done;
-        }
-        case FileType::kNone:
-            break;
-    }
-    return std::nullopt;
-}
-
-std::optional<uint32_t> file_write(File &file, const uint8_t *source, uint32_t count)
-{
-    if (!file.writable)
-        return std::nullopt;
-
-    switch (file.type)
-    {
-        case FileType::kConsole:
-        {
-            IConsole *console = (file_console != nullptr) ? file_console : null_console;
-            console->write(reinterpret_cast<const char *>(source), count);
-            return count;
-        }
-        case FileType::kInode:
-        {
-            auto done = write_data(*file.inode.get(), source, file.offset, count);
-            if (done)
-                file.offset += *done;
-            return done;
-        }
-        case FileType::kNone:
-            break;
-    }
-    return std::nullopt;
+    if (!inode)
+        return nullptr;
+    FileIO *f = find_free(file_io_table);
+    if (f == nullptr)
+        return nullptr;
+    f->open(std::move(inode), readable, writable);
+    return f;
 }
 
 } // namespace FileSystem

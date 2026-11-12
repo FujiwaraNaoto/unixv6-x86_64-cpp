@@ -80,8 +80,8 @@ void close_all_files(Process *proc)
 // fd 0/1/2 をコンソールにつなぐ。失敗したら false (開けた分は呼び出し側が free_process_resources で閉じる)。
 bool open_console_files(Process *proc)
 {
-    proc->files[0] = FileSystem::open_console(/*readable =*/ true, /*writable =*/ false);
-    proc->files[1] = FileSystem::open_console(/*readable =*/ false, /*writable =*/ true);
+    proc->files[0] = FileSystem::open_standard_input();
+    proc->files[1] = FileSystem::open_standard_output();
     if (proc->files[0] == nullptr || proc->files[1] == nullptr)
         return false;
     proc->files[2] = proc->files[1]->duplicate();

@@ -79,8 +79,6 @@ struct ProcessId
     }
 };
 
-struct File;
-
 constexpr int NUM_OPEN_FILES = 16; // 1 プロセスが開けるファイル数 (xv6 の NOFILE)
 
 struct Process
