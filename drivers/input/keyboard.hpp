@@ -1,4 +1,5 @@
-#pragma once
+#ifndef KEYBOARD_HPP
+#define KEYBOARD_HPP
 #include <cstdint>
 
 namespace keyboard
@@ -14,3 +15,5 @@ bool has_input();
 // IRQ1 handler
 void handle_irq();
 } // namespace keyboard
+
+#endif // KEYBOARD_HPP

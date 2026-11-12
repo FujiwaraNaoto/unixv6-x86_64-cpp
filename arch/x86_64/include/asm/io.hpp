@@ -1,4 +1,5 @@
-#pragma once
+#ifndef IO_HPP
+#define IO_HPP
 #include <cstdint>
 #include <type_traits>
 
@@ -27,3 +28,5 @@ inline void outb(uint16_t port, Enum value)
     outb(port, static_cast<uint8_t>(value));
 }
 } // namespace io
+
+#endif // IO_HPP

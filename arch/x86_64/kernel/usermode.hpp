@@ -1,4 +1,5 @@
-#pragma once
+#ifndef USERMODE_HPP
+#define USERMODE_HPP
 #include <cstdint>
 #include "address.hpp"
 #include "vmm.hpp"
@@ -18,3 +19,5 @@ constexpr uint64_t kUserStackTop = kUserStack.address + PAGE_SIZE - 16;
 [[noreturn]] void enter(uint64_t entry_point, uint64_t stack_pointer);
 
 } // namespace usermode
+
+#endif // USERMODE_HPP

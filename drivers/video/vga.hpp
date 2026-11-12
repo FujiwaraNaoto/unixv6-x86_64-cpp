@@ -1,4 +1,5 @@
-#pragma once
+#ifndef VGA_HPP
+#define VGA_HPP
 #include <cstddef>
 #include <cstdint>
 #include "console.hpp"
@@ -38,3 +39,5 @@ inline VGA *vga = nullptr;
 
 
 } // namespace vga
+
+#endif // VGA_HPP

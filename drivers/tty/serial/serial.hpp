@@ -1,4 +1,5 @@
-#pragma once
+#ifndef SERIAL_HPP
+#define SERIAL_HPP
 #include <cstdint>
 #include <cstddef>
 #include "console.hpp"
@@ -24,3 +25,5 @@ class Serial : public IConsole
 // main で明示的に構築することで、初期化順序の問題を避ける。
 inline Serial *serial = nullptr;
 } // namespace serial
+
+#endif // SERIAL_HPP

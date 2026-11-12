@@ -1,4 +1,5 @@
-#pragma once
+#ifndef IDT_HPP
+#define IDT_HPP
 #include <cstdint>
 #include "console.hpp"
 
@@ -78,3 +79,5 @@ class InterruptDescriptorTable
 };
 
 } // namespace idt
+
+#endif // IDT_HPP

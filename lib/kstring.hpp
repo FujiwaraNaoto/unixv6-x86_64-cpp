@@ -1,4 +1,5 @@
-#pragma once
+#ifndef KSTRING_HPP
+#define KSTRING_HPP
 #include <cstddef>
 
 // 固定容量の value 型文字列。
@@ -90,3 +91,5 @@ class kstring
     char data_[N];
     size_t len_;
 };
+
+#endif // KSTRING_HPP

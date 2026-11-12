@@ -1,5 +1,6 @@
 
-#pragma once
+#ifndef PIC_HPP
+#define PIC_HPP
 #include <cstdint>
 
 
@@ -13,3 +14,5 @@ void unmask_irq(uint8_t irq);
 void send_eoi(uint8_t irq);
 
 } // namespace pic
+
+#endif // PIC_HPP
