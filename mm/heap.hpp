@@ -1,9 +1,7 @@
 #ifndef MM_HEAP_HPP
 #define MM_HEAP_HPP
 #include <cstdint>
-#include "units.hpp"
 #include <cstddef>
-#include "asm/memory_layout.hpp"
 
 // Heap はポインタとして持つだけなので、ヘッダは読み込まず前方宣言で済ませる。
 // (pmm.hpp / vmm.hpp を読み込むと、heap.hpp を使う側にまで依存が広がる)

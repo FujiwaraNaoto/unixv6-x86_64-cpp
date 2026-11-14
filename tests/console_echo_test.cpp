@@ -1,4 +1,3 @@
-#include <cstdint>
 #include "tests.hpp"
 #include "asm/user_entry.hpp"
 #include "process.hpp"
@@ -46,11 +45,11 @@ void echo_entry(void *)
 {
     Process *self = process::current_process();
 
-    if(!usermode::arch_enter_user(self,&user_echo_program)){
+    if (!usermode::arch_enter_user(self, &user_echo_program))
+    {
         fail("failed to map user space\n");
         return;
     }
-
 }
 
 } // namespace

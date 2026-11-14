@@ -1,6 +1,8 @@
 #include <cstdint>
 #include "address.hpp"
 #include "console.hpp"
+#include "memory_region.hpp"
+#include "asm/memory_layout.hpp"
 #include "vga.hpp"
 #include "serial.hpp"
 #include "exception.hpp"

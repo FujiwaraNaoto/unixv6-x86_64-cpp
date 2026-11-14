@@ -1,5 +1,6 @@
 #include "pmm.hpp"
-#include "multiboot2.hpp"
+#include "memory_region.hpp"
+#include <cstddef>
 #include <cstdint>
 #include "address.hpp"
 

@@ -77,7 +77,8 @@ void user_fork_entry(void *)
     }
 
     // ここから戻らない。終了は exit システムコール (process::exit) 経由。
-    if(!usermode::arch_enter_user(self,&user_fork_program)){
+    if (!usermode::arch_enter_user(self, &user_fork_program))
+    {
         fail("failed to map user space\n");
         return;
     }
