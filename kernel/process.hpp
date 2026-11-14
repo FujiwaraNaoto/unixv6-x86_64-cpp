@@ -7,6 +7,7 @@
 #include "address.hpp"
 #include "kstring.hpp"
 #include "asm/trapframe.hpp"
+#include "file.hpp"
 
 
 enum class ProcessState
@@ -79,8 +80,6 @@ struct ProcessId
     }
 };
 
-struct File;
-
 constexpr int NUM_OPEN_FILES = 16; // 1 プロセスが開けるファイル数 (xv6 の NOFILE)
 
 struct Process
@@ -101,7 +100,7 @@ struct Process
     int exit_status;     // プロセスの終了ステータス (exit() で設定される)
     TrapFrame
         *trap_frame; // syscall/syscall_entry.asm が積む、リング3のレジスタ一式．カーネルスレッドからの場合は nullptr
-    std::array<File *, NUM_OPEN_FILES> files{}; // fd 表。nullptr が空き
+    std::array<FileDescriptor *, NUM_OPEN_FILES> files{}; // fd 表。nullptr が空き
 };
 
 namespace process

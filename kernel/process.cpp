@@ -68,9 +68,10 @@ namespace
 // fd 表の File をすべて閉じる。閉じた fd は nullptr にするので、2 回呼んでも問題ない。
 void close_all_files(Process *proc)
 {
-    for (File *&file : proc->files)
+    for (FileDescriptor *&file : proc->files)
     {
-        FileSystem::file_close(file);
+        if (file != nullptr)
+            file->close();
         file = nullptr;
     }
 }
@@ -78,11 +79,11 @@ void close_all_files(Process *proc)
 // fd 0/1/2 をコンソールにつなぐ。失敗したら false (開けた分は呼び出し側が free_process_resources で閉じる)。
 bool open_console_files(Process *proc)
 {
-    proc->files[0] = FileSystem::file_open_console(true, false);
-    proc->files[1] = FileSystem::file_open_console(false, true);
+    proc->files[0] = FileSystem::open_standard_input();
+    proc->files[1] = FileSystem::open_standard_output();
     if (proc->files[0] == nullptr || proc->files[1] == nullptr)
         return false;
-    proc->files[2] = FileSystem::file_duplicate(proc->files[1]);
+    proc->files[2] = proc->files[1]->duplicate();
     return true;
 }
 
@@ -481,7 +482,7 @@ int fork()
 
     for (size_t fd = 0; fd < parent->files.size(); fd++)
     {
-        child->files[fd] = FileSystem::file_duplicate(parent->files[fd]);
+        child->files[fd] = (parent->files[fd] != nullptr) ? parent->files[fd]->duplicate() : nullptr;
     }
 
     bool is_user_thread = (parent->trap_frame != nullptr);

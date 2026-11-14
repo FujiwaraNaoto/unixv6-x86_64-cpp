@@ -8,6 +8,7 @@
 #include "inode.hpp"
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 
 namespace tests
@@ -33,36 +34,54 @@ bool report(IConsole *console, const char *name, bool ok)
     return ok;
 }
 
-// 空きスロットの数を数える (いったん全部確保して返す)。満杯で nullptr が返ることの確認も兼ねる。
+// FileIO を 1 つ開く。中身は読まないので、どのファイルでもよい
+FileDescriptor *open_root()
+{
+    return FileSystem::open_file(FileSystem::get_inode(ROOT_INODE), true, false);
+}
+
+// FileIO のプールの空きスロットの数を数える (open できなくなるまで開いてから全部閉じる)。
+// 満杯で nullptr が返ることの確認も兼ねる。
 int count_free_slots()
 {
-    std::array<File *, FileSystem::NUM_FILES + 1> taken{};
+    std::array<FileDescriptor *, FileSystem::NUM_FILES + 1> taken{};
     int count = 0;
     while (count <= FileSystem::NUM_FILES)
     {
-        taken[count] = FileSystem::file_allocate();
+        taken[count] = open_root();
         if (taken[count] == nullptr)
             break;
         count++;
     }
     for (int i = 0; i < count; i++)
-        FileSystem::file_close(taken[i]);
+        taken[i]->close();
     return count;
 }
 
-bool allocate_dup_close(IConsole *console)
+// 唯一の StandardInput / StandardOutput が、いま何か所から参照されているか (調べるための 1 つは除く)
+size_t standard_refcounts()
 {
-    File *file = FileSystem::file_allocate();
-    bool ok    = file != nullptr && file->refcnt == 1;
+    FileDescriptor *input  = FileSystem::open_standard_input();
+    FileDescriptor *output = FileSystem::open_standard_output();
+    const size_t count     = (input->refcount() - 1) + (output->refcount() - 1);
+    input->close();
+    output->close();
+    return count;
+}
+
+bool open_dup_close(IConsole *console)
+{
+    FileDescriptor *file = open_root();
+    bool ok              = file != nullptr && file->in_use() && file->refcount() == 1;
     if (ok)
     {
-        ok = FileSystem::file_duplicate(file) == file && file->refcnt == 2;
-        FileSystem::file_close(file);
-        ok = ok && file->refcnt == 1;
-        FileSystem::file_close(file);
-        ok = ok && file->refcnt == 0 && file->type == FileType::kNone;
+        ok = file->duplicate() == file && file->refcount() == 2;
+        file->close();
+        ok = ok && file->refcount() == 1;
+        file->close();
+        ok = ok && file->refcount() == 0 && !file->in_use();
     }
-    return report(console, "allocate / dup / close", ok);
+    return report(console, "open / dup / close", ok);
 }
 
 bool table_can_be_exhausted(IConsole *console)
@@ -72,6 +91,24 @@ bool table_can_be_exhausted(IConsole *console)
     return report(console,
                   "exhausted table returns nullptr",
                   free_slots > 0 && free_slots <= FileSystem::NUM_FILES && count_free_slots() == free_slots);
+}
+
+// 標準入出力は実体が 1 つで、open は参照カウントを増やすだけ
+bool standard_files_are_shared(IConsole *console)
+{
+    FileDescriptor *input1     = FileSystem::open_standard_input();
+    FileDescriptor *input2     = FileSystem::open_standard_input();
+    FileDescriptor *output1    = FileSystem::open_standard_output();
+    FileDescriptor *output2    = FileSystem::open_standard_output();
+    const size_t output_refcnt = output1->refcount();
+    bool ok                    = input1 == input2 && output1 == output2 && input1 != output1;
+    output2->close();
+    // 閉じても実体は残り、他の参照からはそのまま書ける
+    ok = ok && output1->refcount() == output_refcnt - 1 && output1->write("", 0) == 0;
+    input1->close();
+    input2->close();
+    output1->close();
+    return report(console, "standard files are shared", ok);
 }
 
 // 1 ブロックをまたぐ大きさ
@@ -89,18 +126,6 @@ bool read_buffer_matches(uint32_t offset, uint32_t count)
     return true;
 }
 
-File *open_inode_file(InodeNumber inode_number, bool readable, bool writable)
-{
-    File *file = FileSystem::file_allocate();
-    if (file == nullptr)
-        return nullptr;
-    file->type     = FileType::kInode;
-    file->readable = readable;
-    file->writable = writable;
-    file->inode    = FileSystem::get_inode(inode_number);
-    return file;
-}
-
 bool inode_file(IConsole *console)
 {
     InodeRef inode = FileSystem::allocate_inode(InodeType::kFile);
@@ -111,50 +136,49 @@ bool inode_file(IConsole *console)
     for (uint32_t i = 0; i < kDataSize; i++)
         source_data[i] = static_cast<uint8_t>(i * 31 + i / FSBLOCK_SIZE);
 
-    File *writer = open_inode_file(inode_number, false, true);
-    File *reader = open_inode_file(inode_number, true, false);
-    if (writer == nullptr || reader == nullptr)
+    FileDescriptor *writer = FileSystem::open_file(FileSystem::get_inode(inode_number), false, true);
+    FileDescriptor *reader = FileSystem::open_file(FileSystem::get_inode(inode_number), true, false);
+    FileDescriptor *other  = FileSystem::open_file(FileSystem::get_inode(inode_number), true, false);
+    if (writer == nullptr || reader == nullptr || other == nullptr)
         return report(console, "inode file", false);
 
-    // 2 回に分けて書くと、offset が進んで続きに書かれる
-    auto first  = FileSystem::file_write(*writer, source_data.data(), 100);
-    auto second = FileSystem::file_write(*writer, source_data.data() + 100, kDataSize - 100);
-    bool ok     = first && *first == 100 && second && *second == kDataSize - 100 && writer->offset == kDataSize;
-    report(console, "write advances offset", ok);
+    // 2 回に分けて書くと、offset が進んで続きに書かれる (進まなければ size は 600 になる)
+    const size_t first  = writer->write(source_data.data(), 100);
+    const size_t second = writer->write(source_data.data() + 100, kDataSize - 100);
+    bool ok             = report(console,
+                     "write advances offset",
+                     first == 100 && second == kDataSize - 100 && inode->disk.size == kDataSize);
 
-    // reader は writer とは別の File なので offset は 0 から
-    auto all    = FileSystem::file_read(*reader, read_buffer.data(), kDataSize);
-    bool all_ok = report(console,
-                         "separate File has own offset",
-                         all && *all == kDataSize && read_buffer_matches(0, kDataSize) && reader->offset == kDataSize);
-    ok          = ok && all_ok;
+    // reader は writer とは別の FileIO なので offset は 0 から
+    const size_t all = reader->read(read_buffer.data(), kDataSize);
+    ok &= report(console, "separate file has own offset", all == kDataSize && read_buffer_matches(0, kDataSize));
 
-    auto end = FileSystem::file_read(*reader, read_buffer.data(), 1);
-    ok &= report(console, "read at end returns 0", end && *end == 0);
+    ok &= report(console, "read at end returns 0", reader->read(read_buffer.data(), 1) == 0);
 
-    // dup した File は offset を共有する
-    reader->offset = 0;
-    File *shared   = FileSystem::file_duplicate(reader);
-    auto part1     = FileSystem::file_read(*reader, read_buffer.data(), 600);
-    bool part1_ok  = part1 && *part1 == 600 && read_buffer_matches(0, 600);
-    auto part2     = FileSystem::file_read(*shared, read_buffer.data(), 100);
-    ok &= report(console, "dup shares offset", part1_ok && part2 && *part2 == 100 && read_buffer_matches(600, 100));
-    FileSystem::file_close(shared);
+    // dup した FileDescriptor は offset を共有する
+    FileDescriptor *shared = other->duplicate();
+    const size_t part1     = other->read(read_buffer.data(), 600);
+    const bool part1_ok    = part1 == 600 && read_buffer_matches(0, 600);
+    const size_t part2     = shared->read(read_buffer.data(), 100);
+    ok &= report(console, "dup shares offset", part1_ok && part2 == 100 && read_buffer_matches(600, 100));
+    shared->close();
 
-    // 向きが違う操作は失敗し、offset も動かない
-    const uint32_t reader_offset = reader->offset;
-    const uint32_t writer_offset = writer->offset;
+    // 向きが違う操作は失敗し、offset も動かない (reader は末尾のまま)
     ok &= report(console,
                  "wrong direction fails",
-                 !FileSystem::file_write(*reader, source_data.data(), 1) &&
-                     !FileSystem::file_read(*writer, read_buffer.data(), 1) && reader->offset == reader_offset &&
-                     writer->offset == writer_offset);
+                 reader->write(source_data.data(), 1) == FileDescriptor::kError &&
+                     writer->read(read_buffer.data(), 1) == FileDescriptor::kError &&
+                     reader->read(read_buffer.data(), 1) == 0 && inode->disk.size == kDataSize);
 
-    // 最後の close で inode の参照を手放す。refcnt は inode, writer, reader の 3
+    // 最後の close で inode の参照を手放す。refcnt は inode, writer, reader, other の 4
     const int refcnt_before = inode->refcnt;
-    FileSystem::file_close(writer);
-    FileSystem::file_close(reader);
-    ok &= report(console, "close releases inode", refcnt_before == 3 && inode->refcnt == 1);
+    writer->close();
+    reader->close();
+    other->close();
+    ok &= report(console,
+                 "close releases inode",
+                 refcnt_before == 4 && inode->refcnt == 1 && !writer->in_use() && !reader->in_use() &&
+                     !other->in_use());
 
     // 後片付け: ブロックと inode を空きに戻す (fs.img は次回も使われる)
     for (BlockNumber block_number : inode->disk.addrs)
@@ -168,19 +192,22 @@ bool inode_file(IConsole *console)
 
 bool unusable_files(IConsole *console)
 {
-    File *console_file = FileSystem::file_open_console(false, true);
-    File *empty        = FileSystem::file_allocate();
-    if (console_file == nullptr || empty == nullptr)
+    FileDescriptor *input  = FileSystem::open_standard_input();
+    FileDescriptor *output = FileSystem::open_standard_output();
+    FileDescriptor *closed =
+        FileSystem::open_file(FileSystem::get_inode(ROOT_INODE), false, false); // 読み書きどちらも不可で開く
+    if (input == nullptr || output == nullptr || closed == nullptr)
         return report(console, "unusable files fail", false);
-    empty->readable = true;
-    empty->writable = true;
 
     uint8_t byte = 0;
-    // 読めないコンソールは、入力を待たずに失敗する
-    const bool ok = !FileSystem::file_read(*console_file, &byte, 1) && !FileSystem::file_read(*empty, &byte, 1) &&
-                    !FileSystem::file_write(*empty, &byte, 1);
-    FileSystem::file_close(console_file);
-    FileSystem::file_close(empty);
+    // 標準出力の read は、入力を待たずに失敗する
+    const bool ok = input->write(&byte, 1) == FileDescriptor::kError &&
+                    output->read(&byte, 1) == FileDescriptor::kError &&
+                    closed->read(&byte, 1) == FileDescriptor::kError &&
+                    closed->write(&byte, 1) == FileDescriptor::kError;
+    input->close();
+    output->close();
+    closed->close();
     return report(console, "unusable files fail", ok);
 }
 
@@ -195,14 +222,15 @@ void process_thread(void *)
     Process *self = process::current_process();
     auto &files   = self->files;
 
-    console_fds_ok = files[0] != nullptr && files[0]->type == FileType::kConsole && files[0]->readable &&
-                     !files[0]->writable && files[1] != nullptr && files[1]->type == FileType::kConsole &&
-                     !files[1]->readable && files[1]->writable && files[2] == files[1] && files[3] == nullptr;
+    uint8_t probe  = 0;
+    console_fds_ok = files[0] != nullptr && files[1] != nullptr && files[0] != files[1] && files[2] == files[1] &&
+                     files[3] == nullptr && files[0]->write(&probe, 1) == FileDescriptor::kError &&
+                     files[1]->read(&probe, 1) == FileDescriptor::kError;
     if (!console_fds_ok)
         return;
 
-    const int stdin_refcnt  = files[0]->refcnt;
-    const int stdout_refcnt = files[1]->refcnt;
+    const size_t stdin_refcnt  = files[0]->refcount();
+    const size_t stdout_refcnt = files[1]->refcount();
 
     const int pid = process::fork();
     if (pid == 0)
@@ -217,12 +245,12 @@ void process_thread(void *)
     }
 
     // 協調型なので、子はまだ走っていない
-    fork_shares_ok = pid > 0 && files[0]->refcnt == stdin_refcnt + 1 && files[1]->refcnt == stdout_refcnt + 2;
+    fork_shares_ok = pid > 0 && files[0]->refcount() == stdin_refcnt + 1 && files[1]->refcount() == stdout_refcnt + 2;
 
     int code;
     const auto waited = process::wait(&code);
-    wait_restores_ok  = waited && files[1] != nullptr && files[0]->refcnt == stdin_refcnt &&
-                       files[1]->refcnt == stdout_refcnt;
+    wait_restores_ok  = waited && files[1] != nullptr && files[0]->refcount() == stdin_refcnt &&
+                       files[1]->refcount() == stdout_refcnt;
 
     const char message[] = "[FILE] write through fd 1\n";
     const long length    = static_cast<long>(sizeof(message) - 1);
@@ -237,9 +265,9 @@ void process_thread(void *)
                      call_syscall(SyscallNo::kRead, NUM_OPEN_FILES, &byte, 1) == -1;
 
     // close: fd を空けて参照を 1 つ返す。同じ File を指す他の fd はそのまま使える
-    files[3]       = FileSystem::file_duplicate(files[1]);
+    files[3]       = files[1]->duplicate();
     const long ret = call_syscall(SyscallNo::kClose, 3, nullptr, 0);
-    close_ok       = ret == 0 && files[3] == nullptr && files[1]->refcnt == stdout_refcnt &&
+    close_ok       = ret == 0 && files[3] == nullptr && files[1]->refcount() == stdout_refcnt &&
                call_syscall(SyscallNo::kWrite, 3, message, 1) == -1 && // 閉じた fd は使えない
                call_syscall(SyscallNo::kWrite, 1, message, 0) == 0 &&
                call_syscall(SyscallNo::kClose, 3, nullptr, 0) == -1 && // 二重 close
@@ -248,7 +276,7 @@ void process_thread(void *)
 
 bool process_files(IConsole *console)
 {
-    const int free_before = count_free_slots();
+    const size_t refcnt_before = standard_refcounts();
 
     if (process::create_process(process_thread, "files") == nullptr)
         return report(console, "create process", false);
@@ -261,7 +289,7 @@ bool process_files(IConsole *console)
     ok &= report(console, "close syscall", close_ok);
     ok &= report(console, "close in child keeps parent's fd", child_close_ok);
     // entry から戻って終わったスレッドの分も閉じられている
-    ok &= report(console, "no File leak after thread ends", count_free_slots() == free_before);
+    ok &= report(console, "no file leak after thread ends", standard_refcounts() == refcnt_before);
     return ok;
 }
 
@@ -269,8 +297,9 @@ bool process_files(IConsole *console)
 
 bool file_basic(IConsole *console)
 {
-    bool ok = allocate_dup_close(console);
+    bool ok = open_dup_close(console);
     ok &= table_can_be_exhausted(console);
+    ok &= standard_files_are_shared(console);
     ok &= inode_file(console);
     ok &= unusable_files(console);
     ok &= process_files(console);
