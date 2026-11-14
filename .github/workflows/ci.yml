@@ -153,6 +153,37 @@ jobs:
             qemu-int.log
           retention-days: 7
 
+  # include の過不足 (使っていない include / 別ヘッダ経由で入っているだけの記号) を
+  # clang-tidy の misc-include-cleaner で調べる。いまは報告だけで CI は落とさない。
+  # 検出は PR の差分画面に warning 注釈として出る。全件は include-check.log を参照。
+  include-check:
+    name: include-check (clang-tidy 18, report only)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      # コンパイルコマンドは make -n から取るので、Makefile と同じ g++-13 が要る
+      # (libstdc++ のヘッダのパスを g++-13 -dumpversion で決めているため)。
+      # clang-tidy は format ジョブの clang-format と同じく pip の wheel で版を固定する。
+      - name: Install toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends g++-13
+          python3 -m venv .ctvenv
+          ./.ctvenv/bin/pip install --quiet clang-tidy==18.1.8
+          ./.ctvenv/bin/clang-tidy --version
+
+      - name: Check includes
+        run: make include-check CLANG_TIDY=./.ctvenv/bin/clang-tidy INCLUDE_CHECK_FLAGS=--github 2>&1 | tee include-check.log
+
+      - name: Upload include-check log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: include-check-log
+          path: include-check.log
+          retention-days: 7
+
   format:
     name: format (clang-format 14)
     runs-on: ubuntu-24.04

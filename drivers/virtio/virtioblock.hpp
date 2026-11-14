@@ -3,7 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 #include "address.hpp"
-#include "bitmask_enum.hpp"
+#include "bitmask_enum.hpp" // IWYU pragma: export (VRingDescriptorFlags の | / & を使う側のため)
 
 /*
 Reference: https://ozlabs.org/~rusty/virtio-spec/virtio-0.9.5.pdf

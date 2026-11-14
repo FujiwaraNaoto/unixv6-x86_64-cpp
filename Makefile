@@ -128,7 +128,7 @@ QEMU_GUI       = $(QEMU_COMMON) -display gtk -serial file:serial.log
 
 QEMU_GDB_FLAGS = $(QEMU_TERM) -s -S
 
-.PHONY: all iso run run-vscode run-gui run-gdb tests tests-build tests-gui tests-gdb clean format
+.PHONY: all iso run run-vscode run-gui run-gdb tests tests-build tests-gui tests-gdb clean format include-check
 
 all: $(KERNEL)
 iso: $(ISO)
@@ -203,6 +203,13 @@ format:
 	@echo "[format] Running clang-format..."
 	@find . -type f \( -name '*.c' -o -name '*.cpp' -o -name '*.h' -o -name '*.hpp' \) -print0 | xargs -0 clang-format -i
 	@echo "[format] Done."
+
+# include の過不足を clang-tidy (misc-include-cleaner) で調べる。報告だけで、ファイルは書き換えない。
+# clang-tidy 17 以上が必要 (Ubuntu 24.04 なら apt の clang-tidy-18)。
+# build/compile_commands.json もここで作られる (clangd からも使える)。
+CLANG_TIDY ?= clang-tidy-18
+include-check:
+	@CLANG_TIDY=$(CLANG_TIDY) python3 scripts/include_check.py $(INCLUDE_CHECK_FLAGS)
 
 # コンパイル時に -MMD -MP で生成したヘッダ依存 (.d) を取り込む。
 # ヘッダを変えたとき、それをインクルードしている .cpp も再コンパイルされる。
