@@ -1,4 +1,5 @@
-#pragma once
+#ifndef ASM_MEMORY_LAYOUT_HPP
+#define ASM_MEMORY_LAYOUT_HPP
 #include <cstdint>
 #include "units.hpp"
 
@@ -24,3 +25,5 @@ static_assert(KERNEL_HEAP_END <= 0xFFFFFFFFC0000000ULL,
 
 
 }
+
+#endif // ASM_MEMORY_LAYOUT_HPP
