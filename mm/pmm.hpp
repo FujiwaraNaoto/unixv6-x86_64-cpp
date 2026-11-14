@@ -2,7 +2,8 @@
 #define MM_PMM_HPP
 #include <cstdint>
 #include <array>
-#include "multiboot2.hpp"
+#include <cstddef>
+#include "memory_region.hpp"
 #include "console.hpp"
 #include "address.hpp"
 #include "units.hpp"
@@ -44,12 +45,13 @@ inline void print_mm_state(const PhysicalMemoryManagerState &state, IConsole *co
 class PhysicalMemoryManager
 {
   public:
-    // memory_map / multiboot_address はどちらも GRUB が渡してくるブート情報。
-    // memory_map から使用可能な物理メモリを拾い、カーネル本体 ([base, kernel_end))
-    // と multiboot2 情報構造体そのものを「使用中」にして構築する。
-    // 情報構造体を予約しないと、カーネル終端より後ろに置かれているぶんが
-    // 普通の空きページとして配られてしまう。
-    PhysicalMemoryManager(Multiboot2MemoryMapTag *memory_map, uint64_t kernel_end, uint32_t multiboot_address);
+    // usable の物理メモリを空きページとして拾い、reserved に入っている範囲
+    // (カーネル本体やブート情報など) を「使用中」にして構築する。
+    // どちらも arch 側がブート情報から作って渡す。PMM はブートローダの形式を知らない。
+    PhysicalMemoryManager(const MemoryRegion *usable,
+                          size_t usable_count,
+                          const MemoryRegion *reserved,
+                          size_t reserved_count);
     // 空きページを 1 つ確保し、その物理アドレスを返す。空きが無ければ無効 (nullopt) な PhysicalAddress。
     PhysicalAddress allocate();
     // 確保したページを解放する。無効 (nullopt) な物理アドレスは無視する。

@@ -1,6 +1,6 @@
 #include <cstdint>
 #include "tests.hpp"
-#include "usermode.hpp"
+#include "asm/user_entry.hpp"
 #include "process.hpp"
 #include "user_syscall.hpp"
 #include "asm/irqflags.hpp"
@@ -94,21 +94,19 @@ void fail(const char *message)
 void user_entry(void *)
 {
     Process *self = process::current_process();
-    if (self == nullptr || !self->pml4)
+    if (self == nullptr || !self->page_table_root)
     {
         fail("no process context\n");
         return;
     }
 
-    if (!usermode::map_user_space(self->pml4))
+    // リング3へ遷移 (16バイト境界に揃える)。
+    // syscall で降りてくる先のカーネルスタックは schedule() が設定済み。
+    if (!usermode::arch_enter_user(self, &user_program))
     {
         fail("failed to map user space\n");
         return;
     }
-
-    // リング3へ遷移 (16バイト境界に揃える)。
-    // syscall で降りてくる先のカーネルスタックは schedule() が設定済み。
-    usermode::enter(reinterpret_cast<uint64_t>(&user_program), usermode::kUserStackTop);
 }
 
 } // namespace

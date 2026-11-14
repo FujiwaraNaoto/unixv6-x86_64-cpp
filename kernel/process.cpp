@@ -168,9 +168,9 @@ Process *allocate_process()
     proc->trap_frame    = nullptr; // リング3から syscall で入ったときだけ設定される
     // 失敗したときに free_process_resources() が「まだ確保していない資源」を
     // 解放しようとしないよう、空の状態から始める。
-    proc->kernel_stack = KernelStack{};
-    proc->pml4         = PhysicalAddress{};
-    proc->files        = {};
+    proc->kernel_stack    = KernelStack{};
+    proc->page_table_root = PhysicalAddress{};
+    proc->files           = {};
 
     void *stack = ptable.heap->allocate(KERNEL_STACK_SIZE);
     if (stack == nullptr)
@@ -180,8 +180,8 @@ Process *allocate_process()
     }
     proc->kernel_stack = KernelStack{static_cast<uint8_t *>(stack)};
 
-    proc->pml4 = vmm::vmm_ptr->create_address_space();
-    if (!proc->pml4)
+    proc->page_table_root = vmm::vmm_ptr->create_address_space();
+    if (!proc->page_table_root)
     {
         free_process_resources(proc); // カーネルスタックもここで解放される
         return nullptr;
@@ -375,16 +375,16 @@ void free_process_resources(Process *proc)
         proc->kernel_stack = KernelStack{};
     }
 
-    if (proc->pml4)
+    if (proc->page_table_root)
     {
-        vmm::vmm_ptr->destroy_address_space(proc->pml4);
+        vmm::vmm_ptr->destroy_address_space(proc->page_table_root);
     }
 
-    proc->pml4          = PhysicalAddress{};
-    proc->parent        = nullptr;
-    proc->sleep_channel = nullptr;
-    proc->exit_status   = 0;
-    proc->state         = ProcessState::Unused;
+    proc->page_table_root = PhysicalAddress{};
+    proc->parent          = nullptr;
+    proc->sleep_channel   = nullptr;
+    proc->exit_status     = 0;
+    proc->state           = ProcessState::Unused;
 }
 
 std::optional<ProcessId> wait(int *exit_code_out)
@@ -445,7 +445,7 @@ int fork_user(Process *parent, Process *child)
 {
 
     // ユーザページの複製
-    if (!vmm::vmm_ptr->copy_user_pages(parent->pml4, child->pml4))
+    if (!vmm::vmm_ptr->copy_user_pages(parent->page_table_root, child->page_table_root))
     {
         // copy_user_pages() は複製済みのユーザーページを自分で解放してから戻る。
         // 残りの資源 (カーネルスタック・アドレス空間) と parent はここで片付ける。

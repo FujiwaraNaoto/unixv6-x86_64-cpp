@@ -1,10 +1,12 @@
 #include "usermode.hpp"
+#include "asm/user_entry.hpp"
 #include "address.hpp"
 #include "vga.hpp"
 #include "console.hpp"
 #include "pmm.hpp"
 #include "vmm.hpp"
 #include <cstdint>
+#include "process.hpp"
 
 extern "C" [[noreturn]] void enter_usermode(uint64_t entry, uint64_t user_stack);
 
@@ -39,8 +41,10 @@ bool map_user_space(PhysicalAddress pml4)
     {
         return false;
     }
-    if (!vmm::vmm_ptr->map_page_in(
-            pml4, kUserStack, stack_phys, vmm::PageFlag::Present | vmm::PageFlag::Writable | vmm::PageFlag::User))
+    if (!vmm::vmm_ptr->map_page_in(pml4,
+                                   usermode::kUserStack,
+                                   stack_phys,
+                                   vmm::PageFlag::Present | vmm::PageFlag::Writable | vmm::PageFlag::User))
     {
         pmm::pmm_ptr->free(stack_phys);
         return false;
@@ -56,5 +60,15 @@ void enter(uint64_t entry, uint64_t user_stack)
     vga::vga->puts("entering ring 3...\n");
     enter_usermode(entry, user_stack);
 }
+
+bool arch_enter_user(Process *self, void (*entry)())
+{
+    const PhysicalAddress pml4 = self->page_table_root; // x86-64 ではルートのテーブルが PML4
+    if (!usermode::map_user_space(pml4))
+        return false;
+    usermode::enter(reinterpret_cast<uint64_t>(entry), usermode::kUserStackTop);
+    return true;
+}
+
 
 } // namespace usermode

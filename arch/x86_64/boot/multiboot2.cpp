@@ -1,5 +1,6 @@
 #include "multiboot2.hpp"
 #include <cstdint>
+#include "memory_region.hpp"
 
 namespace
 {
@@ -37,4 +38,34 @@ uint32_t multiboot_info_size(uint32_t multiboot_address)
     // 物理アドレスなので direct map 経由で読む
     uint64_t virt = static_cast<uint64_t>(multiboot_address) + DIRECT_MAP_BASE;
     return reinterpret_cast<const Multiboot2InfoHeader *>(virt)->total_size;
+}
+
+bool collect_memory_regions(uint32_t multiboot_address, uint64_t kernel_phys_end, BootMemoryMap *out)
+{
+    auto *memory_map = find_mmap(multiboot_address);
+    if (!memory_map)
+    {
+        return false;
+    }
+
+    // AVAILABLE のエントリだけを usable に詰める。ページ境界にそろえるのは PMM 側。
+    // MAX_USABLE を超えた分は捨てる (QEMU では数個しかない)。
+    out->usable_count    = 0;
+    uint32_t num_entries = (memory_map->size - sizeof(Multiboot2MemoryMapTag)) / memory_map->entry_size;
+    for (uint32_t i = 0; i < num_entries && out->usable_count < out->usable.size(); i++)
+    {
+        auto entry = reinterpret_cast<Multiboot2MemoryMapEntry *>(reinterpret_cast<uint8_t *>(memory_map->entries) +
+                                                                  i * memory_map->entry_size);
+        if (entry->type != MULTIBOOT2_MEMORY_AVAILABLE)
+            continue;
+        out->usable[out->usable_count++] = MemoryRegion{entry->base_addr, entry->base_addr + entry->length};
+    }
+
+    // 0 からカーネル終端まで。カーネル本体と、1MB より下の低位メモリを配らない。
+    out->reserved[0] = MemoryRegion{0, kernel_phys_end};
+    // GRUB が置いた multiboot2 情報構造体。カーネル終端より後ろにあるので、別に押さえる。
+    out->reserved[1]    = MemoryRegion{multiboot_address,
+                                    multiboot_address + static_cast<uint64_t>(multiboot_info_size(multiboot_address))};
+    out->reserved_count = 2;
+    return true;
 }

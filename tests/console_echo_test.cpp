@@ -1,6 +1,5 @@
-#include <cstdint>
 #include "tests.hpp"
-#include "usermode.hpp"
+#include "asm/user_entry.hpp"
 #include "process.hpp"
 #include "user_syscall.hpp"
 #include "asm/irqflags.hpp"
@@ -46,13 +45,11 @@ void echo_entry(void *)
 {
     Process *self = process::current_process();
 
-    if (!usermode::map_user_space(self->pml4))
+    if (!usermode::arch_enter_user(self, &user_echo_program))
     {
         fail("failed to map user space\n");
         return;
     }
-
-    usermode::enter(reinterpret_cast<uint64_t>(&user_echo_program), usermode::kUserStackTop);
 }
 
 } // namespace

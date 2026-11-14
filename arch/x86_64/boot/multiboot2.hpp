@@ -1,6 +1,7 @@
 #ifndef BOOT_MULTIBOOT2_HPP
 #define BOOT_MULTIBOOT2_HPP
 #include <cstdint>
+#include "memory_region.hpp"
 
 // see 4.4.1 multiboot2.h
 constexpr uint32_t MULTIBOOT2_TAG_END             = 0;
@@ -50,5 +51,9 @@ Multiboot2MemoryMapTag *find_mmap(uint32_t multiboot_address);
 // GRUB が置いた情報構造体全体のバイト数を返す。
 // PMM に予約させて、後から物理ページとして配られるのを防ぐために使う。
 uint32_t multiboot_info_size(uint32_t multiboot_address);
+
+// メモリマップを PMM に渡す形 (BootMemoryMap) に変換する。
+// kernel_phys_end はカーネル終端の物理アドレス。メモリマップが見つからなければ false。
+bool collect_memory_regions(uint32_t multiboot_address, uint64_t kernel_phys_end, BootMemoryMap *out);
 
 #endif // BOOT_MULTIBOOT2_HPP

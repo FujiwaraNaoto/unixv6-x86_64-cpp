@@ -1,14 +1,17 @@
 #include "pmm.hpp"
-#include "multiboot2.hpp"
+#include "memory_region.hpp"
+#include <cstddef>
 #include <cstdint>
 #include "address.hpp"
 
 
 namespace pmm
 {
-PhysicalMemoryManager::PhysicalMemoryManager(Multiboot2MemoryMapTag *memory_map,
-                                             uint64_t kernel_end,
-                                             uint32_t multiboot_address)
+
+PhysicalMemoryManager::PhysicalMemoryManager(const MemoryRegion *usable,
+                                             size_t usable_count,
+                                             const MemoryRegion *reserved,
+                                             size_t reserved_count)
 {
     // initialize bitmap (all pages used)
     for (auto &b : bitmap_)
@@ -17,17 +20,11 @@ PhysicalMemoryManager::PhysicalMemoryManager(Multiboot2MemoryMapTag *memory_map,
     }
 
     uint64_t total = 0, base_found = 0;
-    uint32_t num_page = (memory_map->size - sizeof(Multiboot2MemoryMapTag)) / memory_map->entry_size;
-    for (uint32_t i = 0; i < num_page; i++)
+    for (size_t i = 0; i < usable_count; i++)
     {
-        auto entry = reinterpret_cast<Multiboot2MemoryMapEntry *>(reinterpret_cast<uint8_t *>(memory_map->entries) +
-                                                                  i * memory_map->entry_size);
-        if (entry->type != MULTIBOOT2_MEMORY_AVAILABLE)
-            continue;
-
         // ~(PAGE_SIZE - 1) は PAGE_SIZE でアラインメントするためのマスク
-        uint64_t start = (entry->base_addr + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1); //切り上げ
-        uint64_t end   = (entry->base_addr + entry->length) & ~(PAGE_SIZE - 1); //切り捨て
+        uint64_t start = (usable[i].start + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1); //切り上げ
+        uint64_t end   = usable[i].end & ~(PAGE_SIZE - 1);                     //切り捨て
         if (start >= end)
             continue;
         if (total == 0)
@@ -41,21 +38,15 @@ PhysicalMemoryManager::PhysicalMemoryManager(Multiboot2MemoryMapTag *memory_map,
     base_  = base_found;
     pages_ = (total > MAX_PAGES) ? MAX_PAGES : total;
 
-    // availableなページを解放
-    for (uint32_t i = 0; i < num_page; i++)
+    // usable なページを解放
+    for (size_t i = 0; i < usable_count; i++)
     {
-        auto entry = reinterpret_cast<Multiboot2MemoryMapEntry *>(reinterpret_cast<uint8_t *>(memory_map->entries) +
-                                                                  i * memory_map->entry_size);
-        if (entry->type != MULTIBOOT2_MEMORY_AVAILABLE)
-            continue;
-        uint64_t start = (entry->base_addr + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
-        uint64_t end   = (entry->base_addr + entry->length) & ~(PAGE_SIZE - 1);
+        uint64_t start = (usable[i].start + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
+        uint64_t end   = usable[i].end & ~(PAGE_SIZE - 1);
         if (start >= end)
             continue;
         for (uint64_t addr = start; addr < end; addr += PAGE_SIZE)
         {
-            if (addr < kernel_end)
-                continue;                // カーネル領域はスキップ
             free(PhysicalAddress{addr}); // release the page to the free list
         }
     }
@@ -66,27 +57,14 @@ PhysicalMemoryManager::PhysicalMemoryManager(Multiboot2MemoryMapTag *memory_map,
     // はリアルモード割り込みベクタテーブルやBIOSデータエリアなどで使用されることがあるため、これらも使用中にする
     if (base_ == 0)
     {
-        set_bit(0); // ベースアドレスが0の場合、最初のページを使用中にする
-        if (free_pages_ > 0)
-            free_pages_--;
+        reserve_region(0, PAGE_SIZE);
     }
 
-    uint64_t kernel_end_page = (kernel_end + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
-    for (uint64_t addr = base_; addr < kernel_end_page; addr += PAGE_SIZE)
+    // カーネル本体やブート情報など、usable の中でも配ってはいけない範囲を使用中にする
+    for (size_t i = 0; i < reserved_count; i++)
     {
-        uint64_t page_idx = address_to_page_index(addr);
-        if (page_idx < pages_)
-        {
-            set_bit(page_idx); // カーネル領域を使用中にする
-            if (free_pages_ > 0)
-                free_pages_--;
-        }
+        reserve_region(reserved[i].start, reserved[i].end);
     }
-
-    // GRUB が置いた multiboot2 情報構造体を予約する。
-    // これはカーネル終端より後ろに置かれるので、上のループでは押さえられない。
-    // (multiboot_address が 0 なら size も 0 になり、reserve_region は何もしない)
-    reserve_region(multiboot_address, multiboot_address + multiboot_info_size(multiboot_address));
 }
 
 void PhysicalMemoryManager::free(PhysicalAddress page_address)
