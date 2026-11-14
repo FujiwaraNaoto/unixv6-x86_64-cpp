@@ -1,5 +1,5 @@
-#ifndef PMM_HPP
-#define PMM_HPP
+#ifndef MM_PMM_HPP
+#define MM_PMM_HPP
 #include <cstdint>
 #include <array>
 #include <optional>
@@ -101,4 +101,4 @@ inline PhysicalMemoryManager *pmm_ptr = nullptr;
 
 } // namespace pmm
 
-#endif // PMM_HPP
+#endif // MM_PMM_HPP

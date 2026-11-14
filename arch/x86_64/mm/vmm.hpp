@@ -1,5 +1,5 @@
-#ifndef VMM_HPP
-#define VMM_HPP
+#ifndef MM_VMM_HPP
+#define MM_VMM_HPP
 #include <cstdint>
 #include <optional>
 #include "pmm.hpp"
@@ -119,4 +119,4 @@ inline VirtualMemoryManager *vmm_ptr = nullptr;
 
 } // namespace vmm
 
-#endif // VMM_HPP
+#endif // MM_VMM_HPP
