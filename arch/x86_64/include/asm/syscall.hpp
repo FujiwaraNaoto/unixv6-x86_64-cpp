@@ -7,4 +7,4 @@
 // console は初期化メッセージの出力先。
 void arch_syscall_init(IConsole *console);
 
-#endif //ASM_SYSCALL_HPP
+#endif // ASM_SYSCALL_HPP
