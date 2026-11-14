@@ -1,6 +1,8 @@
 #include <cstdint>
-#include <new>
+#include <new> // IWYU pragma: keep (placement new)
 #include "asm/setup.hpp"
+#include "console.hpp"
+#include "memory_region.hpp"
 #include "idt.hpp"
 #include "pic.hpp"
 #include "gdt.hpp"

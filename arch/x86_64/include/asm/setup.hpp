@@ -1,4 +1,5 @@
-#pragma once
+#ifndef ASM_SETUP_HPP
+#define ASM_SETUP_HPP
 #include <cstdint>
 #include "console.hpp"
 #include "memory_region.hpp"
@@ -10,3 +11,5 @@
 // console は割り込み・例外ハンドラと初期化メッセージの出力先。
 // メモリマップが見つからなければ false を返す。
 bool arch_setup(IConsole *console, uint32_t boot_info, BootMemoryMap *memory_map);
+
+#endif // ASM_SETUP_HPP
