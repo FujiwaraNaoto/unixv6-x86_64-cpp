@@ -1,4 +1,5 @@
-#pragma once
+#ifndef ASM_MSR_HPP
+#define ASM_MSR_HPP
 #include <cstdint>
 
 
@@ -16,3 +17,5 @@ constexpr uint32_t FMASK =
 extern "C" void syscall_entry();
 extern "C" uint64_t rdmsr(uint32_t msr);
 extern "C" void wrmsr(uint32_t msr, uint64_t value);
+
+#endif // ASM_MSR_HPP

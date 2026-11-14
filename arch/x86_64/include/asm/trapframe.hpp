@@ -1,4 +1,5 @@
-#pragma once
+#ifndef ASM_TRAPFRAME_HPP
+#define ASM_TRAPFRAME_HPP
 
 #include <cstddef>
 #include <cstdint>
@@ -59,3 +60,5 @@ struct [[gnu::packed]] UserForkFrame
 
 // switch_context が context を pop し終えたとき、rsp がちょうど trap_frame を指すこと
 static_assert(offsetof(UserForkFrame, trap_frame) == sizeof(ProcessContext), "fork_return expects rsp == &trap_frame");
+
+#endif // ASM_TRAPFRAME_HPP

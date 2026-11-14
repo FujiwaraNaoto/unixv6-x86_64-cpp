@@ -1,4 +1,5 @@
-#pragma once
+#ifndef ASM_IRQFLAGS_HPP
+#define ASM_IRQFLAGS_HPP
 // 割り込みを禁止する
 inline void irq_disable()
 {
@@ -26,3 +27,4 @@ inline void irq_enable_and_wait()
 {
     asm volatile("sti; hlt");
 }
+#endif // ASM_IRQFLAGS_HPP
