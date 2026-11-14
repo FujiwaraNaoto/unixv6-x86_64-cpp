@@ -1,5 +1,5 @@
-#ifndef GDT_HPP
-#define GDT_HPP
+#ifndef KERNEL_GDT_HPP
+#define KERNEL_GDT_HPP
 #include <cstdint>
 
 extern "C"
@@ -71,4 +71,4 @@ void initialize_gdt();
 void set_kernel_stack(uint64_t rsp0);
 } // namespace gdt
 
-#endif // GDT_HPP
+#endif // KERNEL_GDT_HPP

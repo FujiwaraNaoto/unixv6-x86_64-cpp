@@ -1,10 +1,9 @@
 #include <cstdint>
 #include "tests.hpp"
 #include "usermode.hpp"
-#include "pmm.hpp"
-#include "vmm.hpp"
 #include "process.hpp"
 #include "user_syscall.hpp"
+#include "asm/irqflags.hpp"
 
 namespace tests
 {
@@ -76,7 +75,7 @@ namespace
     // 念のため
     while (1)
     {
-        asm volatile("hlt");
+        cpu_idle();
     }
 }
 

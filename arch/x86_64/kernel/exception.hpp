@@ -1,5 +1,5 @@
-#ifndef EXCEPTION_HPP
-#define EXCEPTION_HPP
+#ifndef KERNEL_EXCEPTION_HPP
+#define KERNEL_EXCEPTION_HPP
 #include <cstdint>
 #include "console.hpp"
 
@@ -31,4 +31,4 @@ extern "C" void irq_handler(uint64_t irq_number);
 
 } // namespace exception
 
-#endif // EXCEPTION_HPP
+#endif // KERNEL_EXCEPTION_HPP

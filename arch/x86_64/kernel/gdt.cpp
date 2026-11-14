@@ -2,6 +2,7 @@
 #include <cstring>
 #include <array>
 #include "vga.hpp"
+#include "console.hpp"
 
 namespace
 {

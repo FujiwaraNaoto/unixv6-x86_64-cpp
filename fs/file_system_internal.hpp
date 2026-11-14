@@ -2,6 +2,8 @@
 #define FILE_SYSTEM_INTERNAL_HPP
 
 #include "file_system.hpp"
+#include "block_store.hpp"
+#include "console.hpp"
 #include <optional>
 
 // file_system.cpp / fs_mount.cpp / inode.cpp の間でのみ共有する。

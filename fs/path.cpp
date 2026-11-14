@@ -1,5 +1,6 @@
 #include "path.hpp"
 #include "directory.hpp"
+#include "file_system.hpp"
 #include <cstddef>
 #include <utility>
 

@@ -1,5 +1,5 @@
-#ifndef IO_HPP
-#define IO_HPP
+#ifndef ASM_IO_HPP
+#define ASM_IO_HPP
 #include <cstdint>
 #include <type_traits>
 
@@ -29,4 +29,4 @@ inline void outb(uint16_t port, Enum value)
 }
 } // namespace io
 
-#endif // IO_HPP
+#endif // ASM_IO_HPP

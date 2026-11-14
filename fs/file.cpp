@@ -1,5 +1,6 @@
 #include "file.hpp"
 #include "keyboard.hpp"
+#include "asm/irqflags.hpp"
 
 #include <array>
 
@@ -20,7 +21,7 @@ uint32_t console_read(uint8_t *dest, uint32_t count)
             // キーボード割り込みを受けられるようにする。sti の直後に hlt を置くと
             // sti から1命令ぶん割り込みが遅延する x86 の仕様により、check と hlt の
             // 間に来た入力も取りこぼさずに wake できる (lost-wakeup 回避)。
-            asm volatile("sti; hlt");
+            irq_enable_and_wait();
         }
         char c = keyboard::getchar();
         if (c == 0)

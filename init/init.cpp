@@ -1,4 +1,5 @@
 
+#include <cstdint>
 #include "init.hpp"
 #include "process.hpp"
 #include "usermode.hpp"

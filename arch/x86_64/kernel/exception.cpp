@@ -1,10 +1,10 @@
 #include "exception.hpp"
 #include "serial.hpp"
 #include "pic.hpp"
-#include "process.hpp"
 #include "keyboard.hpp"
 #include "console.hpp"
 #include "enum_util.hpp"
+#include "asm/irqflags.hpp"
 
 
 // page fault 例外発生時に CR2 レジスタに格納される、アクセスしようとした仮想アドレスを返す
@@ -136,7 +136,7 @@ void isr_common_handler(register_state_t *regs)
 
     while (1)
     {
-        asm volatile("hlt");
+        cpu_idle();
     }
 }
 

@@ -1,6 +1,7 @@
-#ifndef INCLUDE_ADDRESS_HPP
-#define INCLUDE_ADDRESS_HPP
+#ifndef ASM_ADDRESS_HPP
+#define ASM_ADDRESS_HPP
 #include <cstdint>
+#include <cstddef>
 #include <optional>
 #include "units.hpp"
 
@@ -85,4 +86,4 @@ struct VirtualAddress
     }
 };
 
-#endif // INCLUDE_ADDRESS_HPP
+#endif // ASM_ADDRESS_HPP

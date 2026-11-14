@@ -1,5 +1,6 @@
 #include "usermode.hpp"
 #include "vga.hpp"
+#include "console.hpp"
 #include "pmm.hpp"
 #include "vmm.hpp"
 

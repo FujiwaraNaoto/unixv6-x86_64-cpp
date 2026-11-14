@@ -1,10 +1,9 @@
 #include <cstdint>
 #include "tests.hpp"
 #include "usermode.hpp"
-#include "pmm.hpp"
-#include "vmm.hpp"
 #include "process.hpp"
 #include "user_syscall.hpp"
+#include "asm/irqflags.hpp"
 
 namespace tests
 {
@@ -70,7 +69,7 @@ void console_echo(IConsole *console)
     while (1)
     {
         process::yield();
-        asm volatile("sti; hlt");
+        irq_enable_and_wait();
     }
 }
 

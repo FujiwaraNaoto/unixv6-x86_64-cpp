@@ -1,5 +1,5 @@
-#ifndef HEAP_HPP
-#define HEAP_HPP
+#ifndef MM_HEAP_HPP
+#define MM_HEAP_HPP
 #include <cstdint>
 #include "units.hpp"
 #include <cstddef>
@@ -67,4 +67,4 @@ class Heap final
 inline Heap *heap_ptr;
 } // namespace heap
 
-#endif // HEAP_HPP
+#endif // MM_HEAP_HPP

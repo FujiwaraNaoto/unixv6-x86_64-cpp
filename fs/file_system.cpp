@@ -1,6 +1,7 @@
 #include "file_system.hpp"
 #include "file_system_internal.hpp"
 #include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 

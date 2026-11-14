@@ -2,6 +2,7 @@
 #include "idt.hpp"
 #include "gdt.hpp"
 #include "exception.hpp"
+#include "asm/irqflags.hpp"
 
 
 namespace
@@ -52,7 +53,7 @@ InterruptDescriptorTable::InterruptDescriptorTable(IConsole *console)
     idt_ptr.limit = sizeof(InterruptDescriptorTableEntry) * entries.size() - 1;
     idt_ptr.base  = reinterpret_cast<uint64_t>(entries.data());
     asm volatile("lidt %0" : : "m"(idt_ptr));
-    asm volatile("sti"); // 割り込みを有効化
+    irq_enable(); // 割り込みを有効化
 }
 
 

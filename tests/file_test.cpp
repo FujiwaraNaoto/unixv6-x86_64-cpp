@@ -3,10 +3,12 @@
 #include "file_system_internal.hpp"
 #include "process.hpp"
 #include "systemcall.hpp"
+#include "block_store.hpp"
+#include "file_system.hpp"
+#include "inode.hpp"
 
 #include <array>
 #include <cstdint>
-#include <utility>
 
 namespace tests
 {

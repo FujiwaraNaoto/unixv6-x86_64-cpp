@@ -1,5 +1,5 @@
-#ifndef USERMODE_HPP
-#define USERMODE_HPP
+#ifndef KERNEL_USERMODE_HPP
+#define KERNEL_USERMODE_HPP
 #include <cstdint>
 #include "address.hpp"
 #include "vmm.hpp"
@@ -20,4 +20,4 @@ constexpr uint64_t kUserStackTop = kUserStack.address + PAGE_SIZE - 16;
 
 } // namespace usermode
 
-#endif // USERMODE_HPP
+#endif // KERNEL_USERMODE_HPP

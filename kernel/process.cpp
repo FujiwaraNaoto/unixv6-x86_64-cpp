@@ -6,6 +6,7 @@
 #include "address.hpp"
 #include "gdt.hpp"
 #include "file.hpp"
+#include "asm/irqflags.hpp"
 
 extern "C" void switch_context(ProcessContext **old_ctx, ProcessContext *new_ctx);
 
@@ -60,7 +61,7 @@ void initialize(heap::Heap &heap)
     if (ptable.initialized)
     {
         while (1)
-            asm volatile("hlt");
+            cpu_idle();
     }
 
     for (Process &p : ptable.procs)
@@ -113,7 +114,7 @@ void trampoline()
     // unreachable, but just in case, halt the CPU to avoid unexpected behavior. The process will be in Zombie state,
     // and won't be scheduled again, but it will still consume CPU time if we don't halt here.
     while (1)
-        asm volatile("hlt");
+        cpu_idle();
 }
 
 void schedule(Process *prev_proc)
@@ -293,7 +294,7 @@ void sleep(void *channel)
     if (!p)
         return; // カーネル初期文脈では sleep しない
     // lost wakeup 対策: 状態変更中は割り込みを止める
-    asm volatile("cli");
+    irq_disable();
 
     p->sleep_channel = channel;
     p->state         = ProcessState::Sleeping;
@@ -302,7 +303,7 @@ void sleep(void *channel)
 
     // ─── wakeup されて再開したらここに戻る ───
     p->sleep_channel = nullptr;
-    asm volatile("sti");
+    irq_enable();
 }
 
 // ─── wakeup ───────────────────────────────────────────────────────
@@ -360,12 +361,14 @@ void schedule_from_zombie(ProcessContext **discard_context)
         // カーネル初期文脈から exit() されるのは呼び出し側のバグ。
         // noreturn なので return はできない (呼び出し側は後ろのコードが無い前提で最適化される)
         while (1)
-            asm volatile("cli; hlt");
+        {
+            cpu_idle();
+        }
     }
 
     close_all_files(p);
 
-    asm volatile("cli"); // 状態変更中は割り込みを止める
+    irq_disable(); // 状態変更中は割り込みを止める
 
     p->exit_status = status;
     p->state       = ProcessState::Zombie;
@@ -411,7 +414,7 @@ void schedule_from_zombie(ProcessContext **discard_context)
 
     // unreachable, but just in case, halt the CPU to avoid unexpected behavior. The process will be in Zombie state,
     while (1)
-        asm volatile("hlt");
+        cpu_idle();
 }
 
 void free_process_resources(Process *proc)

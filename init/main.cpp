@@ -1,11 +1,11 @@
 #include <cstdint>
-#include <optional>
+#include "address.hpp"
+#include "console.hpp"
 #include "vga.hpp"
 #include "serial.hpp"
 #include "exception.hpp"
 #include "idt.hpp"
 #include "pic.hpp"
-#include "io.hpp"
 #include "pmm.hpp"
 #include "vmm.hpp"
 #include "heap.hpp"
@@ -14,12 +14,12 @@
 #include "systemcall.hpp"
 #include "keyboard.hpp"
 #include "gdt.hpp"
-#include "usermode.hpp"
 #include "virtioblock.hpp"
+#include "block_store.hpp"
 #include "buffer_cache.hpp"
 #include "file_system.hpp"
-#include "file.hpp"
 #include "init.hpp"
+#include "asm/irqflags.hpp"
 
 // tests/ 以下は make tests (TESTS=1) のときだけコンパイル・リンクされる。
 // 通常ビルドではテストコードはカーネルに一切含まれない。
@@ -90,7 +90,7 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, uint32_t mb_addr
     if (!mmap)
     {
         vga::vga->puts("Memory map not found\n");
-        asm volatile("hlt");
+        cpu_idle();
     }
 
     // PMM は物理アドレスを扱うので、高位カーネル化後は kernel_end (仮想) ではなく
@@ -138,7 +138,7 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, uint32_t mb_addr
     if (!VirtIOBlock::initialize(resolve_physical))
     {
         vga::vga->puts("VirtIO block device initialization failed\n");
-        asm volatile("hlt");
+        cpu_idle();
     }
 
     auto device = BufferCache::BlockDevice{
@@ -149,7 +149,7 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, uint32_t mb_addr
     if (not BufferCache::initialize(device))
     {
         vga::vga->puts("BufferCache initialization failed\n");
-        asm volatile("hlt");
+        cpu_idle();
     }
     // block_store を渡さずに FileSystem::initialize() を呼んだときの既定値。
     // (グローバルに置くと初期化順序がリンク順任せになるので、ここで作る)
@@ -163,7 +163,7 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, uint32_t mb_addr
     if (not FileSystem::initialize(VirtIOBlock::capacity(), &block_store, vga::vga))
     {
         vga::vga->puts("FileSystem initialization failed\n");
-        asm volatile("hlt");
+        cpu_idle();
     }
 #ifdef ENABLE_TESTS
     // 各機能の動作確認 (どのテストを走らせるかは tests/tests.cpp で切り替える)
@@ -174,8 +174,8 @@ extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, uint32_t mb_addr
 
     while (1)
     {
-        asm volatile("sti"); // 寝る前に割り込みを開ける
-        process::yield();    // Runnableが居れば拾う
+        irq_enable();     // 寝る前に割り込みを開ける
+        process::yield(); // Runnableが居れば拾う
         asm volatile("sti; hlt;");
     }
 }

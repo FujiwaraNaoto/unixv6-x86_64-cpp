@@ -1,5 +1,5 @@
-#ifndef IDT_HPP
-#define IDT_HPP
+#ifndef KERNEL_IDT_HPP
+#define KERNEL_IDT_HPP
 #include <cstdint>
 #include "console.hpp"
 
@@ -80,4 +80,4 @@ class InterruptDescriptorTable
 
 } // namespace idt
 
-#endif // IDT_HPP
+#endif // KERNEL_IDT_HPP
