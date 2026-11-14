@@ -1,6 +1,6 @@
 #ifndef USER_SYSCALL_HPP
 #define USER_SYSCALL_HPP
-#include "systemcall.hpp"
+#include "systemcall.hpp" // IWYU pragma: export (呼び出し側が SyscallNo を使う)
 
 // リング3から syscall 命令を撃つ。実体は user_syscall.cpp の .user セクションにある。
 //

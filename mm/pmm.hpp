@@ -1,0 +1,105 @@
+#ifndef MM_PMM_HPP
+#define MM_PMM_HPP
+#include <cstdint>
+#include <array>
+#include <cstddef>
+#include "memory_region.hpp"
+#include "console.hpp"
+#include "address.hpp"
+#include "units.hpp"
+
+namespace pmm
+{
+constexpr uint64_t PAGE_SIZE  = 4_KiB; // 4KB
+constexpr uint32_t PAGE_SHIFT = 12;    // 2^12 = 4096
+struct PhysicalMemoryManagerState
+{
+    uint64_t total_pages;
+    uint64_t free_pages;
+    uint64_t base;
+    uint64_t top;
+    explicit PhysicalMemoryManagerState(uint64_t total_pages, uint64_t free_pages, uint64_t base, uint64_t top)
+        : total_pages(total_pages), free_pages(free_pages), base(base), top(top)
+    {
+    }
+};
+
+static constexpr uint32_t MAX_PAGES   = 65536; // 65536 * 4KB = 256MB
+static constexpr uint32_t BITMAP_SIZE = MAX_PAGES / 8;
+
+// 物理メモリの状態を表示する。
+// 出力先は注入で受け取るので、PMM は VGA / シリアルのどちらに出るかを知らない。
+// console に nullptr を渡した場合は何も出力しない。
+inline void print_mm_state(const PhysicalMemoryManagerState &state, IConsole *console)
+{
+    if (console == nullptr)
+    {
+        return;
+    }
+    console->printf("Physical Memory Manager State:\n");
+    console->printf("  Total Pages: %lu\n", state.total_pages);
+    console->printf("  Free Pages: %lu\n", state.free_pages);
+    console->printf("  Base Address: 0x%016lx\n", state.base);
+    console->printf("  Top Address: 0x%016lx\n", state.top);
+}
+class PhysicalMemoryManager
+{
+  public:
+    // usable の物理メモリを空きページとして拾い、reserved に入っている範囲
+    // (カーネル本体やブート情報など) を「使用中」にして構築する。
+    // どちらも arch 側がブート情報から作って渡す。PMM はブートローダの形式を知らない。
+    PhysicalMemoryManager(const MemoryRegion *usable,
+                          size_t usable_count,
+                          const MemoryRegion *reserved,
+                          size_t reserved_count);
+    // 空きページを 1 つ確保し、その物理アドレスを返す。空きが無ければ無効 (nullopt) な PhysicalAddress。
+    PhysicalAddress allocate();
+    // 確保したページを解放する。無効 (nullopt) な物理アドレスは無視する。
+    void free(PhysicalAddress page_address);
+    PhysicalMemoryManagerState get_state() const;
+
+
+  private:
+    // [start, end) を「使用中」にして allocate() の対象から外す。
+    // ページ境界に丸めて (start は切り下げ / end は切り上げ) 予約するので、
+    // 範囲にかかるページは必ず保護される。
+    void reserve_region(uint64_t start, uint64_t end);
+
+    // a bitmap which tracks the usage of physical memory. 1 bit = 1 page. 0 = free, 1 = used.
+    std::array<uint8_t, BITMAP_SIZE> bitmap_{};
+    uint64_t base_{0};
+    uint64_t pages_{0};
+    uint64_t free_pages_{0};
+
+    void set_bit(uint64_t page_index)
+    {
+        bitmap_[page_index / 8] |= (1 << (page_index % 8));
+    }
+
+
+    void clear_bit(uint64_t page_index)
+    {
+        bitmap_[page_index / 8] &= ~(1 << (page_index % 8));
+    }
+
+    bool test_bit(uint64_t page_index) const
+    {
+        return bitmap_[page_index / 8] & (1 << (page_index % 8));
+    }
+
+    uint64_t address_to_page_index(uint64_t address) const
+    {
+        return (address - base_) / PAGE_SIZE;
+    }
+
+    uint64_t page_index_to_address(uint64_t page_index) const
+    {
+        return base_ + page_index * PAGE_SIZE;
+    }
+};
+
+inline PhysicalMemoryManager *pmm_ptr = nullptr;
+
+} // namespace pmm
+
+#endif // MM_PMM_HPP

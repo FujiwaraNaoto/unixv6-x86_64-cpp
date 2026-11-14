@@ -1,0 +1,208 @@
+#ifndef BUFFER_CACHE_HPP
+#define BUFFER_CACHE_HPP
+
+#include <array>
+#include <cstdint>
+#include "block_store.hpp"
+
+// ─── バッファキャッシュ層 ────────────────────────────────────────
+// 目的:
+//   1. 一度読んだブロックをメモリに保持し、ディスク I/O の回数を減らす
+//   2. 上位層 (inode 層) に対して統一されたブロックアクセス API を提供する
+//
+// 位置づけ:
+//   inode 層  ←→  BufferCache (ここ)  ←→  ブロックデバイス (virtio-blk 等)
+//
+// 前提: このカーネルのスケジューラは協調型 (タイマ割り込みからは yield しない)
+//       なので、ロックを持たない。プリエンプティブにする際は xv6 同様に
+//       バッファ単位の sleeplock が必要になる。
+
+constexpr uint32_t BLOCK_SIZE = 512;
+constexpr int NBUF            = 30; // キャッシュ数
+
+struct Buffer
+{
+    BlockNumber block_number;             // ブロック番号
+    bool valid;                           // ディスクから読み込み済みか
+    bool dirty;                           // 変更されたか (書き戻しが必要)
+    int refcnt;                           // 参照カウント (使用中の数)
+    Buffer *prev, *next;                  // LRUリスト用
+    std::array<uint8_t, BLOCK_SIZE> data; // ブロックの中身
+};
+
+namespace BufferCache
+{
+
+// 下位のブロックデバイス。特定のドライバに依存しないよう関数で受け取る。
+// (VirtIOBlock::read_block / write_block をそのまま渡せる形にしてある)
+//
+// std::function ではなく関数ポインタにしている理由 (process.hpp の EntryPoint と同じ):
+//   1. std::function はキャプチャが 16 バイト (libstdc++ の内部バッファ) を超えると
+//      operator new でヒープから確保するが、このカーネルには実体が無く
+//      リンクエラーになる。
+//   2. g++ 13 以降の libstdc++ は、そもそも <functional> の中身を
+//      #if _GLIBCXX_HOSTED で囲っている。-ffreestanding では __STDC_HOSTED__ == 0
+//      なので std::function は宣言されず、「does not name a template type」になる。
+//      (_GLIBCXX_HOSTED は c++config.h が定義し直すので -D では上書きできない)
+//
+// テストから状態を持つ偽デバイス (RAM ディスク等) を差し込むことは、関数ポインタでも
+// 変わらずできる。状態は TU 内の static に置き、キャプチャ無しのラムダを渡す
+// (キャプチャ有りのラムダは関数ポインタへ変換できない)。
+//
+//   static uint8_t disk[NBLOCK][BLOCK_SIZE];
+//   BufferCache::BlockDevice{
+//       .read_block = [](uint64_t n, uint8_t *dst) { ... disk[n] ... },
+//       ...
+//   }
+//
+//   read_block():reads one block (BLOCK_SIZE bytes) at block_number from the device into buffer.
+//                Returns false if the device reports an error.
+//   write_block():writes one block (BLOCK_SIZE bytes) from buffer to block_number on the device.
+//                 Returns false if the device reports an error.
+// Both return only after the device has finished (no asynchronous completion).
+// block_number is the device's sector number, since BLOCK_SIZE is the same as the sector size.
+struct BlockDevice
+{
+    bool (*read_block)(uint64_t block_number, uint8_t *buffer);
+    bool (*write_block)(uint64_t block_number, const uint8_t *buffer);
+};
+
+// バッファキャッシュの初期化 (LRU リストの構築とデバイスの登録)。
+// 状態は buffer_cache.cpp のモジュール内 static が持ち、acquire() / release() など
+// はフリー関数としてそれを操作する (process.cpp と同じ形)。
+//
+// false を返すのは次の 2 つ。
+//   1. device の呼び出し先が揃っていない (何も登録せずに戻る)
+//   2. 2 回目以降の呼び出し
+// 2 を弾くのは、やり直すと refcnt と LRU リストが初期値に戻り、誰かが掴んでいる
+// バッファが同時に別のブロックとして再利用されて中身が壊れるため。
+//
+// 戻り値を見るのは呼び出し側の 1 回だけでよい。acquire()/write()/flush() は
+// 未初期化でも安全に空振りするので、呼び出しごとの初期化済み判定は持たない。
+[[nodiscard]] bool initialize(const BlockDevice &device);
+
+// ブロックを取得する。キャッシュに無ければデバイスから読み込む。
+// 戻り値は参照カウントを 1 増やした状態のバッファ。失敗時は nullptr。
+// 使い終わったら必ず release() すること。
+Buffer *read(BlockNumber block_number);
+
+// buffer->data を書き換えた後に呼ぶ。実際の書き戻しは write() / flush() で行う。
+void mark_dirty(Buffer *buffer);
+
+// buffer をデバイスへ即座に書き戻す (write-through)。成功すると dirty が下りる。
+bool write(Buffer *buffer);
+
+// dirty なバッファをすべて書き戻す。1つでも失敗したら false を返す。
+bool flush();
+
+// 参照を手放す。refcnt が 0 になったバッファは LRU の「最近使った」側へ移る。
+void release(Buffer *buffer);
+
+// read() で取得した参照を、スコープを抜けるときに自動で release() する RAII ガード。
+// release() の呼び忘れはバッファを枯渇させる (acquire が nullptr を返すようになる)
+// ので、上位層では生の read()/release() ではなくこちらを使う。
+class BufferRef final
+{
+  public:
+    BufferRef() = default;
+    explicit BufferRef(Buffer *buffer) : buffer_(buffer) { }
+    ~BufferRef()
+    {
+        reset();
+    }
+
+    BufferRef(const BufferRef &)            = delete;
+    BufferRef &operator=(const BufferRef &) = delete;
+
+    BufferRef(BufferRef &&other) noexcept : buffer_(other.buffer_)
+    {
+        other.buffer_ = nullptr;
+    }
+    BufferRef &operator=(BufferRef &&other) noexcept
+    {
+        if (this != &other)
+        {
+            reset();
+            buffer_       = other.buffer_;
+            other.buffer_ = nullptr;
+        }
+        return *this;
+    }
+
+    explicit operator bool() const
+    {
+        return buffer_ != nullptr;
+    }
+
+    Buffer *get() const
+    {
+        return buffer_;
+    }
+    Buffer *operator->() const
+    {
+        return buffer_;
+    }
+    Buffer &operator*() const
+    {
+        return *buffer_;
+    }
+
+    void mark_dirty()
+    {
+        BufferCache::mark_dirty(buffer_);
+    }
+    bool write()
+    {
+        return BufferCache::write(buffer_);
+    }
+
+    // スコープを抜ける前に明示的に手放したいときに使う。
+    void reset()
+    {
+        if (buffer_ != nullptr)
+        {
+            BufferCache::release(buffer_);
+            buffer_ = nullptr;
+        }
+    }
+
+  private:
+    Buffer *buffer_ = nullptr;
+};
+
+// read() の RAII 版。失敗時は空の BufferRef (operator bool が false) を返す。
+//
+// NOTE: Buffer を直接触る低レベル側の口。上位層は BlockStore 経由の BlockRef を
+//       使うので、今これを使っているのはキャッシュ自体を調べる tests/virtio_test.cpp
+//       だけ。
+BufferRef acquire(BlockNumber block_number);
+
+
+// 上位層 (ファイルシステム) への入口。IBlockStore の呼び出しを BufferCache の
+// フリー関数へ中継するだけの、状態を持たない変換役。
+//
+// デバイスは initialize() で登録済みのものを使うため、コンストラクタで受け取らない。
+// (受け取れる形にすると、インスタンスごとに別のデバイスを指定できるように見えて、
+//  実際は黙って無視される)
+class BlockStore final : public IBlockStore
+{
+  public:
+    BlockRef acquire(BlockNumber block_number) override;
+    bool write_back(BlockNumber block_number) override;
+    void release(BlockNumber block_number) override;
+};
+
+
+// キャッシュの効き具合を確認するための統計。
+struct Statistics
+{
+    uint32_t hits;       // キャッシュに載っていた回数
+    uint32_t misses;     // デバイスから読んだ回数
+    uint32_t evictions;  // 有効なバッファを追い出した回数
+    uint32_t writebacks; // デバイスへ書き戻した回数
+};
+Statistics statistics();
+
+} // namespace BufferCache
+
+#endif // BUFFER_CACHE_HPP

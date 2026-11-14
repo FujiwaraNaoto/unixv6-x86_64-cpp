@@ -1,9 +1,6 @@
-#include <cstdint>
 #include "tests.hpp"
 #include "process.hpp"
-#include "usermode.hpp"
-#include "pmm.hpp"
-#include "vmm.hpp"
+#include "asm/user_entry.hpp"
 #include "systemcall.hpp"
 #include "user_syscall.hpp"
 
@@ -73,20 +70,18 @@ void fail(const char *message)
 void user_fork_entry(void *)
 {
     Process *self = process::current_process();
-    if (self == nullptr || !self->pml4)
+    if (self == nullptr || !self->page_table_root)
     {
         fail("no process context\n");
         return;
     }
 
-    if (!usermode::map_user_space(self->pml4))
+    // ここから戻らない。終了は exit システムコール (process::exit) 経由。
+    if (!usermode::arch_enter_user(self, &user_fork_program))
     {
         fail("failed to map user space\n");
         return;
     }
-
-    // ここから戻らない。終了は exit システムコール (process::exit) 経由。
-    usermode::enter(reinterpret_cast<uint64_t>(&user_fork_program), usermode::kUserStackTop);
 }
 
 } // namespace

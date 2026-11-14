@@ -73,15 +73,31 @@ CFLAGS   = -m64 -std=c++20 -g \
            -fno-pic -fno-pie \
            -mno-red-zone -mno-mmx -mno-sse -mno-sse2 \
 		   -MMD -MP \
-           -Iinclude -Iuser $(TEST_FLAGS) $(STD_INC)
+           $(addprefix -I,$(INC_DIRS)) $(TEST_FLAGS) $(STD_INC)
 
-LDFLAGS  = -T kernel.ld -nostdlib -z max-page-size=0x1000
-NASMFLAGS = -f elf64 -Iinclude
+ARCH     ?= x86_64
+ARCH_DIR  = arch/$(ARCH)
 
-ASM_SRC  = boot/boot.asm io/io.asm interrupt/isr.asm interrupt/helper.asm boot/switch.asm syscall/syscall_entry.asm syscall/helper.asm user/usermode_entry.asm syscall/fork_ret.asm include/gdt_helper.asm
-CPP_SRC  = kernel/main.cpp \
-           $(wildcard include/*.cpp) \
-           $(wildcard user/*.cpp) \
+# ヘッダはまだ "vga.hpp" のようにディレクトリ無しで include しているので、
+# ヘッダを置いているディレクトリをすべて -I に並べる。
+INC_DIRS = $(ARCH_DIR)/include $(ARCH_DIR)/include/asm \
+           $(ARCH_DIR)/boot $(ARCH_DIR)/kernel $(ARCH_DIR)/mm \
+           init kernel mm fs lib \
+           drivers/block drivers/virtio drivers/pci drivers/tty drivers/tty/serial \
+           drivers/video drivers/input \
+           user
+
+LDFLAGS  = -T $(ARCH_DIR)/kernel.ld -nostdlib -z max-page-size=0x1000
+NASMFLAGS = -f elf64 -I$(ARCH_DIR)/kernel
+
+ASM_SRC  = $(ARCH_DIR)/boot/boot.asm $(ARCH_DIR)/lib/io.asm $(ARCH_DIR)/kernel/isr.asm $(ARCH_DIR)/kernel/irq_helper.asm \
+           $(ARCH_DIR)/kernel/switch.asm $(ARCH_DIR)/entry/syscall_entry.asm $(ARCH_DIR)/entry/syscall_helper.asm \
+           user/arch/$(ARCH)/usermode_entry.asm $(ARCH_DIR)/entry/fork_ret.asm $(ARCH_DIR)/kernel/gdt_helper.asm
+CPP_SRC  = init/main.cpp \
+           $(wildcard $(ARCH_DIR)/*/*.cpp) \
+           $(wildcard init/init.cpp fs/*.cpp kernel/*.cpp mm/*.cpp lib/*.cpp) \
+           $(wildcard drivers/*/*.cpp drivers/*/*/*.cpp) \
+           $(wildcard user/*.cpp user/arch/$(ARCH)/*.cpp) \
            $(TEST_SRC)
 
 OBJ_DIR  = build/$(BUILD_NAME)
@@ -112,7 +128,7 @@ QEMU_GUI       = $(QEMU_COMMON) -display gtk -serial file:serial.log
 
 QEMU_GDB_FLAGS = $(QEMU_TERM) -s -S
 
-.PHONY: all iso run run-vscode run-gui run-gdb tests tests-build tests-gui tests-gdb clean format
+.PHONY: all iso run run-vscode run-gui run-gdb tests tests-build tests-gui tests-gdb clean format include-check
 
 all: $(KERNEL)
 iso: $(ISO)
@@ -155,7 +171,7 @@ $(OBJ_DIR)/%.o: %.asm
 # (これが無いと .inc を書き換えても再アセンブルされず、古いセレクタ値が残る)
 # 注意: この行は `all:` より後に置くこと。レシピの無いルールでも「最初のターゲット」に
 #       なりうるため、上の方に書くと make の既定ゴールが .o に奪われる。
-$(ASM_OBJ): include/gdt_selectors.inc
+$(ASM_OBJ): $(ARCH_DIR)/kernel/gdt_selectors.inc
 
 $(OBJ_DIR)/%.o: %.cpp
 	@mkdir -p $(@D)
@@ -187,6 +203,16 @@ format:
 	@echo "[format] Running clang-format..."
 	@find . -type f \( -name '*.c' -o -name '*.cpp' -o -name '*.h' -o -name '*.hpp' \) -print0 | xargs -0 clang-format -i
 	@echo "[format] Done."
+
+# include の過不足を clang-tidy (misc-include-cleaner) で調べる。報告だけで、ファイルは書き換えない。
+# 検出が 1 件でもあれば失敗する (CI も同じ)。
+# clang-tidy 17 以上が必要。Ubuntu 22.04 の apt には無いので、CI と同じ版を venv に入れる:
+#   python3 -m venv ~/.ctvenv && ~/.ctvenv/bin/pip install clang-tidy==18.1.8
+#   make include-check CLANG_TIDY=~/.ctvenv/bin/clang-tidy
+# build/compile_commands.json もここで作られる (clangd からも使える)。
+CLANG_TIDY ?= clang-tidy-18
+include-check:
+	@CLANG_TIDY=$(CLANG_TIDY) python3 scripts/include_check.py $(INCLUDE_CHECK_FLAGS)
 
 # コンパイル時に -MMD -MP で生成したヘッダ依存 (.d) を取り込む。
 # ヘッダを変えたとき、それをインクルードしている .cpp も再コンパイルされる。

@@ -1,0 +1,264 @@
+#include "inode.hpp"
+#include "file_system.hpp"
+#include "file_system_internal.hpp"
+#include "block_store.hpp"
+#include <algorithm>
+#include <array>
+#include <cstdint>
+#include <cstring>
+#include <optional>
+
+namespace FileSystem
+{
+namespace
+{
+// ヘッダに置くと include した翻訳単位ごとに実体ができるので、ここに置く
+std::array<Inode, NUM_INODE> inode_table{};
+} // namespace
+
+void copy_from_disk(Inode &inode, const DiskInode &disk)
+{
+    inode.disk = disk;
+}
+
+
+DiskInode to_disk(const Inode &inode)
+{
+    return inode.disk;
+}
+
+InodeRef get_inode(InodeNumber inode_number)
+{
+    Inode *empty = nullptr;
+    for (Inode &inode : inode_table)
+    {
+        if (inode.refcnt > 0 and inode.inode_number == inode_number)
+        {
+            inode.refcnt++;
+            return InodeRef{&inode};
+        }
+        if (empty == nullptr and inode.refcnt == 0)
+        {
+            empty = &inode;
+        }
+    }
+
+    if (empty == nullptr)
+    {
+        return InodeRef{};
+    }
+    auto disk = internal::get_disk_inode(inode_number);
+    if (!disk)
+        return InodeRef{};
+    empty->inode_number = inode_number;
+    empty->refcnt       = 1;
+    empty->valid        = true;
+    copy_from_disk(*empty, disk.value());
+    return InodeRef{empty};
+}
+
+InodeRef allocate_inode(InodeType type)
+{
+    if (type == InodeType::kUnused)
+        return InodeRef{};
+    const SuperBlock &superblock = FileSystem::superblock();
+
+    const uint32_t num_super_block_inodes = superblock.ninodes;
+    for (InodeNumber inode_number{1}; inode_number.value < num_super_block_inodes; inode_number.value++)
+    {
+        auto disk = internal::get_disk_inode(inode_number);
+        if (!disk)
+        {
+            return InodeRef{};
+        }
+        if (disk->type != InodeType::kUnused)
+            continue;
+
+        DiskInode fresh{};
+        fresh.type = type;
+        if (!internal::write_disk_inode(inode_number, fresh))
+            return InodeRef{};
+        return get_inode(inode_number);
+    }
+
+    return InodeRef{};
+}
+
+void put_inode(Inode *inode)
+{
+    if (inode == nullptr)
+        return;
+    if (inode->refcnt > 0)
+        inode->refcnt--;
+}
+
+namespace
+{
+// ファイルの中で何番目のブロックか (論理ブロック番号)。
+struct LogicalBlockIndex
+{
+    uint32_t value;
+
+    constexpr explicit LogicalBlockIndex(uint32_t index) : value(index) { }
+
+    // ファイル内のバイト位置 byte_offset を含むブロック
+    static constexpr LogicalBlockIndex containing(uint32_t byte_offset)
+    {
+        return LogicalBlockIndex{byte_offset / FSBLOCK_SIZE};
+    }
+};
+} // namespace
+
+// ファイル内の logical 番目のブロックが、ディスクの何番ブロックかを返す (論理ブロック番号 → 物理ブロック番号)。
+// 未割当なら失敗する。ブロックは確保しない。
+std::optional<BlockNumber> find_block(const Inode &inode, LogicalBlockIndex logical)
+{
+    const auto &addrs = inode.disk.addrs;
+
+    if (logical.value < NDIRECT)
+    {
+        if (addrs[logical.value].value == 0)
+            return std::nullopt;
+        return addrs[logical.value];
+    }
+
+    const uint32_t indirect_index = logical.value - NDIRECT; // 間接ブロックの表の中の位置
+    if (indirect_index >= NINDIRECT)
+        return std::nullopt; // MAXFILE 超え
+
+    if (addrs[INDIRECT_INDEX].value == 0)
+        return std::nullopt;
+
+    auto block = internal::fs.block_store->acquire(addrs[INDIRECT_INDEX]);
+    if (!block)
+        return std::nullopt;
+    const auto *table = reinterpret_cast<const BlockNumber *>(block.data());
+    if (table[indirect_index].value == 0)
+        return std::nullopt;
+    return table[indirect_index];
+}
+
+// find_block と同じだが、未割当なら確保する。
+// addrs を書き換えるので、呼び出し側で update_inode すること。
+std::optional<BlockNumber> allocate_or_find_block(Inode &inode, LogicalBlockIndex logical)
+{
+    auto &addrs = inode.disk.addrs;
+
+    if (logical.value < NDIRECT)
+    {
+        if (addrs[logical.value].value == 0)
+        {
+            auto b = FileSystem::allocate_block();
+            if (!b)
+                return std::nullopt;
+            addrs[logical.value] = *b;
+        }
+        return addrs[logical.value];
+    }
+
+    const uint32_t indirect_index = logical.value - NDIRECT; // 間接ブロックの表の中の位置
+    if (indirect_index >= NINDIRECT)
+        return std::nullopt; // MAXFILE 超え
+
+    if (addrs[INDIRECT_INDEX].value == 0)
+    {
+        auto b = FileSystem::allocate_block(); // 0 埋めされて返るので中身は全部「未割当」
+        if (!b)
+            return std::nullopt;
+        addrs[INDIRECT_INDEX] = *b;
+    }
+
+    auto block = internal::fs.block_store->acquire(addrs[INDIRECT_INDEX]);
+    if (!block)
+        return std::nullopt;
+    auto *table = reinterpret_cast<BlockNumber *>(block.data());
+    if (table[indirect_index].value == 0)
+    {
+        auto b = FileSystem::allocate_block();
+        if (!b)
+            return std::nullopt;
+        table[indirect_index] = *b;
+        if (!block.write_back())
+            return std::nullopt;
+    }
+    return table[indirect_index];
+}
+
+// offset から最大 count バイトを dest に読む。読んだバイト数を返す。
+// ファイル末尾 (disk.size) より先は読まない。offset が末尾より先なら失敗。
+// 読み込みではブロックを確保しない。write_data は穴を作らないので、size 以内で未割当なら失敗する。
+std::optional<uint32_t> read_data(const Inode &inode, uint8_t *dest, uint32_t offset, uint32_t count)
+{
+    const uint32_t size = inode.disk.size;
+    if (offset > size)
+        return std::nullopt;
+    if (count > size - offset)
+        count = size - offset;
+
+    uint32_t done = 0;
+    while (done < count)
+    {
+        const uint32_t pos = offset + done;
+        auto block_number  = find_block(inode, LogicalBlockIndex::containing(pos));
+        if (!block_number)
+            return std::nullopt;
+        auto block = internal::fs.block_store->acquire(*block_number);
+        if (!block)
+            return std::nullopt;
+
+        // このブロックの中で読める分だけ (ブロック境界か残りの少ない方)
+        const uint32_t in_block = pos % FSBLOCK_SIZE;
+        const uint32_t left     = count - done;
+        const uint32_t chunk    = std::min(left, FSBLOCK_SIZE - in_block);
+        std::memcpy(dest + done, block.data() + in_block, chunk);
+        done += chunk;
+    }
+    return done;
+}
+
+// source の count バイトを offset に書く。書けたバイト数を返す。
+// 穴を作らないよう、offset が末尾より先なら失敗。MAXFILE を超える書き込みも失敗。
+// 途中でブロックが尽きたら、そこまで書いた分を返す (size もそこまで伸ばす)。
+std::optional<uint32_t> write_data(Inode &inode, const uint8_t *source, uint32_t offset, uint32_t count)
+{
+    constexpr uint32_t max_bytes = MAXFILE * FSBLOCK_SIZE;
+    if (offset > inode.disk.size)
+        return std::nullopt;
+    if (offset > max_bytes or count > max_bytes - offset)
+        return std::nullopt;
+
+    uint32_t done = 0;
+    while (done < count)
+    {
+        const uint32_t pos = offset + done;
+        auto block_number  = allocate_or_find_block(inode, LogicalBlockIndex::containing(pos));
+        if (!block_number)
+            break;
+        auto block = internal::fs.block_store->acquire(*block_number);
+        if (!block)
+            break;
+
+        const uint32_t in_block = pos % FSBLOCK_SIZE;
+        const uint32_t left     = count - done;
+        const uint32_t chunk    = std::min(left, FSBLOCK_SIZE - in_block);
+        std::memcpy(block.data() + in_block, source + done, chunk);
+        if (!block.write_back())
+            break;
+        done += chunk;
+    }
+
+    if (offset + done > inode.disk.size)
+        inode.disk.size = offset + done;
+    // allocate_or_find_block が addrs を書き換えている可能性があるので、size が変わらなくても書き戻す
+    if (!update_inode(inode))
+        return std::nullopt;
+    return done;
+}
+
+
+bool update_inode(const Inode &inode)
+{
+    return internal::write_disk_inode(inode.inode_number, inode.disk);
+}
+
+} // namespace FileSystem

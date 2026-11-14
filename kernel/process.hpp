@@ -1,0 +1,151 @@
+#ifndef KERNEL_PROCESS_HPP
+#define KERNEL_PROCESS_HPP
+#include <array>
+#include <cstdint>
+#include <cstddef>
+#include <optional>
+#include "address.hpp"
+#include "kstring.hpp"
+#include "asm/trapframe.hpp"
+
+
+enum class ProcessState
+{
+    Unused,
+    Embryo,
+    Runnable,
+    Running,
+    Sleeping,
+    Zombie,
+};
+
+// process::initialize() は参照として受け取るだけなので、前方宣言で済ませる。
+namespace heap
+{
+class Heap;
+}
+
+constexpr size_t MAX_PROCESSES = 64;
+
+// プロセスのエントリポイント。引数は create_process() に渡した arg がそのまま届く。
+// 使わない関数は引数名を省略して void f(void *) と書く。
+// NOTE: arg の指す先は entry が使い終わるまで生きていること。entry は create_process() が
+//       戻った後に走るので、呼び出し元のローカル変数のアドレスを渡してはいけない。
+//
+// std::function ではなく関数ポインタにしている理由:
+//   1. std::function はキャプチャが 16 バイト (libstdc++ の内部バッファ) を超えると
+//      operator new でヒープから確保するが、このカーネルには operator new が無く
+//      リンクエラーになる (operator delete も空実装なので、足してもリークする)。
+//      fork() で entry をコピーするときにも同じ確保が発生する。
+//   2. entry は create_process() が戻った後に、別のカーネルスタック上で実行される。
+//      参照キャプチャ ([&]) した呼び出し元のローカル変数は、その時点で寿命が切れている。
+//      関数ポインタは何もキャプチャできないので、この問題が構造上起きない。
+//
+// NOTE: 標準ライブラリ自体が使えないわけではない (std::array などは使っている)。
+//       また entry はアセンブリから直接ジャンプされる先ではなく trampoline() から
+//       呼ばれるので、呼び出し可能オブジェクトにすること自体は技術的に可能。
+using EntryPoint = void (*)(void *);
+
+
+struct ProcessId
+{
+    uint64_t value;
+
+    explicit operator uint64_t() const
+    {
+        return value;
+    }
+    explicit operator int() const
+    {
+        return static_cast<int>(value);
+    }
+
+    ProcessId &operator++() // prefix increment
+    {
+        value++;
+        return *this;
+    }
+
+    ProcessId operator++(int) // postfix increment
+    {
+        ProcessId temp = *this;
+        ++(*this);
+        return temp;
+    }
+    ProcessId &operator=(uint64_t new_value)
+    {
+        value = new_value;
+        return *this;
+    }
+};
+
+struct File;
+
+constexpr int NUM_OPEN_FILES = 16; // 1 プロセスが開けるファイル数 (xv6 の NOFILE)
+
+struct Process
+{
+    ProcessId pid;
+    ProcessState state;
+    ProcessContext *context;  // カーネルスタック上の保存コンテキストを指す
+    KernelStack kernel_stack; // そのプロセス専用のカーネルスタック領域の先頭アドレス。
+                              // 上端 (rsp の出発点) は .top() で取る
+    EntryPoint entry;
+    void *entry_arg;  // entry に渡す引数
+    kstring<16> name; // NOTE: kstring は固定容量の文字列で、容量超過分は切り捨てられる.
+                      // C++の標準ライブラリは使えないので、std::string は使えない
+    // ページテーブルの最上位の表の物理アドレス (x86-64 では PML4)。未割り当てなら nullopt
+    PhysicalAddress page_table_root;
+    void *sleep_channel; // プロセスが sleep している場合のチャネル (待機理由) 0=起きている
+    Process *parent;     // 親プロセスへのポインタ (fork などで使う)
+    int exit_status;     // プロセスの終了ステータス (exit() で設定される)
+    TrapFrame
+        *trap_frame; // syscall/syscall_entry.asm が積む、リング3のレジスタ一式．カーネルスレッドからの場合は nullptr
+    std::array<File *, NUM_OPEN_FILES> files{}; // fd 表。nullptr が空き
+};
+
+namespace process
+{
+// プロセス管理の初期化 (プロセステーブルのクリアと heap の登録)。
+// 状態は process.cpp のモジュール内 static が持ち、create_process()/yield() は
+// フリー関数としてそれを操作する。この initialize() を他のどの関数より先に 1 回だけ呼ぶ。
+// heap はプロセスが生きている間ずっと使うので、呼び出し側が寿命を保証すること。
+void initialize(heap::Heap &heap);
+
+Process *create_process(EntryPoint entry, const char *name, void *arg = nullptr);
+void yield();
+Process *current_process();
+
+Process *create_init_process(EntryPoint entry, void *arg = nullptr);
+
+
+// 現在プロセスをchannelを理由にしてSleeping状態にしスケジューラへ制御を渡す
+// wakeup()でchannelを理由にしてSleeping状態のプロセスをReady状態にする
+void sleep(void *channel);
+
+// channelを理由にしてSleeping状態のプロセスをReady状態にする
+void wakeup(void *channel);
+
+
+// terminate the current process and set its exit status. This function does not return.
+[[noreturn]] void exit(int status);
+
+// wait for child process to exit.
+// If a child process has exited, return its pid and write its exit status to *exit_code_out.
+// If there are no child processes, return -1.
+// 子プロセスの終了を待つ。終了した子の exit_status を exit_code_out に書き込み、その pid を返す。
+// 子プロセスが 1 つも無ければ nullopt を返す (ProcessId には無効値が無いので optional で表す)。
+// -fno-exceptions なので、中身は .value() ではなく *opt / opt->value で取り出すこと。
+std::optional<ProcessId> wait(int *exit_code_out);
+
+// fork the current process. Return the pid of the child process to the parent, and 0 to the child.
+// If fork fails, return -1.
+int fork();
+
+
+void free_process_resources(Process *proc);
+Process *allocate_process();
+
+} // namespace process
+
+#endif // KERNEL_PROCESS_HPP

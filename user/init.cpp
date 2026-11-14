@@ -1,3 +1,4 @@
+#include "user_init.hpp"
 #include "user_syscall.hpp"
 
 constexpr int LINE_BUFFER_SIZE = 1 << 10;
