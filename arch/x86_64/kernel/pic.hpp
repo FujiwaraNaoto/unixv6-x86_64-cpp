@@ -1,6 +1,6 @@
 
-#ifndef PIC_HPP
-#define PIC_HPP
+#ifndef KERNEL_PIC_HPP
+#define KERNEL_PIC_HPP
 #include <cstdint>
 
 
@@ -15,4 +15,4 @@ void send_eoi(uint8_t irq);
 
 } // namespace pic
 
-#endif // PIC_HPP
+#endif // KERNEL_PIC_HPP

@@ -1,5 +1,5 @@
-#ifndef PROCESS_HPP
-#define PROCESS_HPP
+#ifndef KERNEL_PROCESS_HPP
+#define KERNEL_PROCESS_HPP
 #include <array>
 #include <cstdint>
 #include <cstddef>
@@ -147,4 +147,4 @@ Process *allocate_process();
 
 } // namespace process
 
-#endif // PROCESS_HPP
+#endif // KERNEL_PROCESS_HPP

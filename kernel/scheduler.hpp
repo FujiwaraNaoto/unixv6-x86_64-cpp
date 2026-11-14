@@ -1,9 +1,9 @@
-#ifndef SCHEDULER_HPP
-#define SCHEDULER_HPP
+#ifndef KERNEL_SCHEDULER_HPP
+#define KERNEL_SCHEDULER_HPP
 
 namespace scheduler
 {
 void tick();
 }
 
-#endif // SCHEDULER_HPP
+#endif // KERNEL_SCHEDULER_HPP
