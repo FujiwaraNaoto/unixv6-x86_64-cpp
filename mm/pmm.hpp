@@ -2,7 +2,6 @@
 #define MM_PMM_HPP
 #include <cstdint>
 #include <array>
-#include <optional>
 #include "multiboot2.hpp"
 #include "console.hpp"
 #include "address.hpp"

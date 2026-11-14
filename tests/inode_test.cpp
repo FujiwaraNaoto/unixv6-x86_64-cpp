@@ -1,6 +1,8 @@
+#include "tests.hpp"
 #include "inode.hpp"
 #include "file_system.hpp"
 #include "file_system_internal.hpp"
+#include "block_store.hpp"
 #include <array>
 #include <cstdint>
 namespace tests

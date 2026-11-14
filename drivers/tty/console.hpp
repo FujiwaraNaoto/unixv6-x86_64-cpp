@@ -1,7 +1,6 @@
 #ifndef CONSOLE_HPP
 #define CONSOLE_HPP
 #include <cstddef>
-#include <cstdint>
 #include <cstdarg>
 
 enum class Color

@@ -1,7 +1,6 @@
 #ifndef MM_VMM_HPP
 #define MM_VMM_HPP
 #include <cstdint>
-#include <optional>
 #include "pmm.hpp"
 #include "console.hpp"
 #include "address.hpp"

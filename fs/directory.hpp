@@ -2,6 +2,7 @@
 #define DIRECTORY_HPP
 
 #include "inode.hpp"
+#include "file_system.hpp"
 
 #include <cstdint>
 #include <optional>

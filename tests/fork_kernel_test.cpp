@@ -1,3 +1,4 @@
+#include <cstdint>
 #include "tests.hpp"
 #include "process.hpp"
 

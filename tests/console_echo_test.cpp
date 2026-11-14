@@ -1,8 +1,6 @@
 #include <cstdint>
 #include "tests.hpp"
 #include "usermode.hpp"
-#include "pmm.hpp"
-#include "vmm.hpp"
 #include "process.hpp"
 #include "user_syscall.hpp"
 #include "asm/irqflags.hpp"

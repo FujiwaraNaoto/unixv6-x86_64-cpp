@@ -2,6 +2,7 @@
 #include "heap.hpp"
 #include "pmm.hpp"
 #include "vmm.hpp"
+#include "address.hpp"
 
 namespace heap
 {

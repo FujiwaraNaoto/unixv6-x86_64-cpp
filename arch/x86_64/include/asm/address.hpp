@@ -1,6 +1,7 @@
 #ifndef ASM_ADDRESS_HPP
 #define ASM_ADDRESS_HPP
 #include <cstdint>
+#include <cstddef>
 #include <optional>
 #include "units.hpp"
 

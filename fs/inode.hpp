@@ -2,7 +2,7 @@
 #define INODE_HPP
 
 #include "file_system.hpp"
-#include <array>
+#include <cstdint>
 #include <optional>
 
 struct Inode

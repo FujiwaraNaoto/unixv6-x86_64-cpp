@@ -3,7 +3,6 @@
 
 #include <array>
 #include <cstdint>
-#include <cstddef>
 #include "block_store.hpp"
 
 // ─── バッファキャッシュ層 ────────────────────────────────────────
