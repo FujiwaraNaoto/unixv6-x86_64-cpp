@@ -1,7 +1,10 @@
+#include <cstddef>
 #include <cstdint>
 #include <array>
+#include <optional>
 #include "process.hpp"
 #include "heap.hpp"
+#include "asm/trapframe.hpp"
 #include "vmm.hpp"
 #include "address.hpp"
 #include "file.hpp"

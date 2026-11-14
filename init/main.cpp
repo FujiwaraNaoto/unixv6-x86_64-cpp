@@ -15,7 +15,6 @@
 #include "keyboard.hpp"
 #include "gdt.hpp"
 #include "virtioblock.hpp"
-#include "block_store.hpp"
 #include "buffer_cache.hpp"
 #include "file_system.hpp"
 #include "init.hpp"

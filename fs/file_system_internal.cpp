@@ -1,7 +1,9 @@
 #include "file_system_internal.hpp"
 #include "block_store.hpp"
+#include "file_system.hpp"
 #include <cstdint>
 #include <cstring>
+#include <optional>
 
 namespace FileSystem::internal
 {

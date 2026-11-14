@@ -1,4 +1,5 @@
 #include "multiboot2.hpp"
+#include <cstdint>
 
 namespace
 {

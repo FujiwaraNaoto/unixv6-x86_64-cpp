@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include "address.hpp"
 #include "enum_util.hpp"
 #include "io.hpp"
 #include "pci.hpp"

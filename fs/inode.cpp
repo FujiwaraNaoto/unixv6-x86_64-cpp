@@ -3,6 +3,7 @@
 #include "file_system_internal.hpp"
 #include "block_store.hpp"
 #include <algorithm>
+#include <array>
 #include <cstdint>
 #include <cstring>
 #include <optional>

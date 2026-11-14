@@ -1,8 +1,12 @@
 #include "file.hpp"
+#include "console.hpp"
+#include "inode.hpp"
 #include "keyboard.hpp"
 #include "asm/irqflags.hpp"
 
 #include <array>
+#include <cstdint>
+#include <optional>
 
 namespace
 {

@@ -1,6 +1,9 @@
 #include "vga.hpp"
+#include "console.hpp"
 #include "io.hpp"
 #include "serial.hpp"
+#include <cstddef>
+#include <cstdint>
 
 namespace
 {

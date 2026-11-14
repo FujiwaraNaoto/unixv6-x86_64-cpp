@@ -1,7 +1,7 @@
 #ifndef TESTS_HPP
 #define TESTS_HPP
 
-#include "console.hpp"
+#include "console.hpp" // IWYU pragma: export
 
 // カーネル各機能の動作確認テスト。
 //

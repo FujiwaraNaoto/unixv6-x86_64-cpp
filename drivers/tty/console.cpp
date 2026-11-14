@@ -1,4 +1,6 @@
 #include "console.hpp"
+#include <cstddef>
+#include <cstdarg>
 
 namespace
 {

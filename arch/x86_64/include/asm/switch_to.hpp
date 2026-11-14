@@ -1,4 +1,6 @@
-#include "trapframe.hpp"
+#ifndef ASM_SWITCH_TO_HPP
+#define ASM_SWITCH_TO_HPP
+#include "asm/trapframe.hpp"
 
 
 struct Process;
@@ -19,3 +21,5 @@ int arch_fork_kernel(Process *parent, Process *child);
 void arch_switch(ProcessContext **save_to, Process *next);
 
 void arch_switch_to_scheduler(ProcessContext **save_to, ProcessContext *scheduler_context);
+
+#endif // ASM_SWITCH_TO_HPP

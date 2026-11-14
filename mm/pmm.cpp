@@ -1,4 +1,7 @@
 #include "pmm.hpp"
+#include "multiboot2.hpp"
+#include <cstdint>
+#include "address.hpp"
 
 
 namespace pmm
