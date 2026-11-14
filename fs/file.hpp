@@ -20,76 +20,95 @@
 
 class FileDescriptor
 {
-    public:
-        static constexpr size_t kError = static_cast<size_t>(-1);
+  public:
+    static constexpr size_t kError = static_cast<size_t>(-1);
 
-        virtual ~FileDescriptor() = default;
-        FileDescriptor()=default;
-        virtual size_t read(void* buffer,size_t len) = 0;
-        virtual size_t write(const void* buffer,size_t len) = 0;
-        size_t close(){
-            if(refcnt<=0) return 0;
-            refcnt--;
-            if(refcnt==0) release();
+    virtual ~FileDescriptor()                            = default;
+    FileDescriptor()                                     = default;
+    virtual size_t read(void *buffer, size_t len)        = 0;
+    virtual size_t write(const void *buffer, size_t len) = 0;
+    size_t close()
+    {
+        if (refcnt <= 0)
             return 0;
-        }
-        bool in_use() const {return refcnt>0;}
-        size_t refcount() const {return refcnt;}
-        FileDescriptor* duplicate(){
-            refcnt++;
-            return this;
-        }
-    protected:
-        void start_use(){refcnt=1;} // 派生クラスの open() から呼ぶ。プールの空きスロットを使用中にする
-        virtual void release() = 0; // 最後の close で呼ばれる
-    private:
-        size_t refcnt=0; // fd 表から何か所で指されているか。FileIO では 0 = プールの空きスロット
+        refcnt--;
+        if (refcnt == 0)
+            release();
+        return 0;
+    }
+    bool in_use() const
+    {
+        return refcnt > 0;
+    }
+    size_t refcount() const
+    {
+        return refcnt;
+    }
+    FileDescriptor *duplicate()
+    {
+        refcnt++;
+        return this;
+    }
+
+  protected:
+    // 派生クラスの open() から呼ぶ。プールの空きスロットを使用中にする
+    void start_use()
+    {
+        refcnt = 1;
+    }
+    virtual void release() = 0; // 最後の close で呼ばれる
+  private:
+    size_t refcnt = 0; // fd 表から何か所で指されているか。FileIO では 0 = プールの空きスロット
 };
 
 // fd 0 用: キーボードから読むだけ。NOTE: read は 1 行入力されるまで返らない。
 // 実体はシステムに 1 つで、全プロセスの fd 0 が参照カウントで共有する。
-class StandardInput:  public FileDescriptor
+class StandardInput : public FileDescriptor
 {
-    public:
-        StandardInput() = default;
-        size_t read(void* buffer,size_t len) override;
-        size_t write(const void* buffer,size_t len) override;
-    private:
-        void release() override;
+  public:
+    StandardInput() = default;
+    size_t read(void *buffer, size_t len) override;
+    size_t write(const void *buffer, size_t len) override;
+
+  private:
+    void release() override;
 };
 
 // fd 1/2 用: file_set_console で登録したコンソールに書くだけ。
 // 実体はシステムに 1 つで、全プロセスの fd 1/2 が参照カウントで共有する。
-class StandardOutput:  public FileDescriptor
+class StandardOutput : public FileDescriptor
 {
-    public:
-        StandardOutput() = default;
-        size_t read(void* buffer,size_t len) override;
-        size_t write(const void* buffer,size_t len) override;
-    private:
-        void release() override;
+  public:
+    StandardOutput() = default;
+    size_t read(void *buffer, size_t len) override;
+    size_t write(const void *buffer, size_t len) override;
+
+  private:
+    void release() override;
 };
 
 // ディスク上のファイル。読み書きできるかは open のモードで決まる
-class FileIO:  public FileDescriptor
+class FileIO : public FileDescriptor
 {
-    public:
-        FileIO() = default;
-        void open(InodeRef inoderef_,bool readable_,bool writable_){
-            start_use();
-            inoderef = std::move(inoderef_);
-            offset   = 0;
-            readable = readable_;
-            writable = writable_;
-        }
-        size_t read(void* buffer,size_t len) override;
-        size_t write(const void* buffer,size_t len) override;
-    private:
-        void release() override;
-        InodeRef inoderef;
-        uint32_t offset = 0;
-        bool readable=false;
-        bool writable = false;
+  public:
+    FileIO() = default;
+    void open(InodeRef inoderef_, bool readable_, bool writable_)
+    {
+        start_use();
+        inoderef = std::move(inoderef_);
+        offset   = 0;
+        readable = readable_;
+        writable = writable_;
+    }
+    size_t read(void *buffer, size_t len) override;
+    size_t write(const void *buffer, size_t len) override;
+
+  private:
+    void release() override;
+    InodeRef inoderef;
+    uint32_t offset = 0;
+    bool readable   = false;
+    bool writable   = false;
 };
 
 namespace FileSystem

@@ -8,6 +8,7 @@
 #include "inode.hpp"
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 
 namespace tests
@@ -95,12 +96,12 @@ bool table_can_be_exhausted(IConsole *console)
 // 標準入出力は実体が 1 つで、open は参照カウントを増やすだけ
 bool standard_files_are_shared(IConsole *console)
 {
-    FileDescriptor *input1  = FileSystem::open_standard_input();
-    FileDescriptor *input2  = FileSystem::open_standard_input();
-    FileDescriptor *output1 = FileSystem::open_standard_output();
-    FileDescriptor *output2 = FileSystem::open_standard_output();
+    FileDescriptor *input1     = FileSystem::open_standard_input();
+    FileDescriptor *input2     = FileSystem::open_standard_input();
+    FileDescriptor *output1    = FileSystem::open_standard_output();
+    FileDescriptor *output2    = FileSystem::open_standard_output();
     const size_t output_refcnt = output1->refcount();
-    bool ok = input1 == input2 && output1 == output2 && input1 != output1;
+    bool ok                    = input1 == input2 && output1 == output2 && input1 != output1;
     output2->close();
     // 閉じても実体は残り、他の参照からはそのまま書ける
     ok = ok && output1->refcount() == output_refcnt - 1 && output1->write("", 0) == 0;
@@ -144,7 +145,7 @@ bool inode_file(IConsole *console)
     // 2 回に分けて書くと、offset が進んで続きに書かれる (進まなければ size は 600 になる)
     const size_t first  = writer->write(source_data.data(), 100);
     const size_t second = writer->write(source_data.data() + 100, kDataSize - 100);
-    bool ok = report(console,
+    bool ok             = report(console,
                      "write advances offset",
                      first == 100 && second == kDataSize - 100 && inode->disk.size == kDataSize);
 
@@ -193,7 +194,8 @@ bool unusable_files(IConsole *console)
 {
     FileDescriptor *input  = FileSystem::open_standard_input();
     FileDescriptor *output = FileSystem::open_standard_output();
-    FileDescriptor *closed = FileSystem::open_file(FileSystem::get_inode(ROOT_INODE), false, false); // 読み書きどちらも不可で開く
+    FileDescriptor *closed =
+        FileSystem::open_file(FileSystem::get_inode(ROOT_INODE), false, false); // 読み書きどちらも不可で開く
     if (input == nullptr || output == nullptr || closed == nullptr)
         return report(console, "unusable files fail", false);
 

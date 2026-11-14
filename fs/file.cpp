@@ -6,8 +6,10 @@
 #include "inode.hpp"
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <utility>
 
 namespace
 {
@@ -55,50 +57,67 @@ T *find_free(std::array<T, N> &table)
 } // namespace
 
 
-size_t StandardInput::read(void* buffer,size_t len){
-    return console_read(reinterpret_cast<uint8_t*>(buffer),static_cast<uint32_t>(len));
+size_t StandardInput::read(void *buffer, size_t len)
+{
+    return console_read(reinterpret_cast<uint8_t *>(buffer), static_cast<uint32_t>(len));
 }
 
-size_t StandardInput::write(const void*,size_t){
+size_t StandardInput::write(const void *, size_t)
+{
     return kError; // 入力専用
 }
 
-void StandardInput::release(){
+void StandardInput::release()
+{
     // 実体は 1 つで使い回すので、手放すものは無い
 }
 
-size_t StandardOutput::read(void*,size_t){
+size_t StandardOutput::read(void *, size_t)
+{
     return kError; // 出力専用
 }
 
-size_t StandardOutput::write(const void* buffer,size_t len){
+size_t StandardOutput::write(const void *buffer, size_t len)
+{
     IConsole *console = (file_console != nullptr) ? file_console : null_console;
     console->write(reinterpret_cast<const char *>(buffer), len);
     return len;
 }
 
-void StandardOutput::release(){
+void StandardOutput::release()
+{
     // 実体は 1 つで使い回すので、手放すものは無い
 }
 
 // 現在の offset から読み書きして offset を進める。ファイル末尾を読むと 0。
-size_t FileIO::read(void* buffer,size_t len){
-    if(!readable) return kError;
-    auto done = FileSystem::read_data(*inoderef.get(), reinterpret_cast<uint8_t*>(buffer), offset, static_cast<uint32_t>(len));
-    if(!done) return kError;
+size_t FileIO::read(void *buffer, size_t len)
+{
+    if (!readable)
+        return kError;
+    auto done =
+        FileSystem::read_data(*inoderef.get(), reinterpret_cast<uint8_t *>(buffer), offset, static_cast<uint32_t>(len));
+    if (!done)
+        return kError;
     offset += *done;
     return *done;
 }
 
-size_t FileIO::write(const void* buffer,size_t len){
-    if(!writable) return kError;
-    auto done = FileSystem::write_data(*inoderef.get(), reinterpret_cast<const uint8_t*>(buffer), offset, static_cast<uint32_t>(len));
-    if(!done) return kError;
+size_t FileIO::write(const void *buffer, size_t len)
+{
+    if (!writable)
+        return kError;
+    auto done = FileSystem::write_data(*inoderef.get(),
+                                       reinterpret_cast<const uint8_t *>(buffer),
+                                       offset,
+                                       static_cast<uint32_t>(len));
+    if (!done)
+        return kError;
     offset += *done;
     return *done;
 }
 
-void FileIO::release(){
+void FileIO::release()
+{
     inoderef.reset();
     offset   = 0;
     readable = false;

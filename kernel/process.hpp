@@ -3,6 +3,7 @@
 #include <array>
 #include <cstdint>
 #include <cstddef>
+#include <optional>
 #include "address.hpp"
 #include "kstring.hpp"
 #include "asm/trapframe.hpp"

@@ -74,7 +74,6 @@ void close_all_files(Process *proc)
             file->close();
         file = nullptr;
     }
-
 }
 
 // fd 0/1/2 をコンソールにつなぐ。失敗したら false (開けた分は呼び出し側が free_process_resources で閉じる)。
@@ -483,7 +482,7 @@ int fork()
 
     for (size_t fd = 0; fd < parent->files.size(); fd++)
     {
-        child->files[fd] = (parent->files[fd]!=nullptr)? parent->files[fd]->duplicate() : nullptr;
+        child->files[fd] = (parent->files[fd] != nullptr) ? parent->files[fd]->duplicate() : nullptr;
     }
 
     bool is_user_thread = (parent->trap_frame != nullptr);
