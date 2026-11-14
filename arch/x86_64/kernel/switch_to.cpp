@@ -1,7 +1,10 @@
 
+#include <cstddef>
 #include <cstdint>
 #include "asm/switch_to.hpp"
+#include "address.hpp"
 #include "gdt.hpp"
+#include "asm/trapframe.hpp"
 #include "vmm.hpp"
 #include "process.hpp"
 

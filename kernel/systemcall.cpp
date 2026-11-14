@@ -5,6 +5,7 @@
 #include "process.hpp"
 #include "asm/irqflags.hpp"
 #include "asm/syscall.hpp"
+#include <cstdint>
 #include <limits>
 
 

@@ -205,7 +205,10 @@ format:
 	@echo "[format] Done."
 
 # include の過不足を clang-tidy (misc-include-cleaner) で調べる。報告だけで、ファイルは書き換えない。
-# clang-tidy 17 以上が必要 (Ubuntu 24.04 なら apt の clang-tidy-18)。
+# 検出が 1 件でもあれば失敗する (CI も同じ)。
+# clang-tidy 17 以上が必要。Ubuntu 22.04 の apt には無いので、CI と同じ版を venv に入れる:
+#   python3 -m venv ~/.ctvenv && ~/.ctvenv/bin/pip install clang-tidy==18.1.8
+#   make include-check CLANG_TIDY=~/.ctvenv/bin/clang-tidy
 # build/compile_commands.json もここで作られる (clangd からも使える)。
 CLANG_TIDY ?= clang-tidy-18
 include-check:

@@ -3,6 +3,7 @@
 #include "io.hpp"
 #include "bitmask_enum.hpp"
 #include "enum_util.hpp"
+#include <cstdint>
 
 
 namespace

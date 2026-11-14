@@ -1,4 +1,5 @@
 #include "gdt.hpp"
+#include <cstdint>
 #include <cstring>
 #include <array>
 #include "vga.hpp"

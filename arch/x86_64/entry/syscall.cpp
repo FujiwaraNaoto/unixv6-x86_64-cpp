@@ -2,6 +2,7 @@
 #include "asm/syscall.hpp"
 #include "asm/msr.hpp"
 #include "asm/trapframe.hpp"
+#include "console.hpp"
 #include "systemcall.hpp"
 #include "process.hpp"
 #include "gdt.hpp"

@@ -1,8 +1,10 @@
 
 #include "idt.hpp"
+#include "console.hpp"
 #include "gdt.hpp"
 #include "exception.hpp"
 #include "asm/irqflags.hpp"
+#include <cstdint>
 
 
 namespace

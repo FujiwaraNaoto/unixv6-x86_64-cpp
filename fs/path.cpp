@@ -1,7 +1,10 @@
 #include "path.hpp"
 #include "directory.hpp"
 #include "file_system.hpp"
+#include "inode.hpp"
 #include <cstddef>
+#include <string_view>
+#include <optional>
 #include <utility>
 
 namespace

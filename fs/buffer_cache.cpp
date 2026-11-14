@@ -1,4 +1,6 @@
 #include "buffer_cache.hpp"
+#include <array>
+#include "block_store.hpp"
 
 namespace
 {

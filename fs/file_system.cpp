@@ -1,9 +1,12 @@
 #include "file_system.hpp"
+#include "block_store.hpp"
+#include "console.hpp"
 #include "file_system_internal.hpp"
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <optional>
 
 namespace
 {

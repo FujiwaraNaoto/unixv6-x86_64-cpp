@@ -14,10 +14,10 @@
 #      通常のソースは通常構成 (TESTS=0) で見る。init/main.cpp の #ifdef ENABLE_TESTS の
 #      向こう側の include を誤って「未使用」と判定しないため。tests/ だけテスト構成で見る。
 #   2. ヘッダも 1 つずつ main file として検査する (clang-tidy は main file しか見ないため)。
-#   3. --github を付けると GitHub Actions の ::warning 注釈としても出力する。
+#   3. --github を付けると GitHub Actions の ::error 注釈としても出力する。
 #
 # 意図的な再エクスポートには、include の行末に `// IWYU pragma: export` を付ける。
-# 終了コードは常に 0 (検出数は最後に表示する)。CI で落とすかどうかは呼ぶ側で決める。
+# 検出 (パースエラー含む) が 1 件でもあれば終了コード 1。CI はこれで落ちる。
 
 import json
 import os
@@ -90,8 +90,7 @@ def main():
     for path, line, col, kind, msg in sorted(found):
         print(f'{path}:{line}:{col}: {kind}: {msg}')
         if github:
-            level = 'error' if kind == 'error' else 'warning'
-            print(f'::{level} file={path},line={line},col={col},title=include-cleaner::{msg}')
+            print(f'::error file={path},line={line},col={col},title=include-cleaner::{msg}')
 
     unused = sum(1 for k in found if 'not used directly' in k[4])
     missing = sum(1 for k in found if 'no header providing' in k[4])
@@ -99,6 +98,8 @@ def main():
           f'({len(files)} files)')
     if errors:
         print('[include-check] clang がパースできないファイルがある。結果が欠けている可能性がある。')
+    if found:
+        sys.exit(1)
 
 
 if __name__ == '__main__':

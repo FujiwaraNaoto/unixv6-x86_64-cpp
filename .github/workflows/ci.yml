@@ -154,10 +154,11 @@ jobs:
           retention-days: 7
 
   # include の過不足 (使っていない include / 別ヘッダ経由で入っているだけの記号) を
-  # clang-tidy の misc-include-cleaner で調べる。いまは報告だけで CI は落とさない。
-  # 検出は PR の差分画面に warning 注釈として出る。全件は include-check.log を参照。
+  # clang-tidy の misc-include-cleaner で調べる。1 件でも検出があれば落とす。
+  # 検出は PR の差分画面に注釈として出る。全件は include-check.log を参照。
+  # 手元では make include-check で同じものを実行できる (準備は Makefile のコメント参照)。
   include-check:
-    name: include-check (clang-tidy 18, report only)
+    name: include-check (clang-tidy 18)
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4

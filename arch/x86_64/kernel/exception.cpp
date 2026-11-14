@@ -5,6 +5,7 @@
 #include "console.hpp"
 #include "enum_util.hpp"
 #include "asm/irqflags.hpp"
+#include <cstdint>
 
 
 // page fault 例外発生時に CR2 レジスタに格納される、アクセスしようとした仮想アドレスを返す

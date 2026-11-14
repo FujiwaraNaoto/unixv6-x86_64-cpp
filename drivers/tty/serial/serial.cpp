@@ -1,5 +1,7 @@
 #include "serial.hpp"
 #include "io.hpp"
+#include <cstdint>
+#include <cstddef>
 
 namespace
 {

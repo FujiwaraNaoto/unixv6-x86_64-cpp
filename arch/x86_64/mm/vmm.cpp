@@ -2,6 +2,9 @@
 #include <cstdint>
 #include <concepts>
 #include "vmm.hpp"
+#include "address.hpp"
+#include "pmm.hpp"
+#include "console.hpp"
 #include <cstring>
 
 //  63      48 47    39 38    30 29    21 20    12 11         0

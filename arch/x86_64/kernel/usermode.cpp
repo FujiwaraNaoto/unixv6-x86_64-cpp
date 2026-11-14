@@ -1,8 +1,10 @@
 #include "usermode.hpp"
+#include "address.hpp"
 #include "vga.hpp"
 #include "console.hpp"
 #include "pmm.hpp"
 #include "vmm.hpp"
+#include <cstdint>
 
 extern "C" [[noreturn]] void enter_usermode(uint64_t entry, uint64_t user_stack);
 
