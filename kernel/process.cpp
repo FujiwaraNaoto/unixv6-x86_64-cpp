@@ -65,15 +65,11 @@ void initialize(heap::Heap &heap)
 
 namespace
 {
-// fd 表の File をすべて閉じる。閉じた fd は nullptr にするので、2 回呼んでも問題ない。
+// fd 表の File をすべて閉じる。閉じた fd は空になるので、2 回呼んでも問題ない。
 void close_all_files(Process *proc)
 {
-    for (FileDescriptor *&file : proc->files)
-    {
-        if (file != nullptr)
-            file->close();
-        file = nullptr;
-    }
+    for (FileRef &file : proc->files)
+        file.reset();
 }
 
 // fd 0/1/2 をコンソールにつなぐ。失敗したら false (開けた分は呼び出し側が free_process_resources で閉じる)。
@@ -81,9 +77,9 @@ bool open_console_files(Process *proc)
 {
     proc->files[0] = FileSystem::open_standard_input();
     proc->files[1] = FileSystem::open_standard_output();
-    if (proc->files[0] == nullptr || proc->files[1] == nullptr)
+    if (!proc->files[0] || !proc->files[1])
         return false;
-    proc->files[2] = proc->files[1]->duplicate();
+    proc->files[2] = proc->files[1];
     return true;
 }
 
@@ -480,10 +476,7 @@ int fork()
     child->name      = parent->name;
     child->parent    = parent;
 
-    for (size_t fd = 0; fd < parent->files.size(); fd++)
-    {
-        child->files[fd] = (parent->files[fd] != nullptr) ? parent->files[fd]->duplicate() : nullptr;
-    }
+    child->files = parent->files; // FileRef のコピー = dup。親子で offset を共有する
 
     bool is_user_thread = (parent->trap_frame != nullptr);
     if (is_user_thread)

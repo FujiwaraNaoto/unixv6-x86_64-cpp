@@ -16,38 +16,37 @@ namespace
 // syscall は init() で有効にするので、登録前に dispatch が走ることはない。
 IConsole *syscall_console = nullptr;
 
-// 現在のプロセスの fd 表から FileDescriptor を引く。範囲外・閉じている fd は nullptr。
-FileDescriptor *lookup_file(uint64_t fd)
+// 現在のプロセスの fd 表の 1 マスを引く。範囲外・閉じている fd は nullptr。
+FileRef *lookup_file(uint64_t fd)
 {
     Process *proc = process::current_process();
-    if (proc == nullptr || fd >= proc->files.size())
+    if (proc == nullptr || fd >= proc->files.size() || !proc->files[fd])
         return nullptr;
-    return proc->files[fd];
+    return &proc->files[fd];
 }
 
 long sys_read(uint64_t fd, uint64_t buf, uint64_t len)
 {
-    FileDescriptor *file = lookup_file(fd);
+    FileRef *file = lookup_file(fd);
     if (file == nullptr || len > std::numeric_limits<uint32_t>::max())
         return static_cast<long>(-1);
-    return static_cast<long>(file->read(reinterpret_cast<void *>(buf), len)); // 失敗は -1 のまま返る
+    return static_cast<long>((*file)->read(reinterpret_cast<void *>(buf), len)); // 失敗は -1 のまま返る
 }
 
 long sys_write(uint64_t fd, uint64_t buf, uint64_t len)
 {
-    FileDescriptor *file = lookup_file(fd);
+    FileRef *file = lookup_file(fd);
     if (file == nullptr || len > std::numeric_limits<uint32_t>::max())
         return static_cast<long>(-1);
-    return static_cast<long>(file->write(reinterpret_cast<const void *>(buf), len));
+    return static_cast<long>((*file)->write(reinterpret_cast<const void *>(buf), len));
 }
 
 long sys_close(uint64_t fd)
 {
-    FileDescriptor *file = lookup_file(fd);
+    FileRef *file = lookup_file(fd);
     if (file == nullptr)
         return static_cast<long>(-1);
-    process::current_process()->files[fd] = nullptr;
-    file->close();
+    file->reset();
     return 0;
 }
 

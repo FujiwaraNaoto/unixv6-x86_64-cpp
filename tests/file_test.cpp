@@ -10,6 +10,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <utility>
 
 namespace tests
 {
@@ -35,52 +36,57 @@ bool report(IConsole *console, const char *name, bool ok)
 }
 
 // FileIO を 1 つ開く。中身は読まないので、どのファイルでもよい
-FileDescriptor *open_root()
+FileRef open_root()
 {
     return FileSystem::open_file(FileSystem::get_inode(ROOT_INODE), true, false);
 }
 
-// FileIO のプールの空きスロットの数を数える (open できなくなるまで開いてから全部閉じる)。
-// 満杯で nullptr が返ることの確認も兼ねる。
+// スロットの表の空きの数を数える (open できなくなるまで開いてから全部閉じる)。
+// 満杯で空の FileRef が返ることの確認も兼ねる。
 int count_free_slots()
 {
-    std::array<FileDescriptor *, FileSystem::NUM_FILES + 1> taken{};
+    std::array<FileRef, FileSystem::NUM_FILES + 1> taken{};
     int count = 0;
     while (count <= FileSystem::NUM_FILES)
     {
         taken[count] = open_root();
-        if (taken[count] == nullptr)
+        if (!taken[count])
             break;
         count++;
     }
     for (int i = 0; i < count; i++)
-        taken[i]->close();
+        taken[i].reset();
     return count;
 }
 
 // 唯一の StandardInput / StandardOutput が、いま何か所から参照されているか (調べるための 1 つは除く)
 size_t standard_refcounts()
 {
-    FileDescriptor *input  = FileSystem::open_standard_input();
-    FileDescriptor *output = FileSystem::open_standard_output();
-    const size_t count     = (input->refcount() - 1) + (output->refcount() - 1);
-    input->close();
-    output->close();
-    return count;
+    const FileRef input  = FileSystem::open_standard_input();
+    const FileRef output = FileSystem::open_standard_output();
+    return (input.use_count() - 1) + (output.use_count() - 1);
 }
 
 bool open_dup_close(IConsole *console)
 {
-    FileDescriptor *file = open_root();
-    bool ok              = file != nullptr && file->in_use() && file->refcount() == 1;
+    FileRef file = open_root();
+    bool ok      = file && file.use_count() == 1;
     if (ok)
     {
-        ok = file->duplicate() == file && file->refcount() == 2;
-        file->close();
-        ok = ok && file->refcount() == 1;
-        file->close();
-        ok = ok && file->refcount() == 0 && !file->in_use();
+        FileRef dup = file; // dup
+        ok          = dup.get() == file.get() && file.use_count() == 2;
+        dup.reset(); // close
+        ok = ok && !dup && dup.get() == nullptr && file.use_count() == 1;
+        // 他方の FileRef からはそのまま使える。最後の close で実体が破棄される
+        uint8_t probe = 0;
+        ok            = ok && file->read(&probe, 0) == 0;
+        file.reset();
+        ok = ok && !file && file.use_count() == 0;
     }
+    // ムーブは参照を移すだけで数を変えない
+    FileRef moved_from = open_root();
+    FileRef moved_to   = std::move(moved_from);
+    ok = ok && !moved_from && moved_to && moved_to.use_count() == 1;
     return report(console, "open / dup / close", ok);
 }
 
@@ -96,18 +102,15 @@ bool table_can_be_exhausted(IConsole *console)
 // 標準入出力は実体が 1 つで、open は参照カウントを増やすだけ
 bool standard_files_are_shared(IConsole *console)
 {
-    FileDescriptor *input1     = FileSystem::open_standard_input();
-    FileDescriptor *input2     = FileSystem::open_standard_input();
-    FileDescriptor *output1    = FileSystem::open_standard_output();
-    FileDescriptor *output2    = FileSystem::open_standard_output();
-    const size_t output_refcnt = output1->refcount();
-    bool ok                    = input1 == input2 && output1 == output2 && input1 != output1;
-    output2->close();
+    FileRef input1             = FileSystem::open_standard_input();
+    FileRef input2             = FileSystem::open_standard_input();
+    FileRef output1            = FileSystem::open_standard_output();
+    FileRef output2            = FileSystem::open_standard_output();
+    const size_t output_refcnt = output1.use_count();
+    bool ok = input1.get() == input2.get() && output1.get() == output2.get() && input1.get() != output1.get();
+    output2.reset();
     // 閉じても実体は残り、他の参照からはそのまま書ける
-    ok = ok && output1->refcount() == output_refcnt - 1 && output1->write("", 0) == 0;
-    input1->close();
-    input2->close();
-    output1->close();
+    ok = ok && output1.use_count() == output_refcnt - 1 && output1->write("", 0) == 0;
     return report(console, "standard files are shared", ok);
 }
 
@@ -136,10 +139,10 @@ bool inode_file(IConsole *console)
     for (uint32_t i = 0; i < kDataSize; i++)
         source_data[i] = static_cast<uint8_t>(i * 31 + i / FSBLOCK_SIZE);
 
-    FileDescriptor *writer = FileSystem::open_file(FileSystem::get_inode(inode_number), false, true);
-    FileDescriptor *reader = FileSystem::open_file(FileSystem::get_inode(inode_number), true, false);
-    FileDescriptor *other  = FileSystem::open_file(FileSystem::get_inode(inode_number), true, false);
-    if (writer == nullptr || reader == nullptr || other == nullptr)
+    FileRef writer = FileSystem::open_file(FileSystem::get_inode(inode_number), false, true);
+    FileRef reader = FileSystem::open_file(FileSystem::get_inode(inode_number), true, false);
+    FileRef other  = FileSystem::open_file(FileSystem::get_inode(inode_number), true, false);
+    if (!writer || !reader || !other)
         return report(console, "inode file", false);
 
     // 2 回に分けて書くと、offset が進んで続きに書かれる (進まなければ size は 600 になる)
@@ -155,13 +158,13 @@ bool inode_file(IConsole *console)
 
     ok &= report(console, "read at end returns 0", reader->read(read_buffer.data(), 1) == 0);
 
-    // dup した FileDescriptor は offset を共有する
-    FileDescriptor *shared = other->duplicate();
+    // dup した FileRef は同じ FileDescriptor を指すので offset を共有する
+    FileRef shared = other;
     const size_t part1     = other->read(read_buffer.data(), 600);
     const bool part1_ok    = part1 == 600 && read_buffer_matches(0, 600);
     const size_t part2     = shared->read(read_buffer.data(), 100);
     ok &= report(console, "dup shares offset", part1_ok && part2 == 100 && read_buffer_matches(600, 100));
-    shared->close();
+    shared.reset();
 
     // 向きが違う操作は失敗し、offset も動かない (reader は末尾のまま)
     ok &= report(console,
@@ -172,13 +175,10 @@ bool inode_file(IConsole *console)
 
     // 最後の close で inode の参照を手放す。refcnt は inode, writer, reader, other の 4
     const int refcnt_before = inode->refcnt;
-    writer->close();
-    reader->close();
-    other->close();
-    ok &= report(console,
-                 "close releases inode",
-                 refcnt_before == 4 && inode->refcnt == 1 && !writer->in_use() && !reader->in_use() &&
-                     !other->in_use());
+    writer.reset();
+    reader.reset();
+    other.reset();
+    ok &= report(console, "close releases inode", refcnt_before == 4 && inode->refcnt == 1);
 
     // 後片付け: ブロックと inode を空きに戻す (fs.img は次回も使われる)
     for (BlockNumber block_number : inode->disk.addrs)
@@ -192,11 +192,11 @@ bool inode_file(IConsole *console)
 
 bool unusable_files(IConsole *console)
 {
-    FileDescriptor *input  = FileSystem::open_standard_input();
-    FileDescriptor *output = FileSystem::open_standard_output();
-    FileDescriptor *closed =
+    FileRef input  = FileSystem::open_standard_input();
+    FileRef output = FileSystem::open_standard_output();
+    FileRef closed =
         FileSystem::open_file(FileSystem::get_inode(ROOT_INODE), false, false); // 読み書きどちらも不可で開く
-    if (input == nullptr || output == nullptr || closed == nullptr)
+    if (!input || !output || !closed)
         return report(console, "unusable files fail", false);
 
     uint8_t byte = 0;
@@ -205,9 +205,6 @@ bool unusable_files(IConsole *console)
                     output->read(&byte, 1) == FileDescriptor::kError &&
                     closed->read(&byte, 1) == FileDescriptor::kError &&
                     closed->write(&byte, 1) == FileDescriptor::kError;
-    input->close();
-    output->close();
-    closed->close();
     return report(console, "unusable files fail", ok);
 }
 
@@ -223,34 +220,35 @@ void process_thread(void *)
     auto &files   = self->files;
 
     uint8_t probe  = 0;
-    console_fds_ok = files[0] != nullptr && files[1] != nullptr && files[0] != files[1] && files[2] == files[1] &&
-                     files[3] == nullptr && files[0]->write(&probe, 1) == FileDescriptor::kError &&
+    console_fds_ok = files[0] && files[1] && files[0].get() != files[1].get() && files[2].get() == files[1].get() &&
+                     !files[3] && files[0]->write(&probe, 1) == FileDescriptor::kError &&
                      files[1]->read(&probe, 1) == FileDescriptor::kError;
     if (!console_fds_ok)
         return;
 
-    const size_t stdin_refcnt  = files[0]->refcount();
-    const size_t stdout_refcnt = files[1]->refcount();
+    const size_t stdin_refcnt  = files[0].use_count();
+    const size_t stdout_refcnt = files[1].use_count();
 
     const int pid = process::fork();
     if (pid == 0)
     {
         // 子。スタックは複製なので self は親を指す。自分の表は current_process() から取る
         auto &child_files = process::current_process()->files;
-        child_shares_ok   = child_files[0] == self->files[0] && child_files[1] == self->files[1] &&
-                          child_files[2] == self->files[2] && child_files[3] == nullptr;
+        child_shares_ok   = child_files[0].get() == self->files[0].get() &&
+                          child_files[1].get() == self->files[1].get() &&
+                          child_files[2].get() == self->files[2].get() && !child_files[3];
         // 閉じるのは子の fd だけ。親の表は変わらない (残りの fd は exit が閉じる)
-        child_close_ok = call_syscall(SyscallNo::kClose, 1, nullptr, 0) == 0 && child_files[1] == nullptr;
+        child_close_ok = call_syscall(SyscallNo::kClose, 1, nullptr, 0) == 0 && !child_files[1];
         process::exit(0);
     }
 
     // 協調型なので、子はまだ走っていない
-    fork_shares_ok = pid > 0 && files[0]->refcount() == stdin_refcnt + 1 && files[1]->refcount() == stdout_refcnt + 2;
+    fork_shares_ok = pid > 0 && files[0].use_count() == stdin_refcnt + 1 && files[1].use_count() == stdout_refcnt + 2;
 
     int code;
     const auto waited = process::wait(&code);
-    wait_restores_ok  = waited && files[1] != nullptr && files[0]->refcount() == stdin_refcnt &&
-                       files[1]->refcount() == stdout_refcnt;
+    wait_restores_ok  = waited && files[1] && files[0].use_count() == stdin_refcnt &&
+                       files[1].use_count() == stdout_refcnt;
 
     const char message[] = "[FILE] write through fd 1\n";
     const long length    = static_cast<long>(sizeof(message) - 1);
@@ -265,9 +263,9 @@ void process_thread(void *)
                      call_syscall(SyscallNo::kRead, NUM_OPEN_FILES, &byte, 1) == -1;
 
     // close: fd を空けて参照を 1 つ返す。同じ File を指す他の fd はそのまま使える
-    files[3]       = files[1]->duplicate();
+    files[3]       = files[1];
     const long ret = call_syscall(SyscallNo::kClose, 3, nullptr, 0);
-    close_ok       = ret == 0 && files[3] == nullptr && files[1]->refcount() == stdout_refcnt &&
+    close_ok       = ret == 0 && !files[3] && files[1].use_count() == stdout_refcnt &&
                call_syscall(SyscallNo::kWrite, 3, message, 1) == -1 && // 閉じた fd は使えない
                call_syscall(SyscallNo::kWrite, 1, message, 0) == 0 &&
                call_syscall(SyscallNo::kClose, 3, nullptr, 0) == -1 && // 二重 close

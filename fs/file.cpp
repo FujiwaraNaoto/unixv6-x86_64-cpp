@@ -13,11 +13,12 @@
 
 namespace
 {
-// 標準入出力はプロセスごとの状態を持たないので、実体は 1 つずつ (Linux の /dev/console と同じく共有する)
-StandardInput standard_input;
-StandardOutput standard_output;
-// FileIO は offset を持つので open ごとに実体が要る。new が無いので静的に置き、refcnt == 0 のスロットを空きとして使う
-std::array<FileIO, FileSystem::NUM_FILES> file_io_table{};
+// FileDescriptor の実体の置き場所。FileIO は offset を持つので open ごとに 1 スロット使う
+std::array<FileSystem::detail::FileSlot, FileSystem::NUM_FILES> file_table{};
+// 標準入出力はプロセスごとの状態を持たないので、実体は 1 つずつ (Linux の /dev/console と同じく共有する)。
+// ここで 1 つ参照を持ち続けるので、全プロセスが閉じても破棄されない
+FileRef standard_input;
+FileRef standard_output;
 IConsole *file_console = nullptr;
 
 uint32_t console_read(uint8_t *dest, uint32_t count)
@@ -44,17 +45,21 @@ uint32_t console_read(uint8_t *dest, uint32_t count)
     return done;
 }
 
-template <class T, size_t N>
-T *find_free(std::array<T, N> &table)
-{
-    for (T &f : table)
-        if (!f.in_use())
-            return &f;
-    return nullptr;
-}
-
-
 } // namespace
+
+void FileRef::reset()
+{
+    if (slot_ == nullptr)
+        return;
+    slot_->refcnt--;
+    if (slot_->refcnt == 0)
+    {
+        // 最後の close。仮想デストラクタで派生クラス (FileIO なら InodeRef) を片付けてスロットを空ける
+        slot_->object->~FileDescriptor();
+        slot_->object = nullptr;
+    }
+    slot_ = nullptr;
+}
 
 
 size_t StandardInput::read(void *buffer, size_t len)
@@ -67,11 +72,6 @@ size_t StandardInput::write(const void *, size_t)
     return kError; // 入力専用
 }
 
-void StandardInput::release()
-{
-    // 実体は 1 つで使い回すので、手放すものは無い
-}
-
 size_t StandardOutput::read(void *, size_t)
 {
     return kError; // 出力専用
@@ -82,11 +82,6 @@ size_t StandardOutput::write(const void *buffer, size_t len)
     IConsole *console = (file_console != nullptr) ? file_console : null_console;
     console->write(reinterpret_cast<const char *>(buffer), len);
     return len;
-}
-
-void StandardOutput::release()
-{
-    // 実体は 1 つで使い回すので、手放すものは無い
 }
 
 // 現在の offset から読み書きして offset を進める。ファイル末尾を読むと 0。
@@ -116,42 +111,44 @@ size_t FileIO::write(const void *buffer, size_t len)
     return *done;
 }
 
-void FileIO::release()
-{
-    inoderef.reset();
-    offset   = 0;
-    readable = false;
-    writable = false;
-}
-
-
 namespace FileSystem
 {
+
+namespace detail
+{
+FileSlot *find_free_slot()
+{
+    for (FileSlot &slot : file_table)
+        if (slot.refcnt == 0)
+            return &slot;
+    return nullptr;
+}
+} // namespace detail
 
 void file_set_console(IConsole *console)
 {
     file_console = console;
 }
 
-FileDescriptor *open_standard_input()
+FileRef open_standard_input()
 {
-    return standard_input.duplicate();
+    if (!standard_input)
+        standard_input = make_file<StandardInput>();
+    return standard_input;
 }
 
-FileDescriptor *open_standard_output()
+FileRef open_standard_output()
 {
-    return standard_output.duplicate();
+    if (!standard_output)
+        standard_output = make_file<StandardOutput>();
+    return standard_output;
 }
 
-FileDescriptor *open_file(InodeRef inode, bool readable, bool writable)
+FileRef open_file(InodeRef inode, bool readable, bool writable)
 {
     if (!inode)
-        return nullptr;
-    FileIO *f = find_free(file_io_table);
-    if (f == nullptr)
-        return nullptr;
-    f->open(std::move(inode), readable, writable);
-    return f;
+        return FileRef{};
+    return make_file<FileIO>(std::move(inode), readable, writable);
 }
 
 } // namespace FileSystem

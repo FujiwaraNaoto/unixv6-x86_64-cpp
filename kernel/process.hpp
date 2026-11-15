@@ -100,7 +100,7 @@ struct Process
     int exit_status;     // プロセスの終了ステータス (exit() で設定される)
     TrapFrame
         *trap_frame; // syscall/syscall_entry.asm が積む、リング3のレジスタ一式．カーネルスレッドからの場合は nullptr
-    std::array<FileDescriptor *, NUM_OPEN_FILES> files{}; // fd 表。nullptr が空き
+    std::array<FileRef, NUM_OPEN_FILES> files{}; // fd 表。空の FileRef が空き
 };
 
 namespace process
