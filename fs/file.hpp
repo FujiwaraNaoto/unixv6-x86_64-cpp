@@ -3,6 +3,7 @@
 
 #include "console.hpp"
 #include "inode.hpp"
+#include "types.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -17,17 +18,15 @@
 // 同じファイルを 2 回 open すれば offset は別々になり、fork した親子は同じ FileDescriptor を
 // 指すので offset を共有する。
 //
-// read / write は処理したバイト数を返し、失敗は static_cast<size_t>(-1) を返す。
+// read / write は処理したバイト数を返し、失敗は kError (-1) を返す。
 // その種類のファイルでできない操作 (標準入力への write など) も -1 を返す (Unix の EBADF に相当)。
 
 class FileDescriptor
 {
   public:
-    static constexpr size_t kError = static_cast<size_t>(-1);
-
-    virtual ~FileDescriptor()                            = default;
-    virtual size_t read(void *buffer, size_t len)        = 0;
-    virtual size_t write(const void *buffer, size_t len) = 0;
+    virtual ~FileDescriptor()                             = default;
+    virtual ssize_t read(void *buffer, size_t len)        = 0;
+    virtual ssize_t write(const void *buffer, size_t len) = 0;
 
   protected:
     FileDescriptor()                                  = default;
@@ -41,8 +40,8 @@ class StandardInput : public FileDescriptor
 {
   public:
     StandardInput() = default;
-    size_t read(void *buffer, size_t len) override;
-    size_t write(const void *buffer, size_t len) override;
+    ssize_t read(void *buffer, size_t len) override;
+    ssize_t write(const void *buffer, size_t len) override;
 };
 
 // fd 1/2 用: file_set_console で登録したコンソールに書くだけ。
@@ -51,8 +50,8 @@ class StandardOutput : public FileDescriptor
 {
   public:
     StandardOutput() = default;
-    size_t read(void *buffer, size_t len) override;
-    size_t write(const void *buffer, size_t len) override;
+    ssize_t read(void *buffer, size_t len) override;
+    ssize_t write(const void *buffer, size_t len) override;
 };
 
 // ディスク上のファイル。読み書きできるかは open のモードで決まる
@@ -63,8 +62,8 @@ class FileIO : public FileDescriptor
         : inoderef(std::move(inoderef_)), readable(readable_), writable(writable_)
     {
     }
-    size_t read(void *buffer, size_t len) override;
-    size_t write(const void *buffer, size_t len) override;
+    ssize_t read(void *buffer, size_t len) override;
+    ssize_t write(const void *buffer, size_t len) override;
 
   private:
     InodeRef inoderef; // FileIO が破棄されると (= 最後の close) inode の参照も手放す

@@ -30,7 +30,7 @@ long sys_read(uint64_t fd, uint64_t buf, uint64_t len)
     FileRef *file = lookup_file(fd);
     if (file == nullptr || len > std::numeric_limits<uint32_t>::max())
         return static_cast<long>(-1);
-    return static_cast<long>((*file)->read(reinterpret_cast<void *>(buf), len)); // 失敗は -1 のまま返る
+    return (*file)->read(reinterpret_cast<void *>(buf), len); // 失敗は kError (-1) のまま返る
 }
 
 long sys_write(uint64_t fd, uint64_t buf, uint64_t len)
@@ -38,7 +38,7 @@ long sys_write(uint64_t fd, uint64_t buf, uint64_t len)
     FileRef *file = lookup_file(fd);
     if (file == nullptr || len > std::numeric_limits<uint32_t>::max())
         return static_cast<long>(-1);
-    return static_cast<long>((*file)->write(reinterpret_cast<const void *>(buf), len));
+    return (*file)->write(reinterpret_cast<const void *>(buf), len);
 }
 
 long sys_close(uint64_t fd)

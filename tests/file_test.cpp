@@ -146,31 +146,31 @@ bool inode_file(IConsole *console)
         return report(console, "inode file", false);
 
     // 2 回に分けて書くと、offset が進んで続きに書かれる (進まなければ size は 600 になる)
-    const size_t first  = writer->write(source_data.data(), 100);
-    const size_t second = writer->write(source_data.data() + 100, kDataSize - 100);
+    const ssize_t first  = writer->write(source_data.data(), 100);
+    const ssize_t second = writer->write(source_data.data() + 100, kDataSize - 100);
     bool ok             = report(console,
                      "write advances offset",
                      first == 100 && second == kDataSize - 100 && inode->disk.size == kDataSize);
 
     // reader は writer とは別の FileIO なので offset は 0 から
-    const size_t all = reader->read(read_buffer.data(), kDataSize);
+    const ssize_t all = reader->read(read_buffer.data(), kDataSize);
     ok &= report(console, "separate file has own offset", all == kDataSize && read_buffer_matches(0, kDataSize));
 
     ok &= report(console, "read at end returns 0", reader->read(read_buffer.data(), 1) == 0);
 
     // dup した FileRef は同じ FileDescriptor を指すので offset を共有する
     FileRef shared = other;
-    const size_t part1     = other->read(read_buffer.data(), 600);
+    const ssize_t part1     = other->read(read_buffer.data(), 600);
     const bool part1_ok    = part1 == 600 && read_buffer_matches(0, 600);
-    const size_t part2     = shared->read(read_buffer.data(), 100);
+    const ssize_t part2     = shared->read(read_buffer.data(), 100);
     ok &= report(console, "dup shares offset", part1_ok && part2 == 100 && read_buffer_matches(600, 100));
     shared.reset();
 
     // 向きが違う操作は失敗し、offset も動かない (reader は末尾のまま)
     ok &= report(console,
                  "wrong direction fails",
-                 reader->write(source_data.data(), 1) == FileDescriptor::kError &&
-                     writer->read(read_buffer.data(), 1) == FileDescriptor::kError &&
+                 reader->write(source_data.data(), 1) == kError &&
+                     writer->read(read_buffer.data(), 1) == kError &&
                      reader->read(read_buffer.data(), 1) == 0 && inode->disk.size == kDataSize);
 
     // 最後の close で inode の参照を手放す。refcnt は inode, writer, reader, other の 4
@@ -201,10 +201,10 @@ bool unusable_files(IConsole *console)
 
     uint8_t byte = 0;
     // 標準出力の read は、入力を待たずに失敗する
-    const bool ok = input->write(&byte, 1) == FileDescriptor::kError &&
-                    output->read(&byte, 1) == FileDescriptor::kError &&
-                    closed->read(&byte, 1) == FileDescriptor::kError &&
-                    closed->write(&byte, 1) == FileDescriptor::kError;
+    const bool ok = input->write(&byte, 1) == kError &&
+                    output->read(&byte, 1) == kError &&
+                    closed->read(&byte, 1) == kError &&
+                    closed->write(&byte, 1) == kError;
     return report(console, "unusable files fail", ok);
 }
 
@@ -221,8 +221,8 @@ void process_thread(void *)
 
     uint8_t probe  = 0;
     console_fds_ok = files[0] && files[1] && files[0].get() != files[1].get() && files[2].get() == files[1].get() &&
-                     !files[3] && files[0]->write(&probe, 1) == FileDescriptor::kError &&
-                     files[1]->read(&probe, 1) == FileDescriptor::kError;
+                     !files[3] && files[0]->write(&probe, 1) == kError &&
+                     files[1]->read(&probe, 1) == kError;
     if (!console_fds_ok)
         return;
 
