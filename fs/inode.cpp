@@ -185,13 +185,13 @@ std::optional<BlockNumber> allocate_or_find_block(Inode &inode, LogicalBlockInde
 }
 
 // offset から最大 count バイトを dest に読む。読んだバイト数を返す。
-// ファイル末尾 (disk.size) より先は読まない。offset が末尾より先なら失敗。
-// 読み込みではブロックを確保しない。write_data は穴を作らないので、size 以内で未割当なら失敗する。
-std::optional<uint32_t> read_data(const Inode &inode, uint8_t *dest, uint32_t offset, uint32_t count)
+// ファイル末尾 (disk.size) より先は読まない。offset が末尾より先なら kError。
+// 読み込みではブロックを確保しない。write_data は穴を作らないので、size 以内で未割当なら kError。
+ssize_t read_data(const Inode &inode, uint8_t *dest, uint32_t offset, uint32_t count)
 {
     const uint32_t size = inode.disk.size;
     if (offset > size)
-        return std::nullopt;
+        return kError;
     if (count > size - offset)
         count = size - offset;
 
@@ -201,10 +201,10 @@ std::optional<uint32_t> read_data(const Inode &inode, uint8_t *dest, uint32_t of
         const uint32_t pos = offset + done;
         auto block_number  = find_block(inode, LogicalBlockIndex::containing(pos));
         if (!block_number)
-            return std::nullopt;
+            return kError;
         auto block = internal::fs.block_store->acquire(*block_number);
         if (!block)
-            return std::nullopt;
+            return kError;
 
         // このブロックの中で読める分だけ (ブロック境界か残りの少ない方)
         const uint32_t in_block = pos % FSBLOCK_SIZE;
@@ -217,15 +217,15 @@ std::optional<uint32_t> read_data(const Inode &inode, uint8_t *dest, uint32_t of
 }
 
 // source の count バイトを offset に書く。書けたバイト数を返す。
-// 穴を作らないよう、offset が末尾より先なら失敗。MAXFILE を超える書き込みも失敗。
+// 穴を作らないよう、offset が末尾より先なら kError。MAXFILE を超える書き込みも kError。
 // 途中でブロックが尽きたら、そこまで書いた分を返す (size もそこまで伸ばす)。
-std::optional<uint32_t> write_data(Inode &inode, const uint8_t *source, uint32_t offset, uint32_t count)
+ssize_t write_data(Inode &inode, const uint8_t *source, uint32_t offset, uint32_t count)
 {
     constexpr uint32_t max_bytes = MAXFILE * FSBLOCK_SIZE;
     if (offset > inode.disk.size)
-        return std::nullopt;
+        return kError;
     if (offset > max_bytes or count > max_bytes - offset)
-        return std::nullopt;
+        return kError;
 
     uint32_t done = 0;
     while (done < count)
@@ -251,7 +251,7 @@ std::optional<uint32_t> write_data(Inode &inode, const uint8_t *source, uint32_t
         inode.disk.size = offset + done;
     // allocate_or_find_block が addrs を書き換えている可能性があるので、size が変わらなくても書き戻す
     if (!update_inode(inode))
-        return std::nullopt;
+        return kError;
     return done;
 }
 

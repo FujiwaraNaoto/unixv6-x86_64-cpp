@@ -44,7 +44,7 @@ bool is_name_equal(const char (&entry_name)[DIRECTORY_NAME_SIZE], std::string_vi
 bool read_entry(const Inode &directory, uint32_t offset, DirectoryEntry &entry)
 {
     auto n = FileSystem::read_data(directory, reinterpret_cast<uint8_t *>(&entry), offset, sizeof(DirectoryEntry));
-    return n && *n == sizeof(DirectoryEntry);
+    return n == static_cast<ssize_t>(sizeof(DirectoryEntry));
 }
 
 } // namespace
@@ -108,7 +108,7 @@ bool directory_link(Inode &directory, std::string_view name, InodeNumber inode_n
     std::memcpy(fresh.name, name.data(), name.size());
 
     auto n = write_data(directory, reinterpret_cast<const uint8_t *>(&fresh), offset, sizeof(DirectoryEntry));
-    return n && *n == sizeof(DirectoryEntry);
+    return n == static_cast<ssize_t>(sizeof(DirectoryEntry));
 }
 
 } // namespace FileSystem
