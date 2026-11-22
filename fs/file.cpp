@@ -3,15 +3,22 @@
 #include "inode.hpp"
 #include "keyboard.hpp"
 #include "asm/irqflags.hpp"
+#include "types.hpp"
+#include "inode.hpp"
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
-#include <optional>
+#include <utility>
 
 namespace
 {
-
-std::array<File, FileSystem::NUM_FILES> file_table{}; // 実体
+// FileDescriptor の実体の置き場所。FileIO は offset を持つので open ごとに 1 スロット使う
+std::array<FileSystem::detail::FileSlot, FileSystem::NUM_FILES> file_table{};
+// 標準入出力はプロセスごとの状態を持たないので、実体は 1 つずつ (Linux の /dev/console と同じく共有する)。
+// ここで 1 つ参照を持ち続けるので、全プロセスが閉じても破棄されない
+FileRef standard_input;
+FileRef standard_output;
 IConsole *file_console = nullptr;
 
 uint32_t console_read(uint8_t *dest, uint32_t count)
@@ -40,106 +47,108 @@ uint32_t console_read(uint8_t *dest, uint32_t count)
 
 } // namespace
 
+void FileRef::reset()
+{
+    if (slot_ == nullptr)
+        return;
+    slot_->refcnt--;
+    if (slot_->refcnt == 0)
+    {
+        // 最後の close。仮想デストラクタで派生クラス (FileIO なら InodeRef) を片付けてスロットを空ける
+        slot_->object->~FileDescriptor();
+        slot_->object = nullptr;
+    }
+    slot_ = nullptr;
+}
+
+
+ssize_t StandardInput::read(void *buffer, size_t len)
+{
+    return console_read(reinterpret_cast<uint8_t *>(buffer), static_cast<uint32_t>(len));
+}
+
+ssize_t StandardInput::write(const void *, size_t)
+{
+    return kError; // 入力専用
+}
+
+ssize_t StandardOutput::read(void *, size_t)
+{
+    return kError; // 出力専用
+}
+
+ssize_t StandardOutput::write(const void *buffer, size_t len)
+{
+    IConsole *console = (file_console != nullptr) ? file_console : null_console;
+    console->write(reinterpret_cast<const char *>(buffer), len);
+    return static_cast<ssize_t>(len);
+}
+
+// 現在の offset から読み書きして offset を進める。ファイル末尾を読むと 0。
+ssize_t FileIO::read(void *buffer, size_t len)
+{
+    if (!readable)
+        return kError;
+    const ssize_t done =
+        FileSystem::read_data(*inoderef.get(), reinterpret_cast<uint8_t *>(buffer), offset, static_cast<uint32_t>(len));
+    if (done < 0)
+        return kError;
+    offset += static_cast<uint32_t>(done);
+    return done;
+}
+
+ssize_t FileIO::write(const void *buffer, size_t len)
+{
+    if (!writable)
+        return kError;
+    const ssize_t done = FileSystem::write_data(*inoderef.get(),
+                                                reinterpret_cast<const uint8_t *>(buffer),
+                                                offset,
+                                                static_cast<uint32_t>(len));
+    if (done < 0)
+        return kError;
+    offset += static_cast<uint32_t>(done);
+    return done;
+}
+
 namespace FileSystem
 {
+
+namespace detail
+{
+FileSlot *find_free_slot()
+{
+    for (FileSlot &slot : file_table)
+        if (slot.refcnt == 0)
+            return &slot;
+    return nullptr;
+}
+} // namespace detail
 
 void file_set_console(IConsole *console)
 {
     file_console = console;
 }
 
-File *file_allocate()
+FileRef open_standard_input()
 {
-    for (File &file : file_table)
-    {
-        if (file.refcnt == 0)
-        {
-            file.refcnt = 1;
-            return &file;
-        }
-    }
-    return nullptr;
+    if (!standard_input)
+        standard_input = make_file<StandardInput>();
+    return standard_input;
 }
 
-File *file_duplicate(File *file)
+FileRef open_standard_output()
 {
-    if (file != nullptr)
-        file->refcnt++;
-    return file;
+    if (!standard_output)
+        standard_output = make_file<StandardOutput>();
+    return standard_output;
 }
 
-void file_close(File *file)
+FileRef open_file(InodeRef inode, bool readable, bool writable)
 {
-    if (file == nullptr || file->refcnt <= 0)
-        return;
-    file->refcnt--;
-    if (file->refcnt > 0)
-        return; // まだ誰かが使っている
-
-    file->inode.reset();
-    file->type     = FileType::kNone;
-    file->readable = false;
-    file->writable = false;
-    file->offset   = 0;
-}
-
-File *file_open_console(bool readable, bool writable)
-{
-    File *file = file_allocate();
-    if (file == nullptr)
-        return nullptr;
-    file->type     = FileType::kConsole;
-    file->readable = readable;
-    file->writable = writable;
-    return file;
-}
-
-std::optional<uint32_t> file_read(File &file, uint8_t *dest, uint32_t count)
-{
-    if (!file.readable)
-        return std::nullopt;
-
-    switch (file.type)
-    {
-        case FileType::kConsole:
-            return console_read(dest, count);
-        case FileType::kInode:
-        {
-            auto done = read_data(*file.inode.get(), dest, file.offset, count);
-            if (done)
-                file.offset += *done;
-            return done;
-        }
-        case FileType::kNone:
-            break;
-    }
-    return std::nullopt;
-}
-
-std::optional<uint32_t> file_write(File &file, const uint8_t *source, uint32_t count)
-{
-    if (!file.writable)
-        return std::nullopt;
-
-    switch (file.type)
-    {
-        case FileType::kConsole:
-        {
-            IConsole *console = (file_console != nullptr) ? file_console : null_console;
-            console->write(reinterpret_cast<const char *>(source), count);
-            return count;
-        }
-        case FileType::kInode:
-        {
-            auto done = write_data(*file.inode.get(), source, file.offset, count);
-            if (done)
-                file.offset += *done;
-            return done;
-        }
-        case FileType::kNone:
-            break;
-    }
-    return std::nullopt;
+    if (!inode)
+        return FileRef{};
+    return make_file<FileIO>(std::move(inode), readable, writable);
 }
 
 } // namespace FileSystem

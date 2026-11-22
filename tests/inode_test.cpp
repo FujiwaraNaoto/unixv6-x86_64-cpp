@@ -3,6 +3,7 @@
 #include "file_system.hpp"
 #include "file_system_internal.hpp"
 #include "block_store.hpp"
+#include "types.hpp"
 #include <array>
 #include <cstdint>
 namespace tests
@@ -153,7 +154,7 @@ bool write_and_read_back(IConsole *console)
     auto first                    = FileSystem::write_data(*file.get(), source_data.data(), 0, kFirstPart);
     auto second =
         FileSystem::write_data(*file.get(), source_data.data() + kFirstPart, kFirstPart, kFileSize - kFirstPart);
-    bool ok = first && *first == kFirstPart && second && *second == kFileSize - kFirstPart;
+    bool ok = first == kFirstPart && second == kFileSize - kFirstPart;
 
     // メモリ上のコピーを捨てて、size と addrs もディスクから読み直す
     file.reset();
@@ -164,19 +165,19 @@ bool write_and_read_back(IConsole *console)
     {
         // 全体
         auto all = FileSystem::read_data(*file.get(), read_buffer.data(), 0, kFileSize);
-        ok       = all && *all == kFileSize && read_buffer_matches(0, kFileSize);
+        ok       = all == kFileSize && read_buffer_matches(0, kFileSize);
 
         // 直接ブロックと間接ブロックの境界をまたぐ読み込み
         constexpr uint32_t kBoundary = NDIRECT * FSBLOCK_SIZE;
         auto across                  = FileSystem::read_data(*file.get(), read_buffer.data(), kBoundary - 100, 200);
-        ok                           = ok && across && *across == 200 && read_buffer_matches(kBoundary - 100, 200);
+        ok                           = ok && across == 200 && read_buffer_matches(kBoundary - 100, 200);
 
         // 末尾で切り詰められる
         auto tail = FileSystem::read_data(*file.get(), read_buffer.data(), kFileSize - 10, 100);
-        ok        = ok && tail && *tail == 10 && read_buffer_matches(kFileSize - 10, 10);
+        ok        = ok && tail == 10 && read_buffer_matches(kFileSize - 10, 10);
 
         // 末尾より先は失敗
-        ok = ok && !FileSystem::read_data(*file.get(), read_buffer.data(), kFileSize + 1, 1);
+        ok = ok && FileSystem::read_data(*file.get(), read_buffer.data(), kFileSize + 1, 1) == kError;
     }
 
     file.reset();
@@ -195,8 +196,8 @@ bool read_does_not_allocate(IConsole *console)
     // ブロックを持たないまま、メモリ上の size だけ伸ばす (ディスクには書かない)
     file->disk.size = (NDIRECT + 1) * FSBLOCK_SIZE;
 
-    bool ok = !FileSystem::read_data(*file.get(), read_buffer.data(), 0, 1);
-    ok      = ok && !FileSystem::read_data(*file.get(), read_buffer.data(), NDIRECT * FSBLOCK_SIZE, 1);
+    bool ok = FileSystem::read_data(*file.get(), read_buffer.data(), 0, 1) == kError;
+    ok      = ok && FileSystem::read_data(*file.get(), read_buffer.data(), NDIRECT * FSBLOCK_SIZE, 1) == kError;
     ok      = ok && file->disk.addrs[0].value == 0 && file->disk.addrs[NDIRECT].value == 0;
 
     file.reset();
