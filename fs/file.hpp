@@ -114,14 +114,29 @@ class FileRef
         std::swap(slot_, other.slot_);
         return *this;
     }
-    ~FileRef() { reset(); }
+    ~FileRef()
+    {
+        reset();
+    }
 
     void reset();
 
-    FileDescriptor *get() const { return slot_ != nullptr ? slot_->object : nullptr; }
-    FileDescriptor *operator->() const { return slot_->object; }
-    explicit operator bool() const { return slot_ != nullptr; }
-    size_t use_count() const { return slot_ != nullptr ? slot_->refcnt : 0; }
+    FileDescriptor *get() const
+    {
+        return slot_ != nullptr ? slot_->object : nullptr;
+    }
+    FileDescriptor *operator->() const
+    {
+        return slot_->object;
+    }
+    explicit operator bool() const
+    {
+        return slot_ != nullptr;
+    }
+    size_t use_count() const
+    {
+        return slot_ != nullptr ? slot_->refcnt : 0;
+    }
 
   private:
     FileSystem::detail::FileSlot *slot_ = nullptr;

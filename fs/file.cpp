@@ -102,9 +102,9 @@ ssize_t FileIO::write(const void *buffer, size_t len)
     if (!writable)
         return kError;
     const ssize_t done = FileSystem::write_data(*inoderef.get(),
-                                       reinterpret_cast<const uint8_t *>(buffer),
-                                       offset,
-                                       static_cast<uint32_t>(len));
+                                                reinterpret_cast<const uint8_t *>(buffer),
+                                                offset,
+                                                static_cast<uint32_t>(len));
     if (done < 0)
         return kError;
     offset += static_cast<uint32_t>(done);
