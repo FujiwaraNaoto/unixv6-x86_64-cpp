@@ -4,7 +4,6 @@
 #include "file_system.hpp"
 #include "types.hpp"
 #include <cstdint>
-#include <optional>
 
 struct Inode
 {

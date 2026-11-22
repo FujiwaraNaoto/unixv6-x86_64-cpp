@@ -6,6 +6,7 @@
 #include "block_store.hpp"
 #include "file_system.hpp"
 #include "inode.hpp"
+#include "types.hpp"
 
 #include <array>
 #include <cstddef>

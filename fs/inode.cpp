@@ -2,6 +2,7 @@
 #include "file_system.hpp"
 #include "file_system_internal.hpp"
 #include "block_store.hpp"
+#include "types.hpp"
 #include <algorithm>
 #include <array>
 #include <cstdint>

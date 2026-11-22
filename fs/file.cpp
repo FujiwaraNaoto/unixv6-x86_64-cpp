@@ -3,12 +3,12 @@
 #include "inode.hpp"
 #include "keyboard.hpp"
 #include "asm/irqflags.hpp"
+#include "types.hpp"
 #include "inode.hpp"
 
 #include <array>
 #include <cstddef>
 #include <cstdint>
-#include <optional>
 #include <utility>
 
 namespace
