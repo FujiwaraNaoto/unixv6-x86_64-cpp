@@ -24,7 +24,7 @@ constexpr int kMaxArgs = 16;
         argc = split(line,argv,kMaxArgs);
         if(argc==0) continue;
 
-        if(strcmp(argv[0],kEcho)){
+        if(strcmp(argv[0],kEcho)==0){
             for (int i = 1; i < argc; i++)
             {
                 if (i > 1)
@@ -35,7 +35,9 @@ constexpr int kMaxArgs = 16;
             continue;
 
         }else{
-            
+            char* command = argv[0];
+            put(command,strlen(command));
+            put(kCommandNotFound,strlen(kCommandNotFound));
         }
     }
 }

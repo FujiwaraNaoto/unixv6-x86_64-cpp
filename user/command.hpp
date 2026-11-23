@@ -8,6 +8,6 @@ void put_char(char c);
 long read_line(char *line, size_t capacity);
 int split(char *line, char **argv, int max_args);
 size_t strlen(const char *s);
-bool strcmp(const char *a, const char *b);
+int strcmp(const char *a, const char *b);
 
 #endif // COMMAND_H

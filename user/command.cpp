@@ -62,7 +62,7 @@
 }
 
 // カーネルの strcmp は .text (スーパーバイザページ) にあり ring3 から呼べないので自前で持つ
-[[gnu::section(".user")]] bool strcmp(const char *a, const char *b)
+[[gnu::section(".user")]] int strcmp(const char *a, const char *b)
 {
     while (*a != '\0' && *a == *b)
     {
