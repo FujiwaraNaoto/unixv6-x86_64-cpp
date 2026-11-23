@@ -2,7 +2,6 @@
 #include "user_syscall.hpp"
 #include "command.hpp"
 
-constexpr int LINE_BUFFER_SIZE = 1 << 10;
 constexpr int kLineBufferSize = 1 << 10;
 constexpr int kMaxArgs = 16;
 
