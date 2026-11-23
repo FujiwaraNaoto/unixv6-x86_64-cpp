@@ -31,6 +31,7 @@ SECTIONS {
     .user ALIGN(4096) : AT(ADDR(.user) - KERNEL_VMA){
         __user_start = .;
         *(.user)
+        *(.user.*)
         . = ALIGN(4096);
         __user_end = .;
     }

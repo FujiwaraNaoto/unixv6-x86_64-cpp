@@ -6,14 +6,16 @@ constexpr int kLineBufferSize = 1 << 10;
 constexpr int kMaxArgs = 16;
 
 
+// NOTE: ポインタで書くと.rodataに置かれてuserからアクセスしようとして保護違反となる
+[[gnu::section(".user.rodata")]] static const char kEcho[] = "echo";
+[[gnu::section(".user.rodata")]] static const char kCommandNotFound[] = "command not found \n";
+
 
 [[noreturn, gnu::section(".user")]] void shell_main()
 {
     const char prompt[]="> ";
     char line[kLineBufferSize];
     char *argv[kMaxArgs+1];
-    const char* kEcho = "echo";
-    const char* kCommandNotFound = "command not found \n";
     int argc = 0;
 
     while(1){
