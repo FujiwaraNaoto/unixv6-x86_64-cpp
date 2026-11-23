@@ -2,17 +2,7 @@
 #define KERNEL_SYSTEMCALL_HPP
 #include <cstdint>
 #include "console.hpp"
-
-// Linux x86-64 のシステムコール番号と合わせる
-namespace SyscallNo
-{
-constexpr int kRead  = 0;
-constexpr int kWrite = 1;
-constexpr int kClose = 3;
-constexpr int kFork  = 57;
-constexpr int kExit  = 60;
-constexpr int kWait  = 61;
-} // namespace SyscallNo
+#include "syscall_numbers.hpp" // IWYU pragma: export (SyscallNo はここから使われてきた)
 
 namespace SystemCall
 {
