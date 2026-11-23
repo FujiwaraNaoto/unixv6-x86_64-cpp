@@ -1,9 +1,9 @@
 #include "command.hpp"
-#include "user_syscall.hpp"
+#include "lib/syscall.hpp"
 
 [[gnu::section(".user")]] void put(const char *s, size_t len)
 {
-    user_syscall(SyscallNo::kWrite, 1, reinterpret_cast<long>(s), len);
+    write(1,s,len);
 }
 
 [[gnu::section(".user")]] void put_char(char c)
@@ -15,7 +15,7 @@
 {
     size_t length = 0;
     char c      = 0;
-    while (user_syscall(SyscallNo::kRead, 0, reinterpret_cast<long>(&c), 1) == 1)
+    while (read(0, &c, 1) == 1)
     {
         if (c == '\b')
         {

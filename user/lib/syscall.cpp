@@ -3,32 +3,34 @@
 #include "user_syscall.hpp"
 #include <cstddef>
 
-std::size_t read(int fd, void *buffer, std::size_t count)
+// TODO: ユーザELFを別のファイルとして作りローダで読むようにするとELF全体をUserでマップでき
+// 属性[[gnu::section(".user")]]は必要なくなる
+[[gnu::section(".user")]] std::size_t read(int fd, void *buffer, std::size_t count)
 {
     return user_syscall(SyscallNo::kRead, fd, reinterpret_cast<long>(buffer), static_cast<long>(count));
 }
 
-std::size_t write(int fd, const void *buffer, std::size_t count)
+[[gnu::section(".user")]] std::size_t write(int fd, const void *buffer, std::size_t count)
 {
     return user_syscall(SyscallNo::kWrite, fd, reinterpret_cast<long>(buffer), static_cast<long>(count));
 }
 
-int close(int fd)
+[[gnu::section(".user")]] int close(int fd)
 {
     return user_syscall(SyscallNo::kClose, fd, 0, 0);
 }
 
-int fork()
+[[gnu::section(".user")]] int fork()
 {
     return user_syscall(SyscallNo::kFork,0,0,0);
 }
 
-int wait(int *status)
+[[gnu::section(".user")]] int wait(int *status)
 {
     return user_syscall(SyscallNo::kWait,reinterpret_cast<long>(status),0,0);
 }
 
-void exit(int code)
+[[gnu::section(".user")]] void exit(int code)
 {
     user_syscall(SyscallNo::kExit, code, 0, 0);
     while (1) // exit は戻らないが、noreturn を守るため

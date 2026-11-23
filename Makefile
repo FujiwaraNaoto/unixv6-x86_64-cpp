@@ -97,7 +97,7 @@ CPP_SRC  = init/main.cpp \
            $(wildcard $(ARCH_DIR)/*/*.cpp) \
            $(wildcard init/init.cpp fs/*.cpp kernel/*.cpp mm/*.cpp lib/*.cpp) \
            $(wildcard drivers/*/*.cpp drivers/*/*/*.cpp) \
-           $(wildcard user/*.cpp user/arch/$(ARCH)/*.cpp) \
+           $(wildcard user/*.cpp user/lib/*.cpp user/arch/$(ARCH)/*.cpp) \
            $(TEST_SRC)
 
 OBJ_DIR  = build/$(BUILD_NAME)
