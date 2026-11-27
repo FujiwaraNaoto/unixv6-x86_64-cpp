@@ -115,27 +115,29 @@ const char *exception_name(ExceptionType type)
 } // namespace
 
 
-namespace {
-    
-    // ページフォルトのエラーコードをビットごとに分解して表示する
-    // P   : 0=ページが存在しない, 1=保護違反
-    // W   : 0=読み込み,           1=書き込み
-    // U   : 0=ring0 から,         1=ring3 から
-    // RSVD: 1=ページテーブルエントリの予約ビットが立っていた
-    // I   : 1=命令フェッチ (NX 有効時のみ)
-    // PK  : 1=Protection Key 違反
-    // SS  : 1=シャドウスタックへのアクセス
-    void indicate_errcode(uint64_t errcode){
-        handler_console->printf("  P=%lu W=%lu U=%lu RSVD=%lu I=%lu PK=%lu SS=%lu\n",
-                                (errcode >> 0) & 1,
-                                (errcode >> 1) & 1,
-                                (errcode >> 2) & 1,
-                                (errcode >> 3) & 1,
-                                (errcode >> 4) & 1,
-                                (errcode >> 5) & 1,
-                                (errcode >> 6) & 1);
-    }
+namespace
+{
+
+// ページフォルトのエラーコードをビットごとに分解して表示する
+// P   : 0=ページが存在しない, 1=保護違反
+// W   : 0=読み込み,           1=書き込み
+// U   : 0=ring0 から,         1=ring3 から
+// RSVD: 1=ページテーブルエントリの予約ビットが立っていた
+// I   : 1=命令フェッチ (NX 有効時のみ)
+// PK  : 1=Protection Key 違反
+// SS  : 1=シャドウスタックへのアクセス
+void indicate_errcode(uint64_t errcode)
+{
+    handler_console->printf("  P=%lu W=%lu U=%lu RSVD=%lu I=%lu PK=%lu SS=%lu\n",
+                            (errcode >> 0) & 1,
+                            (errcode >> 1) & 1,
+                            (errcode >> 2) & 1,
+                            (errcode >> 3) & 1,
+                            (errcode >> 4) & 1,
+                            (errcode >> 5) & 1,
+                            (errcode >> 6) & 1);
 }
+} // namespace
 
 void isr_common_handler(register_state_t *regs)
 {

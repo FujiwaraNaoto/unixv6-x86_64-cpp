@@ -3,7 +3,7 @@
 
 [[gnu::section(".user")]] void put(const char *s, size_t len)
 {
-    write(1,s,len);
+    write(1, s, len);
 }
 
 [[gnu::section(".user")]] void put_char(char c)
@@ -14,7 +14,7 @@
 [[gnu::section(".user")]] long read_line(char *line, size_t capacity)
 {
     size_t length = 0;
-    char c      = 0;
+    char c        = 0;
     while (read(0, &c, 1) == 1)
     {
         if (c == '\b')

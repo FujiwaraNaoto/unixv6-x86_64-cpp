@@ -22,12 +22,12 @@
 
 [[gnu::section(".user")]] int fork()
 {
-    return user_syscall(SyscallNo::kFork,0,0,0);
+    return user_syscall(SyscallNo::kFork, 0, 0, 0);
 }
 
 [[gnu::section(".user")]] int wait(int *status)
 {
-    return user_syscall(SyscallNo::kWait,reinterpret_cast<long>(status),0,0);
+    return user_syscall(SyscallNo::kWait, reinterpret_cast<long>(status), 0, 0);
 }
 
 [[gnu::section(".user")]] void exit(int code)
