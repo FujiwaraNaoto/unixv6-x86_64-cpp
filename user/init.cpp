@@ -1,30 +1,74 @@
 #include "user_init.hpp"
 #include "user_syscall.hpp"
+#include "command.hpp"
 
-constexpr int LINE_BUFFER_SIZE = 1 << 10;
-// TODO: 一時的な動作確認用。キーボード入力を File 経由でそのまま画面に出す。シェルができたら消す。
-[[gnu::section(".user")]] void init_main()
+constexpr int kLineBufferSize = 1 << 10;
+constexpr int kMaxArgs        = 16;
+
+
+// NOTE: ポインタで書くと.rodataに置かれてuserからアクセスしようとして保護違反となる
+[[gnu::section(".user.rodata")]] static const char kEcho[]            = "echo";
+[[gnu::section(".user.rodata")]] static const char kCommandNotFound[] = "command not found \n";
+
+
+[[noreturn, gnu::section(".user")]] void shell_main()
 {
-    const char prompt[] = "> "; // user stackに置くため配列を用いることでローカル変数に置かれる
-    char line[LINE_BUFFER_SIZE];
+    const char prompt[] = "> ";
+    char line[kLineBufferSize];
+    char *argv[kMaxArgs + 1];
+    int argc = 0;
 
     while (1)
-    { // ずっとinitでいるための無限ループ
-        user_syscall(SyscallNo::kWrite, 1, reinterpret_cast<long>(prompt), 2);
-        long length = 0;
-        char c      = 0;
+    {
+        put(prompt, 2);
+        read_line(line, sizeof(line));
+        argc = split(line, argv, kMaxArgs);
+        if (argc == 0)
+            continue;
 
-        while (user_syscall(SyscallNo::kRead, 0, reinterpret_cast<long>(&c), 1) == 1)
+        if (strcmp(argv[0], kEcho) == 0) // NOLINT(misc-include-cleaner): 自前の strcmp
         {
-            user_syscall(SyscallNo::kWrite, 1, reinterpret_cast<long>(&c), 1);
-            line[length++] = c;
-            if (c == '\n' || length == sizeof(line))
+            for (int i = 1; i < argc; i++)
+            {
+                if (i > 1)
+                    put_char(' ');
+                put(argv[i], strlen(argv[i])); // NOLINT(misc-include-cleaner): 自前の strlen
+            }
+            put_char('\n');
+            continue;
+        }
+        else
+        {
+            char *command = argv[0];
+            put(command, strlen(command));
+            put(kCommandNotFound, strlen(kCommandNotFound));
+        }
+    }
+}
+
+
+[[gnu::section(".user")]] void init_main()
+{
+    while (1)
+    { // ずっとinitでいるための無限ループ
+        const long pid = user_syscall(SyscallNo::kFork, 0, 0, 0);
+        switch (pid)
+        {
+            case 0:
+                shell_main();
+                break;
+            case -1:
+                // error
+                continue;
+            default:
                 break;
         }
-        const bool empty_line = length == 1 && line[0] == '\n';
-        if (length > 0 && !empty_line)
+        int status = 0;
+
+        while (user_syscall(SyscallNo::kWait, reinterpret_cast<long>(&status), 0, 0) != pid)
         {
-            user_syscall(SyscallNo::kWrite, 1, reinterpret_cast<long>(line), length);
+            continue;
         }
+
     } // init
 }
