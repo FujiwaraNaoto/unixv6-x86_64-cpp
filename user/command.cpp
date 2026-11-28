@@ -1,7 +1,8 @@
 #include "command.hpp"
 #include "lib/syscall.hpp"
+#include <cstddef>
 
-[[gnu::section(".user")]] void put(const char *s, size_t len)
+[[gnu::section(".user")]] void put(const char *s, std::size_t len)
 {
     write(1, s, len);
 }
@@ -11,9 +12,9 @@
     put(&c, 1);
 }
 
-[[gnu::section(".user")]] long read_line(char *line, size_t capacity)
+[[gnu::section(".user")]] long read_line(char *line, std::size_t capacity)
 {
-    size_t length = 0;
+    std::size_t length = 0;
     char c        = 0;
     while (read(0, &c, 1) == 1)
     {
@@ -53,9 +54,11 @@
     return argc;
 }
 
-[[gnu::section(".user")]] size_t strlen(const char *s)
+// libc と同名なので include-cleaner が <cstring> を要求し、引数やローカル変数まで誤検出する
+// NOLINTBEGIN(misc-include-cleaner)
+[[gnu::section(".user")]] std::size_t strlen(const char *s)
 {
-    size_t n = 0;
+    std::size_t n = 0;
     while (s[n] != '\0')
         n++;
     return n;
@@ -71,3 +74,4 @@
     }
     return static_cast<unsigned char>(*a) - static_cast<unsigned char>(*b);
 }
+// NOLINTEND(misc-include-cleaner)

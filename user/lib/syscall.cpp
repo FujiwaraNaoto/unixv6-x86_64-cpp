@@ -30,9 +30,12 @@
     return user_syscall(SyscallNo::kWait, reinterpret_cast<long>(status), 0, 0);
 }
 
+// libc と同名なので include-cleaner が <cstdlib> を要求し、引数まで誤検出する
+// NOLINTBEGIN(misc-include-cleaner)
 [[gnu::section(".user")]] void exit(int code)
 {
     user_syscall(SyscallNo::kExit, code, 0, 0);
     while (1) // exit は戻らないが、noreturn を守るため
         ;
 }
+// NOLINTEND(misc-include-cleaner)

@@ -26,13 +26,13 @@ constexpr int kMaxArgs        = 16;
         if (argc == 0)
             continue;
 
-        if (strcmp(argv[0], kEcho) == 0)
+        if (strcmp(argv[0], kEcho) == 0) // NOLINT(misc-include-cleaner): 自前の strcmp
         {
             for (int i = 1; i < argc; i++)
             {
                 if (i > 1)
                     put_char(' ');
-                put(argv[i], strlen(argv[i]));
+                put(argv[i], strlen(argv[i])); // NOLINT(misc-include-cleaner): 自前の strlen
             }
             put_char('\n');
             continue;
