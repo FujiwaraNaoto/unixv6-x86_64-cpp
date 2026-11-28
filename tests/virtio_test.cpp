@@ -1,11 +1,12 @@
 #include <cstdint>
 #include <cstddef>
 #include <array>
-#include <optional>
 #include "tests.hpp"
 #include "virtioblock.hpp"
 #include "vmm.hpp"
 #include "buffer_cache.hpp"
+#include "address.hpp"
+#include "block_store.hpp"
 
 namespace tests
 {

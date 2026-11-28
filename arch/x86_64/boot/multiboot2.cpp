@@ -1,0 +1,71 @@
+#include "multiboot2.hpp"
+#include <cstdint>
+#include "memory_region.hpp"
+
+namespace
+{
+constexpr uint64_t DIRECT_MAP_BASE = 0xFFFF800000000000ULL;
+} // namespace
+
+Multiboot2Tag *find_next_tag(Multiboot2Tag *current_tag)
+{
+    return reinterpret_cast<Multiboot2Tag *>(reinterpret_cast<uint8_t *>(current_tag) + ((current_tag->size + 7) & ~7));
+}
+
+Multiboot2MemoryMapTag *find_mmap(uint32_t multiboot_address)
+{
+    // multiboot_address は multiboot2 の情報構造体の物理アドレス
+    uint64_t virt = static_cast<uint64_t>(multiboot_address) + DIRECT_MAP_BASE;
+    auto *tag     = reinterpret_cast<Multiboot2Tag *>(virt + 8); //
+
+    while (tag->type != MULTIBOOT2_TAG_END)
+    {
+        if (tag->type == MULTIBOOT2_TAG_TYPE_MEMORY_MAP)
+        {
+            return reinterpret_cast<Multiboot2MemoryMapTag *>(tag);
+        }
+        tag = find_next_tag(tag);
+    }
+    return nullptr; // メモリマップタグが見つからなかった場合
+}
+
+uint32_t multiboot_info_size(uint32_t multiboot_address)
+{
+    if (multiboot_address == 0)
+    {
+        return 0;
+    }
+    // 物理アドレスなので direct map 経由で読む
+    uint64_t virt = static_cast<uint64_t>(multiboot_address) + DIRECT_MAP_BASE;
+    return reinterpret_cast<const Multiboot2InfoHeader *>(virt)->total_size;
+}
+
+bool collect_memory_regions(uint32_t multiboot_address, uint64_t kernel_phys_end, BootMemoryMap *out)
+{
+    auto *memory_map = find_mmap(multiboot_address);
+    if (!memory_map)
+    {
+        return false;
+    }
+
+    // AVAILABLE のエントリだけを usable に詰める。ページ境界にそろえるのは PMM 側。
+    // MAX_USABLE を超えた分は捨てる (QEMU では数個しかない)。
+    out->usable_count    = 0;
+    uint32_t num_entries = (memory_map->size - sizeof(Multiboot2MemoryMapTag)) / memory_map->entry_size;
+    for (uint32_t i = 0; i < num_entries && out->usable_count < out->usable.size(); i++)
+    {
+        auto entry = reinterpret_cast<Multiboot2MemoryMapEntry *>(reinterpret_cast<uint8_t *>(memory_map->entries) +
+                                                                  i * memory_map->entry_size);
+        if (entry->type != MULTIBOOT2_MEMORY_AVAILABLE)
+            continue;
+        out->usable[out->usable_count++] = MemoryRegion{entry->base_addr, entry->base_addr + entry->length};
+    }
+
+    // 0 からカーネル終端まで。カーネル本体と、1MB より下の低位メモリを配らない。
+    out->reserved[0] = MemoryRegion{0, kernel_phys_end};
+    // GRUB が置いた multiboot2 情報構造体。カーネル終端より後ろにあるので、別に押さえる。
+    out->reserved[1]    = MemoryRegion{multiboot_address,
+                                    multiboot_address + static_cast<uint64_t>(multiboot_info_size(multiboot_address))};
+    out->reserved_count = 2;
+    return true;
+}

@@ -1,6 +1,8 @@
 #include "tests.hpp"
 #include "directory.hpp"
 #include "file_system_internal.hpp"
+#include "file_system.hpp"
+#include "inode.hpp"
 
 #include <cstdint>
 #include <string_view>

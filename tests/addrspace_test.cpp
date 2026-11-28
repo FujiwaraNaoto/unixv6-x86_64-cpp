@@ -3,6 +3,7 @@
 #include "process.hpp"
 #include "pmm.hpp"
 #include "vmm.hpp"
+#include "address.hpp"
 
 namespace tests
 {
@@ -58,8 +59,14 @@ bool addrspace_separation(IConsole *console)
         console->set_color(Color::LightGrey, Color::Black);
         return false;
     }
-    vmm::vmm_ptr->map_page_in(pa->pml4, kAddrTestVirt, phys_a, vmm::PageFlag::Present | vmm::PageFlag::Writable);
-    vmm::vmm_ptr->map_page_in(pb->pml4, kAddrTestVirt, phys_b, vmm::PageFlag::Present | vmm::PageFlag::Writable);
+    vmm::vmm_ptr->map_page_in(pa->page_table_root,
+                              kAddrTestVirt,
+                              phys_a,
+                              vmm::PageFlag::Present | vmm::PageFlag::Writable);
+    vmm::vmm_ptr->map_page_in(pb->page_table_root,
+                              kAddrTestVirt,
+                              phys_b,
+                              vmm::PageFlag::Present | vmm::PageFlag::Writable);
 
     process::yield(); // スケジューラ起動
 

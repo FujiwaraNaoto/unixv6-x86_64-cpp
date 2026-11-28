@@ -3,6 +3,7 @@
 #include "process.hpp"
 #include "pmm.hpp"
 #include "vmm.hpp"
+#include "address.hpp"
 
 namespace tests
 {

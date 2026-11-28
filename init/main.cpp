@@ -1,0 +1,158 @@
+#include <cstdint>
+#include "address.hpp"
+#include "console.hpp"
+#include "memory_region.hpp"
+#include "asm/memory_layout.hpp"
+#include "vga.hpp"
+#include "serial.hpp"
+#include "pmm.hpp"
+#include "vmm.hpp"
+#include "heap.hpp"
+#include "process.hpp"
+#include "memory_region.hpp"
+#include "systemcall.hpp"
+#include "keyboard.hpp"
+#include "virtioblock.hpp"
+#include "buffer_cache.hpp"
+#include "file_system.hpp"
+#include "init.hpp"
+#include "asm/irqflags.hpp"
+#include "asm/setup.hpp"
+
+// tests/ 以下は make tests (TESTS=1) のときだけコンパイル・リンクされる。
+// 通常ビルドではテストコードはカーネルに一切含まれない。
+#ifdef ENABLE_TESTS
+#    include "tests.hpp"
+#endif
+
+// CRT 相当: リンカが .init_array に並べたグローバルコンストラクタを
+// 先頭から末尾まで順に呼ぶ。境界シンボルは kernel.ld で定義している。
+extern "C"
+{
+    using ctor_t = void (*)();
+    extern ctor_t __init_array_start[];
+    extern ctor_t __init_array_end[];
+}
+
+namespace
+{
+void call_global_constructors()
+{
+    for (ctor_t *fn = __init_array_start; fn != __init_array_end; ++fn)
+        (*fn)();
+}
+} // namespace
+
+// カーネルのエントリポイント。
+// ここではハードウェアとカーネルサブシステムの初期化だけを行い、
+// 各機能の動作確認は tests/ 以下の tests::run_all() に任せる
+// (make tests でビルドしたときのみ呼ばれる)。
+extern "C" void kernel_main([[maybe_unused]] uint32_t mb_magic, uint32_t mb_addr)
+{
+    // シリアルは最初に作る。以降の初期化で問題が起きたときの報告先になる。
+    // (kernel_main は戻らないので、ローカルに置いても寿命はカーネルと同じ)
+    serial::Serial serial_instance;
+    serial::serial = &serial_instance;
+
+    // 出力を捨てる既定のコンソール。出力先を渡されなかったモジュールが使う。
+    NullConsole null_console_instance;
+    null_console = &null_console_instance;
+
+    // グローバル変数のコンストラクタを実行する。
+    // 初期化順序は .init_array の並び = リンク順 (Makefile の CPP_SRC の順) なので、
+    // グローバル同士が互いのメンバを呼ぶと、まだ構築されていない相手に触ってしまう。
+    // そうならないよう、順序が要るものは main で明示的に構築すること。
+    call_global_constructors();
+
+    vga::VGA vga_instance;
+    vga::vga = &vga_instance; // グローバルにアクセス
+
+    vga::vga->puts("Hello World\n");
+
+    // 割り込み・例外と CPU まわりの初期化 (x86-64 では PIC / PIT、IDT、GDT と TSS)。
+    // あわせて、PMM に渡す物理メモリの情報をブート情報から集める。
+    BootMemoryMap memory_map;
+    if (!arch_setup(vga::vga, mb_addr, &memory_map))
+    {
+        cpu_idle();
+    }
+    pmm::PhysicalMemoryManager pmm(memory_map.usable.data(),
+                                   memory_map.usable_count,
+                                   memory_map.reserved.data(),
+                                   memory_map.reserved_count);
+    vmm::VirtualMemoryManager vmm_instance = vmm::VirtualMemoryManager(&pmm, vga::vga);
+    // カーネルヒープは高位 (0xFFFFFFFF90000000〜) に置く。
+    // 低位の identity map (PML4[0]) には依存しない。
+    heap::Heap heap_instance(heap::KERNEL_HEAP_BASE, heap::KERNEL_HEAP_END, &pmm, &vmm_instance);
+
+    vmm::vmm_ptr   = &vmm_instance;  // グローバルにアクセスできるようにする
+    pmm::pmm_ptr   = &pmm;           // グローバルにアクセスできるようにする
+    heap::heap_ptr = &heap_instance; // グローバルにアクセスできるようにする
+
+    auto state = pmm.get_state();
+    pmm::print_mm_state(state, vga::vga);
+
+    // syscall の MSR (LSTAR/STAR/SFMASK) を設定する。
+    SystemCall::init(vga::vga);
+
+    keyboard::initialize();
+
+    process::initialize(heap_instance);
+
+    // 仮想 → 物理の変換方法はカーネル側の関心事なので、ドライバには関数として渡す。
+    // (キャプチャなしラムダは関数ポインタへ暗黙変換される)
+    const auto resolve_physical = [](const void *virtual_address) -> PhysicalAddress
+    {
+        if (vmm::vmm_ptr == nullptr)
+        {
+            return PhysicalAddress{}; // VMM 未初期化: 変換できない
+        }
+        // virtual_to_physical() 自体も未マップなら無効な PhysicalAddress を返すので、そのまま伝播させる。
+        return vmm::vmm_ptr->virtual_to_physical(PageVirtualAddress{reinterpret_cast<uint64_t>(virtual_address)});
+    };
+
+    // ディスクに読み書きするので、BufferCache / FileSystem より先に初期化する。
+    if (!VirtIOBlock::initialize(resolve_physical))
+    {
+        vga::vga->puts("VirtIO block device initialization failed\n");
+        cpu_idle();
+    }
+
+    auto device = BufferCache::BlockDevice{
+        .read_block  = &VirtIOBlock::read_block,
+        .write_block = &VirtIOBlock::write_block,
+    };
+
+    if (not BufferCache::initialize(device))
+    {
+        vga::vga->puts("BufferCache initialization failed\n");
+        cpu_idle();
+    }
+    // block_store を渡さずに FileSystem::initialize() を呼んだときの既定値。
+    // (グローバルに置くと初期化順序がリンク順任せになるので、ここで作る)
+    NullBlockStore null_block_store_instance;
+    null_block_store = &null_block_store_instance;
+
+    // ファイルシステムへ注入する IBlockStore。null_block_store と同じ理由でグローバルに
+    // 置かず、ここで作る。kernel_main は返らないので、以降の全アクセスより長生きする。
+    // (状態を持たないので、参照先は initialize() で登録したキャッシュとデバイス)
+    BufferCache::BlockStore block_store;
+    if (not FileSystem::initialize(VirtIOBlock::capacity(), &block_store, vga::vga))
+    {
+        vga::vga->puts("FileSystem initialization failed\n");
+        cpu_idle();
+    }
+#ifdef ENABLE_TESTS
+    // 各機能の動作確認 (どのテストを走らせるかは tests/tests.cpp で切り替える)
+    tests::run_all(vga::vga);
+#else
+    process::create_init_process(InitProcess::init_func);
+#endif
+
+    while (1)
+    {
+        irq_enable();     // 寝る前に割り込みを開ける
+        process::yield(); // Runnableが居れば拾う
+        irq_enable_and_wait();
+    }
+}

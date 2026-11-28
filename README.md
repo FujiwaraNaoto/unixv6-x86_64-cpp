@@ -95,16 +95,30 @@ gdb build/kernel/kernel.elf
 
 ## ディレクトリ
 
+Linux のソースツリーに倣った配置にしている。x86-64 固有のものは `arch/x86_64/` の下に置く
+(汎用ディレクトリに残っている x86 依存のコードは、順次 `arch/` へ移している途中)。
+
 | パス | 中身 |
 | --- | --- |
-| [boot/](boot/) | Multiboot2 ヘッダ、32bit→64bit の移行、コンテキストスイッチ (`switch.asm`) |
-| [kernel/](kernel/) | `kernel_main`。各サブシステムの初期化だけを行う |
-| [include/](include/) | カーネル本体 (PMM / VMM / heap / GDT / IDT / PIC / process / syscall / PCI / virtio-blk / バッファキャッシュ / ファイルシステム …) |
-| [interrupt/](interrupt/) | ISR スタブとレジスタ退避のアセンブリ |
-| [io/](io/) | ポート I/O のアセンブリ |
-| [syscall/](syscall/) | `syscall` 命令のエントリ (TrapFrame の積み下ろし)、`fork` の子側の戻り口 |
-| [user/](user/) | リング3 に降りるためのエントリ |
+| [arch/x86_64/boot/](arch/x86_64/boot/) | Multiboot2 ヘッダ、32bit→64bit の移行 (`boot.asm`)、メモリマップの読み取り |
+| [arch/x86_64/kernel/](arch/x86_64/kernel/) | GDT / TSS、IDT と ISR スタブ、CPU 例外、PIC、コンテキストスイッチ (`switch.asm`)、リング3 への遷移 |
+| [arch/x86_64/entry/](arch/x86_64/entry/) | `syscall` 命令のエントリ (TrapFrame の積み下ろし)、`fork` の子側の戻り口 |
+| [arch/x86_64/mm/](arch/x86_64/mm/) | 4段ページテーブル (VMM) |
+| [arch/x86_64/include/asm/](arch/x86_64/include/asm/) | ポート I/O、アドレスの型 |
+| [arch/x86_64/lib/](arch/x86_64/lib/) | ポート I/O のアセンブリ |
+| [arch/x86_64/kernel.ld](arch/x86_64/kernel.ld) | リンカスクリプト (higher-half 配置) |
+| [init/](init/) | `kernel_main`。各サブシステムの初期化と、init プロセスの起動 |
+| [kernel/](kernel/) | プロセス管理、スケジューラ、システムコール |
+| [mm/](mm/) | 物理メモリアロケータ (PMM)、カーネルヒープ |
+| [fs/](fs/) | バッファキャッシュ、ファイルシステム、inode、ディレクトリ、パス解決、File / fd |
+| [drivers/](drivers/) | PCI、virtio-blk、VGA テキスト、シリアル、コンソール、PS/2 キーボード |
+| [lib/](lib/) | `kstring`、enum 用の小道具、単位リテラル、C++ ランタイムのスタブ |
+| [user/](user/) | リング3 で動くプログラム (init) と、そこから使う syscall ラッパ |
 | [tests/](tests/) | テストハーネスと各機能のテスト (`make tests` のときだけリンクされる) |
+
+ヘッダは Makefile で全ディレクトリを `-I` に並べているので、`#include "vga.hpp"` のようにファイル名だけで書く。
+二重 include の防止は `#pragma once` ではなく、`#ifndef VGA_HPP` / `#define VGA_HPP` / `#endif // VGA_HPP` の
+インクルードガードで統一している (ガード名はファイル名を大文字にして `.` を `_` にしたもの)。
 
 ## 実装フェーズ
 
@@ -186,7 +200,7 @@ GDT にユーザーセグメントと TSS を足し、`TSS.RSP0` を設定して
 - **バッファキャッシュ** — 512B × 30 ブロックの LRU キャッシュ。`read` / `mark_dirty` / `write` / `flush`。
   協調型スケジューラなのでロックは持たない (プリエンプティブにするなら xv6 同様バッファ単位の sleeplock が要る)
 - **ディスクレイアウトとブロック確保** — boot / super / inode / bitmap / data の xv6 風レイアウト
-  ([`include/file_system.hpp`](include/file_system.hpp) に図あり)。起動時にスーパーブロックを読み、
+  ([`fs/file_system.hpp`](fs/file_system.hpp) に図あり)。起動時にスーパーブロックを読み、
   未フォーマットなら自分でフォーマットする。`allocate_block()` / `free_block()` はビットマップで管理。
   ファイルシステムはブロックの読み書きを `IBlockStore` 越しに行うので、テストでは偽物に差し替えられる
 

@@ -1,5 +1,6 @@
 #include "tests.hpp"
 #include "keyboard.hpp"
+#include "asm/irqflags.hpp"
 
 namespace tests
 {
@@ -20,7 +21,7 @@ void keyboard_echo(IConsole *console)
                 console->puts("> ");
             }
         }
-        asm volatile("hlt");
+        cpu_idle();
     }
 }
 

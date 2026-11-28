@@ -2,8 +2,12 @@
 #include "directory.hpp"
 #include "file_system_internal.hpp"
 #include "path.hpp"
+#include "block_store.hpp"
+#include "file_system.hpp"
+#include "inode.hpp"
 
 #include <cstddef>
+#include <cstdint>
 #include <string_view>
 
 namespace tests
